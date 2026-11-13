@@ -61,6 +61,7 @@ private struct CaptureShareView: View {
   }
   private func analyze(reanalyze: Bool = false) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
+    if reanalyze { items = []; if let analysisId { CaptureNotifications.clearAnalysis(analysisId) } }
     operation = Task {
       defer { working = false; operation = nil }
       do {
@@ -133,7 +134,7 @@ private struct CaptureShareView: View {
             Button("선택한 \(items.filter(\.selected).count)개 저장", action: save).buttonStyle(.borderedProminent).disabled(working || !items.contains(where: \.selected))
             Button("남은 제안 모두 무시") {
               guard let analysisId else { return }
-              do { try SharedStore().ignoreCapture(id: analysisId); items = []; message = "제안을 무시했어요. 원문 근거도 삭제했어요." }
+              do { try SharedStore().ignoreCapture(id: analysisId, expectedTaskIds: items.map(\.id)); items = []; message = "제안을 무시했어요. 원문 근거도 삭제했어요." }
               catch { failure = "처리하지 못했어요. 앱 분석함에서 다시 확인해 주세요." }
             }.disabled(working)
           }

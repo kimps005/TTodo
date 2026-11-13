@@ -80,7 +80,7 @@ extension SharedStore {
   func failCapture(id: String, code: String, token: String) throws {
     try runSQL("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND status='processing' AND processing_token=?", params: [code, id, token])
   }
-  func approveSingleCapture(id: String, now: Date = Date()) throws -> Bool {
+  func approveSingleCapture(id: String, expectedTaskId: String, now: Date = Date()) throws -> Bool {
     try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       if analysis["status"] as? String == "saved" { return false }
@@ -90,7 +90,7 @@ extension SharedStore {
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
       let tasks = try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=?", params: [id])
       guard tasks.count == 1, let task = tasks.first, task["review_status"] as? String == "pending",
-        task["needs_confirmation"] as? Int64 == 0, let taskId = task["id"] as? String,
+        task["needs_confirmation"] as? Int64 == 0, let taskId = task["id"] as? String, taskId == expectedTaskId,
         let title = task["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         title.unicodeScalars.count <= 200, let precision = task["due_precision"] as? String,
         ExtractionValidator.validDue(task["due_at"] as? String, precision: precision) else { throw CaptureError.reviewRequired }
@@ -105,8 +105,12 @@ extension SharedStore {
       return existing == nil
     }
   }
-  func ignoreCapture(id: String) throws {
+  func ignoreCapture(id: String, expectedTaskIds: [String]? = nil) throws {
     try transaction {
+      if let expectedTaskIds {
+        let current = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["id"] as? String }
+        guard current.sorted() == expectedTaskIds.sorted() else { throw CaptureError.stateChanged }
+      }
       try runSQL("UPDATE extracted_tasks SET review_status='ignored',title='무시한 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0 WHERE analysis_id=? AND review_status='pending'", params: [id])
       try runSQL("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=?", params: [id, id])
     }

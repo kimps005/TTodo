@@ -54,22 +54,23 @@ struct CaptureSmoke {
     if let output = ProcessInfo.processInfo.environment["TTODO_CONTRACT_OUTPUT"] {
       try bridgeData.write(to: URL(fileURLWithPath: output))
     }
-    do { _ = try store.approveSingleCapture(id: first.id); fatalError("Ambiguous task was approved without review") }
+    do { _ = try store.approveSingleCapture(id: first.id, expectedTaskId: "old-task"); fatalError("Ambiguous task was approved without review") }
     catch CaptureError.reviewRequired { }
     try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
     try store.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
     let quick = try store.registerCapture(fingerprint: "quick", channel: "shortcuts")
     let clear = raw.replacingOccurrences(of: #""assignee":null"#, with: #""assignee":"사용자""#).replacingOccurrences(of: #""needs_confirmation":true"#, with: #""needs_confirmation":false"#)
     try store.finishCapture(id: quick.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: quick.token!)
-    check(try store.approveSingleCapture(id: quick.id))
-    check(try !store.approveSingleCapture(id: quick.id))
+    let quickId = (try store.captureReviewItems(id: quick.id))[0].id
+    check(try store.approveSingleCapture(id: quick.id, expectedTaskId: quickId))
+    check(try !store.approveSingleCapture(id: quick.id, expectedTaskId: quickId))
     check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 1)
     try store.ignoreCapture(id: first.id)
     check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [first.id]))[0]["evidence_text"] as? String == "")
     let expired = try store.registerCapture(fingerprint: "expired", channel: "shortcuts")
     try store.finishCapture(id: expired.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: expired.token!)
     try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
-    do { _ = try store.approveSingleCapture(id: expired.id); fatalError("Expired result was approved") }
+    do { _ = try store.approveSingleCapture(id: expired.id, expectedTaskId: "old-task"); fatalError("Expired result was approved") }
     catch CaptureError.reviewRequired { }
     check((try store.captureReviewItems(id: expired.id)).isEmpty)
     check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [expired.id]))[0]["evidence_text"] as? String == "")
@@ -101,6 +102,7 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [stale.id]))[0]["status"] as? String == "processing")
     try store.finishCapture(id: retried.id, tasks: [firstTask], provider: "current", token: retried.token!)
     check((try store.captureReviewItems(id: retried.id)).count == 1)
+    let previousId = (try store.captureReviewItems(id: retried.id))[0].id
     let redone = try store.registerCapture(fingerprint: "retry-race", channel: "share", reanalyzeUnstored: true)
     check(redone.created && redone.token != retried.token)
     check((try store.captureReviewItems(id: redone.id)).isEmpty)
@@ -108,6 +110,11 @@ struct CaptureSmoke {
     catch CaptureError.stateChanged { }
     try store.finishCapture(id: redone.id, tasks: [secondTask], provider: "redone", token: redone.token!)
     check((try store.captureReviewItems(id: redone.id))[0].title == secondTask.title)
+    do { _ = try store.approveSingleCapture(id: redone.id, expectedTaskId: previousId); fatalError("Stale notification approved new proposal") }
+    catch CaptureError.reviewRequired { }
+    do { try store.ignoreCapture(id: redone.id, expectedTaskIds: [previousId]); fatalError("Stale notification ignored new proposal") }
+    catch CaptureError.stateChanged { }
+    check((try store.captureReviewItems(id: redone.id)).count == 1)
     do { _ = try store.registerCapture(fingerprint: "share-multiple", channel: "share", reanalyzeUnstored: true); fatalError("Partially saved capture was reanalyzed") }
     catch CaptureError.alreadyStored { }
     try store.runSQL("DELETE FROM todos WHERE source_id=?", params: [review[0].id])

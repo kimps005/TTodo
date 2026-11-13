@@ -26,7 +26,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
       <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>
     </View>)}
     <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || !selected.length} onPress={() => void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } }))))} />
-    <Button secondary title="남은 제안 모두 무시" disabled={busy || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId))} />
+    <Button secondary title="남은 제안 모두 무시" disabled={busy || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId, items.filter(t => t.review_status === 'pending').map(t => t.id)))} />
     <Button secondary title="닫기" disabled={busy} onPress={close} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
 }

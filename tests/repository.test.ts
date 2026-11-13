@@ -230,6 +230,7 @@ test('저장 전 재분석은 기존 제안을 교체하고 예전 승인·결�
   await assert.rejects(repo.finishAnalysis(a.id, [task], 'stale', a.token!));
   await repo.finishAnalysis(a.id, [{ ...task, title: '새 분석 제안' }], 'second', token);
   await assert.rejects(repo.approve(a.id, [{ id: old.id, input: { title: '예전 화면 승인' } }]));
+  await assert.rejects(repo.ignoreAnalysis(a.id, [old.id]), /변경/);
   const fresh = (await repo.listExtracted(a.id))[0];
   await repo.approve(a.id, [{ id: fresh.id, input: { title: fresh.title } }]);
   await assert.rejects(repo.restartUnstoredAnalysis(a.id), /저장한 캡처/);

@@ -146,8 +146,12 @@ export class Repository {
       await tx.runAsync('UPDATE analyses SET status=? WHERE id=?', pending?.count ? 'review' : 'saved', id);
     });
   }
-  async ignoreAnalysis(id: string) {
+  async ignoreAnalysis(id: string, expectedTaskIds?: string[]) {
     await this.db.withExclusiveTransactionAsync(async tx => {
+      if (expectedTaskIds) {
+        const current = await tx.getAllAsync<{ id: string }>("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", id);
+        if (JSON.stringify(current.map(t => t.id).sort()) !== JSON.stringify([...expectedTaskIds].sort())) throw new Error('분석 제안이 변경되었어요. 분석함에서 다시 확인해 주세요.');
+      }
       await tx.runAsync("UPDATE extracted_tasks SET review_status='ignored',title='무시한 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0 WHERE analysis_id=? AND review_status='pending'", id);
       await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=?", id, id);
     });

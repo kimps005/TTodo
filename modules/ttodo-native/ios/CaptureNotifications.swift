@@ -16,7 +16,7 @@ enum CaptureNotifications {
       let analysis = try? store.querySQL("SELECT status,expires_at FROM analyses WHERE id=?", params: [outcome.id]).first,
       analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
       let expiry = ExtractionValidator.timestamp(expires), expiry > Date(),
-      let tasks = try? store.querySQL("SELECT title,needs_confirmation,review_status FROM extracted_tasks WHERE analysis_id=?", params: [outcome.id]),
+      let tasks = try? store.querySQL("SELECT id,title,needs_confirmation,review_status FROM extracted_tasks WHERE analysis_id=?", params: [outcome.id]),
       let snapshot = try? store.snapshot() else { return }
     let pending = tasks.filter { $0["review_status"] as? String == "pending" }
     guard !pending.isEmpty else { return }
@@ -33,7 +33,8 @@ enum CaptureNotifications {
     content.title = snapshot.hideContent ? "새 분석 결과가 있어요" : "할 일 \(pending.count)개를 발견했어요"
     content.body = quick ? pending[0]["title"] as? String ?? "분석함에서 내용을 확인하세요." : "분석함에서 내용을 확인하고 필요한 항목만 저장하세요."
     content.categoryIdentifier = quick ? singleCategory : category
-    content.userInfo = ["analysis_id": outcome.id]
+    content.userInfo = ["analysis_id": outcome.id, "proposal_ids": pending.compactMap { $0["id"] as? String }]
+    if quick { content.userInfo["proposal_id"] = pending[0]["id"] as? String }
     // Original conversation and images never appear. Task titles require explicit title visibility.
     guard (try? store.hasLocalAIConsent()) == true,
       (try? store.querySQL("SELECT status FROM analyses WHERE id=?", params: [outcome.id]).first?["status"] as? String) == "review" else { return }
@@ -63,7 +64,9 @@ enum CaptureNotifications {
     let content = UNMutableNotificationContent()
     content.title = "분석함에서 내용을 확인해 주세요"
     content.body = "알림에서 바로 처리하지 못했어요. 저장 상태를 확인한 뒤 다시 시도해 주세요."
-    content.categoryIdentifier = category; content.userInfo = ["analysis_id": id]
+    // Only tapping to review is offered after stale/failed actions; do not attach
+    // an Ignore action whose proposal identities were never shown to the user.
+    content.userInfo = ["analysis_id": id]
     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "ttodo.capture.\(id)", content: content, trigger: nil), withCompletionHandler: nil)
   }
 }

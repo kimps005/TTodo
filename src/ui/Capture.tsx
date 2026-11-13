@@ -64,6 +64,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
         else { await openReview(result.id); return; }
       }
       if (!token) throw new Error('분석 상태가 변경되었어요. 다시 시도해 주세요.');
+      nativeBridge?.clearCaptureNotification(result.id);
       const tasks = await onDeviceProvider.extract({ text, captured_at: null, message_date: messageDate.trim() || null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, new AbortController().signal);
       await repository.finishAnalysis(result.id, tasks, onDeviceProvider.version, token);
       await openReview(result.id);

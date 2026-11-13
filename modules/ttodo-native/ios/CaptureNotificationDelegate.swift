@@ -14,8 +14,13 @@ final class CaptureNotificationDelegate: NotificationDelegate {
     // local transaction synchronously here; an asynchronous model/network job would be unsafe.
     do {
       let store = try SharedStore()
-      if response.actionIdentifier == CaptureNotifications.addAction { _ = try store.approveSingleCapture(id: id) }
-      else { try store.ignoreCapture(id: id) }
+      if response.actionIdentifier == CaptureNotifications.addAction {
+        guard let taskId = content.userInfo["proposal_id"] as? String, UUID(uuidString: taskId) != nil else { throw CaptureError.reviewRequired }
+        _ = try store.approveSingleCapture(id: id, expectedTaskId: taskId)
+      } else {
+        guard let taskIds = content.userInfo["proposal_ids"] as? [String], !taskIds.isEmpty, taskIds.allSatisfy({ UUID(uuidString: $0) != nil }) else { throw CaptureError.reviewRequired }
+        try store.ignoreCapture(id: id, expectedTaskIds: taskIds)
+      }
       UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
       WidgetCenter.shared.reloadAllTimelines()
       Task { try? await TodoActivityManager.refresh() }
