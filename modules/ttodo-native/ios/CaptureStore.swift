@@ -24,14 +24,18 @@ enum DuplicateEvidence {
     }
     let current = normalized(source), previous = normalized(evidence)
     guard previous.unicodeScalars.count >= 8, !current.isEmpty else { return false }
-    if current.contains(previous) { return true }
-    guard previous.unicodeScalars.count >= 16 else { return false }
     func numbers(_ value: String) -> Set<String> {
       let text = value.precomposedStringWithCompatibilityMapping
-      let regex = try! NSRegularExpression(pattern: "[0-9]+")
-      return Set(regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text).map { String(text[$0]) } })
+      let regex = try! NSRegularExpression(pattern: "[0-9]+(?:[.,][0-9]+)*")
+      return Set(regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match -> String? in
+        guard let range = Range(match.range, in: text) else { return nil }
+        let number = String(text[range])
+        return number.range(of: "^[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]+)?$", options: .regularExpression) != nil ? number.replacingOccurrences(of: ",", with: "") : number
+      })
     }
     guard numbers(evidence).isSubset(of: numbers(source)) else { return false }
+    if current.contains(previous) { return true }
+    guard previous.unicodeScalars.count >= 16 else { return false }
     func grams(_ value: String) -> Set<String> {
       let chars = value.unicodeScalars.map { String($0) }
       guard chars.count >= 3 else { return [] }

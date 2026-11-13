@@ -4,7 +4,7 @@ import { resemblesEvidence } from '../src/domain/duplicate';
 import seed from '../evaluation/duplicate-seed.json';
 
 test('Swift와 공유하는 합성 중복 사례의 예상 판정을 따른다', () => {
-  for (const item of seed) assert.equal(resemblesEvidence(item.source, item.evidence), item.expected);
+  for (const item of seed) assert.equal(resemblesEvidence(item.source, item.evidence), item.expected, JSON.stringify(item));
 });
 
 test('공백·문장부호·전각 차이를 비교하되 짧은 상용구는 중복 후보로 보지 않는다', () => {
