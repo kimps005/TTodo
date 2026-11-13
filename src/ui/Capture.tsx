@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { File } from 'expo-file-system';
 import { Alert, Image, Modal, ScrollView, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,7 +33,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
       const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
       if (picked.canceled) return;
       const asset = picked.assets[0];
-      if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { const original = new File(asset.uri); if (original.exists) original.delete(); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
+      if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { discardTemporaryImage(asset.uri); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
       const uri = ownTemporaryImage(asset.uri);
       // Commit a new draft only after a real selection. Cancelling preserves edits;
       // a different image must never inherit the previous conversation's date.
