@@ -20,6 +20,7 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     const apply = () => config.mods.ios.xcodeproj({ ...config, modResults: project, modRequest: { projectRoot: root, platformProjectRoot: ios, platform: 'ios', modName: 'xcodeproj' } });
     await apply();
     const first = project.writeSync(); await apply(); assert.equal(project.writeSync(), first);
+    assert.ok(!first.includes('TTodoUITests'), '일반 앱 생성에 CI UI 테스트 타깃을 포함하면 안 된다');
     const targets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoWidgets"') as any[];
     assert.equal(targets.length, 1);
     const shareTargets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoShare"') as any[];

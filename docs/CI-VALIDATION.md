@@ -30,6 +30,14 @@
 - 알림 백그라운드 액션의 실제 기기 동작
 - TestFlight/App Store 설치·심사
 
+## 별도 수동 입력 UI 검사
+
+`ui-tests.yml`은 수동 실행용이며, GitHub macOS 시뮬레이터에서 XCTest로 실제 화면의 온보딩 완료·수동 입력·프로세스 재실행 후 보존·제목 편집·삭제 취소·삭제 후 재실행을 확인합니다. 합성 제목만 사용하고 AI/OCR/알림/잠금 입력은 시험하지 않습니다.
+
+`configure-ui-tests.cjs`가 생성된 프로젝트에 테스트 타깃과 스킴을 추가합니다. 일반 prebuild/plugin은 이 스크립트를 호출하지 않으며 테스트 타깃은 앱의 의존성이나 배포 제품에 포함하지 않습니다. `SKIP_INSTALL=YES`이고 스킴의 archive 참여도 꺼 둡니다. 실제 실행 전에는 준비 상태로만 표시하며, 성공 후에도 실기기·오프라인 네트워크 차단·VoiceOver 완료로 해석하지 않습니다.
+
+산출물은 `ui-tests` artifact의 `report.json`, 로그와 `results.xcresult`입니다. 새 일회성 시뮬레이터를 사용하며 종료 후 해당 기기만 삭제합니다. 사용자 노트북의 UI는 조작하지 않습니다. [Apple XCUIApplication API](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication)를 사용한 코드 검사입니다.
+
 ## 확인된 실행 결과
 
 [086295c 실행](https://github.com/kimps005/TTodo/actions/runs/43447613048): iOS 26.5 / iPhone 16 Pro 시뮬레이터, Xcode 자체 서명으로 앱 실행·App Group SQLite v3 초기화·무결성 ok·합성 데이터 3개 재실행 보존 통과. 초기 화면과 합성 목록 화면을 직접 시각 검토했고 한글·하단 탭·미완료 2개 표시를 확인했다. 목록 아래로 스크롤하거나 버튼을 조작한 검사는 아니다.
