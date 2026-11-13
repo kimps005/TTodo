@@ -25,7 +25,7 @@ jobs:
       - name: Build release app with embedded JavaScript
         run: |
           set -o pipefail
-          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build 2>&1 | tee simulator-build.log
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build 2>&1 | tee simulator-build.log
       - name: Launch simulator and inspect shared database
         run: node scripts/simulator-smoke.mjs
       - uses: actions/upload-artifact@v4

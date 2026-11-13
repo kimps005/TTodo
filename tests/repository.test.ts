@@ -123,11 +123,12 @@ test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대�
 });
 test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 사진을 최신 스키마에서 처리한다', async () => {
   const { repo, native } = fixture();
-  native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('PRAGMA user_version = 3', 'PRAGMA user_version = 1'));
+  native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('processing_token TEXT, ', '').replace('PRAGMA user_version = 3', 'PRAGMA user_version = 1'));
   const todoId = await repo.addTodo({ title: '이전 버전 할 일' });
-  const old = await repo.createAnalysis('old-image', 'manual', '2026-11-12T02:00:00Z');
-  await repo.setPreference('ai_local_consent', 'yes');
-  await repo.finishAnalysis(old.id, [task], 'old-model', old.token!);
+  // Seed the actual legacy shape; current capture APIs require the v3 attempt column.
+  const old = { id: 'legacy-analysis' };
+  native.prepare("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,model_version,expires_at) VALUES(?,?,?,?,?,?,?,?)").run(old.id, 'old-image', '2026-11-12T02:00:00Z', '2026-11-13T02:00:00Z', 'review', 'manual', 'old-model', '2026-11-20T02:00:00Z');
+  native.prepare("INSERT INTO extracted_tasks(id,analysis_id,title,due_precision,confidence,evidence_text) VALUES(?,?,?,?,?,?)").run('legacy-task', old.id, task.title, 'unknown', .9, task.evidence_text);
   const oldTask = (await repo.listExtracted(old.id))[0];
   await repo.approve(old.id, [{ id: oldTask.id, input: { title: task.title } }]);
   await repo.initialize();

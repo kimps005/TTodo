@@ -30,23 +30,18 @@ try {
   report.phase = 'sign';
   const bundle = info(application, 'CFBundleIdentifier');
   const group = `group.${bundle}`;
-  // Ad-hoc signing is for the disposable simulator only, with the app's real App Group
-  // entitlements. It does not create an iPhone provisioning profile or use an Apple account.
-  const frameworks = path.join(application, 'Frameworks');
-  if (existsSync(frameworks)) {
-    for (const name of readdirSync(frameworks)) if (name.endsWith('.framework') || name.endsWith('.dylib')) {
-      run('codesign', ['--force', '--sign', '-', path.join(frameworks, name)]);
-    }
-  }
+  // Keep Xcode's simulator signature intact. Xcode places simulated capabilities
+  // according to ENTITLEMENTS_DESTINATION; copying the device plist into a new
+  // host code signature can make taskgated reject it before app code executes.
+  report.signing = 'xcode-simulator';
   const plugins = path.join(application, 'PlugIns');
   for (const name of ['TTodoWidgets', 'TTodoShare']) {
     const extension = path.join(plugins, `${name}.appex`);
     if (!existsSync(extension)) throw new Error(`Extension is missing: ${name}`);
-    run('codesign', ['--force', '--sign', '-', '--entitlements', path.join(root, 'ios', name, `${name}.entitlements`), '--generate-entitlement-der', extension]);
+    run('codesign', ['--verify', '--strict', extension]);
     report.extensions.push(info(extension, 'CFBundleIdentifier'));
   }
-  run('codesign', ['--force', '--sign', '-', '--entitlements', path.join(root, 'ios/TTodo/TTodo.entitlements'), '--generate-entitlement-der', application]);
-  diagnostic('signature.txt', () => run('codesign', ['--verify', '--deep', '--strict', '--verbose=4', application], { stdio: ['ignore', 'pipe', 'pipe'] }));
+  run('codesign', ['--verify', '--deep', '--strict', application]);
   const runtimes = JSON.parse(sim('list', 'runtimes', '--json')).runtimes.filter(item => item.isAvailable && item.identifier.includes('.iOS-'));
   runtimes.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
   if (!runtimes[0]) throw new Error('No available iOS simulator runtime.');
@@ -105,7 +100,7 @@ try {
   if (device && /^[0-9a-f-]{36}$/i.test(device)) {
     diagnostic('failure-screen.txt', () => sim('io', device, 'screenshot', path.join(output, 'failure.png')));
     diagnostic('simulator-system.log', () => sim('spawn', device, 'log', 'show', '--last', '8m', '--style', 'compact', '--predicate', 'process == "SpringBoard" OR process == "runningboardd" OR process == "amfid" OR process == "TTodo" OR eventMessage CONTAINS[c] "com.kimps005.ttodo"'));
-    diagnostic('host-simulator.log', () => run('log', ['show', '--last', '8m', '--style', 'compact', '--predicate', 'process == "Simulator" OR process == "SimulatorTrampoline" OR process == "CoreSimulatorService"']));
+    diagnostic('host-simulator.log', () => run('log', ['show', '--last', '8m', '--style', 'compact', '--predicate', 'process == "Simulator" OR process == "SimulatorTrampoline" OR process == "CoreSimulatorService" OR process == "taskgated-helper" OR process == "amfid"']));
     const crashes = path.join(os.homedir(), 'Library/Logs/DiagnosticReports');
     if (existsSync(crashes)) for (const name of readdirSync(crashes).filter(name => /^(TTodo|SpringBoard|SimulatorTrampoline).*\.(ips|crash)$/.test(name))) {
       copyFileSync(path.join(crashes, name), path.join(output, name));
