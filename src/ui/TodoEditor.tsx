@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Todo, TodoInput } from '../domain/todo';
@@ -15,12 +15,13 @@ export function TodoEditor({ todo, save, remove, close }: { todo: Todo; save: (i
   const [time, setTime] = useState(initial.time);
   const [dateEdited, setDateEdited] = useState(false);
   const [busy, setBusy] = useState(false);
-  const act = async (fn: () => Promise<void>) => { setBusy(true); try { await fn(); close(); } catch (e) { Alert.alert('저장하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { setBusy(false); } };
-  return <Modal animationType="slide" onRequestClose={close}><SafeAreaView style={ui.screen}>
+  const working = useRef(false);
+  const act = async (fn: () => Promise<void>) => { if (working.current) return; working.current = true; setBusy(true); try { await fn(); close(); } catch (e) { Alert.alert('변경하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
+  return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
       <Text style={ui.eyebrow}>TASK DETAILS</Text><Text style={ui.title}>할 일 다듬기</Text>
-      <Text style={ui.label}>할 일</Text><TextInput accessibilityLabel="할 일 제목" style={ui.input} value={title} onChangeText={setTitle} multiline maxLength={400} />
-      <Text style={ui.label}>메모</Text><TextInput accessibilityLabel="할 일 메모" style={[ui.input, { minHeight: 110 }]} value={description} onChangeText={setDescription} multiline maxLength={4000} />
+      <Text style={ui.label}>할 일</Text><TextInput accessibilityLabel="할 일 제목" editable={!busy} style={ui.input} value={title} onChangeText={setTitle} multiline maxLength={400} />
+      <Text style={ui.label}>메모</Text><TextInput accessibilityLabel="할 일 메모" editable={!busy} style={[ui.input, { minHeight: 110 }]} value={description} onChangeText={setDescription} multiline maxLength={4000} />
       <Text style={ui.label}>마감 날짜</Text>
       <DeadlineFields day={date} time={time} disabled={busy} onDay={value => { setDate(value); setDateEdited(true); }} onTime={value => { setTime(value); setDateEdited(true); }} />
       <Text style={ui.small}>{todo.source_type === 'manual' ? '직접 입력한 할 일이에요.' : '캡처 분석에서 승인한 할 일이에요.'}</Text>

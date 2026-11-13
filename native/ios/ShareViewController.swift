@@ -140,7 +140,7 @@ private struct CaptureShareView: View {
               Text("시각을 비우면 날짜만 저장해요. 둘 다 비우면 마감을 해제해요. 시각은 현재 기기 시간대를 사용해요.").font(.caption).foregroundStyle(.secondary)
               Text("원문 근거").font(.caption.bold())
               Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled)
-            }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).disabled(working)
           }
           if !items.isEmpty {
             Button("선택한 \(items.filter(\.selected).count)개 저장") { save() }.buttonStyle(.borderedProminent).disabled(working || !items.contains(where: \.selected))

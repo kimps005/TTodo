@@ -6,8 +6,8 @@ export function Button({ title, onPress, secondary = false, disabled = false, st
     <Text style={[ui.buttonText, secondary && ui.secondaryText]}>{title}</Text>
   </Pressable>;
 }
-export function Check({ checked, label, onPress }: { checked: boolean; label: string; onPress: () => void }) {
-  return <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked }} onPress={onPress} style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}>
+export function Check({ checked, label, onPress, disabled = false }: { checked: boolean; label: string; onPress: () => void; disabled?: boolean }) {
+  return <Pressable accessibilityRole="checkbox" accessibilityLabel={label} accessibilityState={{ checked, disabled }} disabled={disabled} onPress={onPress} style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', opacity: disabled ? .45 : 1 }}>
     <Text style={{ fontSize: 28, color: checked ? '#23664E' : '#8793A2' }}>{checked ? '●' : '○'}</Text>
   </Pressable>;
 }
