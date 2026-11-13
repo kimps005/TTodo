@@ -105,11 +105,21 @@ extension SharedStore {
     }
   }
   func captureReviewItems(id: String) throws -> [CaptureReviewItem] {
-    try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=? AND review_status='pending' ORDER BY rowid", params: [id]).map { row in
-      guard let taskId = row["id"] as? String, let title = row["title"] as? String,
-        let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
-      let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
-      return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: fields.day, timeText: fields.time)
+    try transaction {
+      if let analysis = try querySQL("SELECT expires_at FROM analyses WHERE id=?", params: [id]).first {
+        guard let raw = analysis["expires_at"] as? String, let expiry = ExtractionValidator.timestamp(raw) else { throw CaptureError.stateChanged }
+        if expiry <= Date() {
+          try runSQL("UPDATE extracted_tasks SET review_status='ignored',title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,confidence=0 WHERE analysis_id=? AND review_status='pending'", params: [id])
+          try runSQL("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id=?", params: [id])
+          try runSQL("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=? AND status='review'", params: [id, id])
+        }
+      }
+      return try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=? AND review_status='pending' ORDER BY rowid", params: [id]).map { row in
+        guard let taskId = row["id"] as? String, let title = row["title"] as? String,
+          let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
+        let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
+        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: fields.day, timeText: fields.time)
+      }
     }
   }
   func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], now: Date = Date()) throws -> Int {

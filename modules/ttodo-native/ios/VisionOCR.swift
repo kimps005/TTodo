@@ -1,6 +1,7 @@
 import Foundation
 import Vision
 import ImageIO
+import CoreGraphics
 import CryptoKit
 
 enum VisionOCR {
@@ -9,13 +10,7 @@ enum VisionOCR {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
   static func recognize(_ data: Data) throws -> String {
-    guard !data.isEmpty, data.count <= maximumBytes else { throw OCRFailure.tooLarge }
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-        kCGImageSourceCreateThumbnailFromImageAlways: true,
-        kCGImageSourceCreateThumbnailWithTransform: true,
-        kCGImageSourceThumbnailMaxPixelSize: 2400
-      ] as CFDictionary) else { throw OCRFailure.invalidImage }
+    let image = try thumbnail(data, maximumDimension: 2400)
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.recognitionLanguages = ["ko-KR", "en-US"]
@@ -28,6 +23,16 @@ enum VisionOCR {
       return rowA != rowB ? rowA > rowB : a.boundingBox.minX < b.boundingBox.minX
     }
     return observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+  }
+  static func thumbnail(_ data: Data, maximumDimension: Int) throws -> CGImage {
+    guard !data.isEmpty, data.count <= maximumBytes else { throw OCRFailure.tooLarge }
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+      let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maximumDimension
+      ] as CFDictionary) else { throw OCRFailure.invalidImage }
+    return image
   }
 }
 enum OCRFailure: LocalizedError {

@@ -65,6 +65,8 @@ struct CaptureSmoke {
     try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
     do { _ = try store.approveSingleCapture(id: expired.id); fatalError("Expired result was approved") }
     catch CaptureError.reviewRequired { }
+    check((try store.captureReviewItems(id: expired.id)).isEmpty)
+    check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [expired.id]))[0]["evidence_text"] as? String == "")
     let multi = try store.registerCapture(fingerprint: "share-multiple", channel: "share")
     var firstTask = try ExtractionValidator.validate(clear, sourceText: text, messageDate: nil)[0]
     firstTask.title = "첫 번째 제안"

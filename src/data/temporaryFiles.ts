@@ -17,3 +17,7 @@ export function ownTemporaryImage(uri: string): string {
   try { original.copy(target); return target.uri; }
   finally { if (original.exists) original.delete(); }
 }
+export function discardTemporaryImage(uri: string) {
+  try { const file = new File(uri); if (file.exists) file.delete(); }
+  catch { /* A cleanup interrupted by the OS is retried by clearTemporaryFiles on next startup. */ }
+}

@@ -7,18 +7,24 @@ import { nativeBridge } from '../native/bridge';
 import { containsSensitiveText } from '../ai/extraction';
 import { Button } from './components';
 import { ui } from './theme';
-import { ownTemporaryImage } from '../data/temporaryFiles';
+import { discardTemporaryImage, ownTemporaryImage } from '../data/temporaryFiles';
 import type { Repository } from '../data/repository';
 import { availabilityLabels, onDeviceProvider } from '../ai/onDeviceProvider';
 import { validateDue } from '../domain/todo';
-export function Capture({ close, repository, analyzed }: { close: () => void; repository: Repository; analyzed: (id: string) => Promise<void> }) {
+export function Capture({ close, repository, analyzed }: { close: () => void; repository: Repository; analyzed: (id: string, imageUri?: string) => Promise<void> }) {
   const [image, setImage] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [messageDate, setMessageDate] = useState('');
   const working = useRef(false);
-  useEffect(() => () => { if (image) { const file = new File(image); if (file.exists) file.delete(); } }, [image]);
+  const transferred = useRef<string | null>(null);
+  useEffect(() => () => { if (image && transferred.current !== image) discardTemporaryImage(image); }, [image]);
+  const openReview = async (id: string) => {
+    transferred.current = image;
+    try { await analyzed(id, image ?? undefined); }
+    catch (error) { transferred.current = null; throw error; }
+  };
   const select = async () => {
     if (working.current) return;
     working.current = true; setBusy(true); setText(''); setFingerprint(null);
@@ -49,11 +55,11 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
       if (!result.created) {
         const previous = (await repository.listAnalyses()).find(item => item.id === result.id);
         if (previous?.status === 'failed') await repository.retryFailedAnalysis(result.id);
-        else { await analyzed(result.id); return; }
+        else { await openReview(result.id); return; }
       }
       const tasks = await onDeviceProvider.extract({ text, captured_at: null, message_date: messageDate.trim() || null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, new AbortController().signal);
       await repository.finishAnalysis(result.id, tasks, onDeviceProvider.version);
-      await analyzed(result.id);
+      await openReview(result.id);
     } catch (error) {
       if (analysisId) await repository.failAnalysis(analysisId, 'LOCAL_AI_FAILED');
       Alert.alert('분석하지 못했어요', error instanceof Error ? error.message : '기기 내 AI 준비 상태를 확인하고 다시 시도해 주세요.');
@@ -65,7 +71,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   };
   const aiStatus = nativeBridge?.localAIAvailability() ?? 'missing_native';
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-    <Text style={ui.eyebrow}>CAPTURE TO TASK</Text><Text style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
+    <Text style={ui.eyebrow}>CAPTURE TO TASK</Text><Text style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
     <Button title={busy ? '글자를 읽는 중…' : '사진에서 선택'} onPress={() => void select()} disabled={busy} />
     {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}
     {!!text && <View style={ui.card}><Text style={ui.label}>기기에서 인식한 글자</Text><TextInput accessibilityLabel="인식된 글자" style={[ui.input, { minHeight: 150 }]} multiline value={text} onChangeText={setText} />{containsSensitiveText(text) && <Text style={[ui.subtitle, ui.danger]}>민감한 정보가 감지되었어요. 외부 AI 전송을 제한해야 하는 내용이에요.</Text>}</View>}

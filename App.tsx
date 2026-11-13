@@ -14,7 +14,7 @@ import { Button, Check } from './src/ui/components';
 import { TodoEditor } from './src/ui/TodoEditor';
 import { Review } from './src/ui/Review';
 import { Capture } from './src/ui/Capture';
-import { clearTemporaryFiles } from './src/data/temporaryFiles';
+import { clearTemporaryFiles, discardTemporaryImage } from './src/data/temporaryFiles';
 import { availabilityLabels } from './src/ai/onDeviceProvider';
 import { ModelEvaluation } from './src/dev/ModelEvaluation';
 import { analysisReviewRoute } from './src/notifications/route';
@@ -30,7 +30,7 @@ function Application() {
   const [busy, setBusy] = useState(false);
   const mutationInFlight = useRef(false);
   const [editing, setEditing] = useState<Todo | null>(null);
-  const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[] } | null>(null);
+  const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[]; imageUri?: string } | null>(null);
   const [capture, setCapture] = useState(false);
   const [evaluation, setEvaluation] = useState(false);
   const [lockVisibility, setLockVisibility] = useState<'titles' | 'count' | 'hidden'>('count');
@@ -117,8 +117,8 @@ function Application() {
     </KeyboardAvoidingView>
     <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line }}>{([['today', '할 일'], ['inbox', '분석함'], ['settings', '설정']] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }} style={{ flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', padding: 10 }} onPress={() => { setTab(key); void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.')); }}><Text style={{ color: tab === key ? colors.accent : colors.muted, fontWeight: tab === key ? '800' : '500', fontSize: 15 }}>{label}{key === 'inbox' && analyses.some(a => a.status === 'review') ? ' •' : ''}</Text></Pressable>)}</View>
     {editing && <TodoEditor key={editing.id} todo={editing} close={() => setEditing(null)} save={async input => { await repo.updateTodo(editing.id, input); await changed(); }} remove={async () => { await repo.removeTodo(editing.id); await changed(); }} />}
-    {review && <Review key={review.id} analysisId={review.id} tasks={review.tasks} repository={repo} close={() => setReview(null)} changed={changed} />}
-    {capture && <Capture repository={repo} close={() => setCapture(false)} analyzed={async id => { await changed(); const tasks = await repo.listExtracted(id); setCapture(false); if (tasks.length) setReview({ id, tasks }); else Alert.alert('발견한 할 일이 없어요', '필요한 내용은 직접 할 일로 입력할 수 있어요.'); }} />}
+    {review && <Review key={review.id} analysisId={review.id} tasks={review.tasks} repository={repo} close={() => setReview(null)} changed={changed} imageUri={review.imageUri} />}
+    {capture && <Capture repository={repo} close={() => setCapture(false)} analyzed={async (id, imageUri) => { await changed(); const tasks = await repo.listExtracted(id); setCapture(false); if (tasks.length) setReview({ id, tasks, imageUri }); else { if (imageUri) discardTemporaryImage(imageUri); Alert.alert('발견한 할 일이 없어요', '필요한 내용은 직접 할 일로 입력할 수 있어요.'); } }} />}
     {__DEV__ && evaluation && <ModelEvaluation close={() => setEvaluation(false)} />}
   </SafeAreaView>;
 }

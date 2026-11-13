@@ -30,6 +30,7 @@ private struct CaptureShareView: View {
   @State private var analysisId: String?
   @State private var items: [CaptureReviewItem] = []
   @State private var operation: Task<Void, Never>?
+  @State private var preview: UIImage?
   private func dueLabel(_ item: CaptureReviewItem) -> String {
     guard let due = item.dueAt else { return "마감 없음" }
     if item.duePrecision == "date" {
@@ -62,12 +63,15 @@ private struct CaptureShareView: View {
       defer { working = false; operation = nil }
       do {
         let data = try await readImage(); try Task.checkCancellation()
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", extract: OnDeviceExtraction.extract)
+        preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
+        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, extract: OnDeviceExtraction.extract)
         try Task.checkCancellation()
         let store = try SharedStore()
         let proposals = try store.captureReviewItems(id: result.id)
         analysisId = result.id; items = proposals
-        message = proposals.isEmpty ? (result.duplicate ? "이미 저장하거나 무시한 이미지예요. 앱 분석함에서 내역을 확인할 수 있어요." : "이 이미지에서 할 일을 찾지 못했어요.") : "제목·날짜·원문 근거를 확인하고 필요한 항목만 저장하세요."
+        let status = try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [result.id]).first?["status"] as? String
+        if status == "processing" || status == "queued" { message = "이 이미지는 이미 분석 중이에요. 잠시 후 앱 분석함에서 확인해 주세요." }
+        else { message = proposals.isEmpty ? (result.duplicate ? "검토할 제안이 없어요. 이미 처리되었거나 보존 기간이 지난 결과는 앱 분석함에서 확인할 수 있어요." : "이 이미지에서 할 일을 찾지 못했어요.") : "제목·날짜·원문 근거를 확인하고 필요한 항목만 저장하세요." }
       } catch {
         guard !Task.isCancelled else { return }
         failure = (error as? LocalizedError)?.errorDescription ?? "기기 내 분석을 마치지 못했어요. 앱에서 AI 준비 상태를 확인하고 다시 시도해 주세요."
@@ -96,6 +100,7 @@ private struct CaptureShareView: View {
         VStack(alignment: .leading, spacing: 20) {
           Text("캡처 속 할 일").font(.largeTitle.bold())
           Text(message).foregroundStyle(.secondary)
+          if let preview { Image(uiImage: preview).resizable().scaledToFit().frame(maxHeight: 220).accessibilityLabel("이번 분석 이미지 미리보기") }
           Text("무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
           if let failure { Text(failure).foregroundStyle(.red) }
           if working { ProgressView("처리 중") }
