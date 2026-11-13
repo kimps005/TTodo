@@ -121,7 +121,7 @@ export class Repository {
   }
   async ignoreAnalysis(id: string) {
     await this.db.withExclusiveTransactionAsync(async tx => {
-      await tx.runAsync("UPDATE extracted_tasks SET review_status='ignored' WHERE analysis_id=? AND review_status='pending'", id);
+      await tx.runAsync("UPDATE extracted_tasks SET review_status='ignored',title='무시한 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0 WHERE analysis_id=? AND review_status='pending'", id);
       await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=?", id, id);
     });
   }
@@ -129,8 +129,19 @@ export class Repository {
     return (await this.db.getFirstAsync<{ value: string }>('SELECT value FROM preferences WHERE key=?', key))?.value ?? null;
   }
   setPreference(key: string, value: string) { return this.db.runAsync('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value); }
-  pruneEvidence() {
-    return this.db.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", this.now());
+  async pruneEvidence() {
+    const time = this.now();
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
+      await tx.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
+      await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review' AND expires_at<=?", time);
+    });
+  }
+  async revokeLocalAIConsent() {
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await tx.runAsync("INSERT INTO preferences(key,value) VALUES('ai_local_consent','no') ON CONFLICT(key) DO UPDATE SET value='no'");
+      await tx.runAsync("UPDATE extracted_tasks SET evidence_text=''");
+    });
   }
   async exportData() {
     let result: object = {};

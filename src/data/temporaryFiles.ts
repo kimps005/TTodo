@@ -4,8 +4,10 @@ const captureDirectory = () => new Directory(Paths.cache, 'ttodo-captures');
 export function clearTemporaryFiles() {
   const directory = captureDirectory();
   if (directory.exists) directory.delete();
-  const exported = new File(Paths.cache, 'TTodo-export.json');
-  if (exported.exists) exported.delete();
+  for (const name of ['TTodo-export.json', 'TTodo-model-evaluation.json']) {
+    const exported = new File(Paths.cache, name);
+    if (exported.exists) exported.delete();
+  }
 }
 export function ownTemporaryImage(uri: string): string {
   const original = new File(uri);

@@ -20,7 +20,7 @@
 - 홈, 할 일 편집, 분석함, 제안 검토, 설정 및 데이터 내보내기/삭제 UI 구현.
 - AI 제공자 인터페이스, 원문 근거·날짜·신뢰도·실제 할 일 여부 응답 검증, 민감 텍스트 제한 구현.
 - Apple Foundation Models 기기 내 추출 후보와 사진 선택→OCR→동의→추출→검토→승인 경로 연결. OS/기기/모델/한국어 준비 상태 확인. 외부 전송 없음. 실제 생성과 정확도는 미검증.
-- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋 검사 등 14개 통과. `npm run typecheck`: 통과.
+- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋/실행기, 날짜 문맥 검사 등 19개 통과. `npm run typecheck`: 통과.
 - Expo 전이 의존성 minimatch 취약점을 해당 의존성 범위의 override로 수정. 설치 시 보안 경고 0개.
 - UI는 아직 iPhone에서 실행·시각 검증하지 않음. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
 - App Group SQLite, 잠금 이후 접근 정책(재부팅 후 최초 인증 필요), AddTodo App Intent, Vision 한국어/영어 OCR, WidgetKit 및 Live Activity 코드 구현.
@@ -29,10 +29,14 @@
 - Windows Hermes 실행 오류의 원인: 운영체제 애플리케이션 제어 정책이 `hermesc.exe`를 차단. 보안 정책을 변경하지 않고, 로컬 JS 번들 검사와 CI의 실제 Hermes 빌드를 구분한다.
 - 로컬 iOS JavaScript 번들 검사 통과. 첫 GitHub CI core 작업에서 타입·테스트·보안·실제 Hermes 바이트코드 모두 통과.
 - 첫 macOS CI 소스 경로 오류를 수정하고 [299af4a CI](https://github.com/kimps005/TTodo/actions/runs/43426175047)에서 앱과 확장의 네이티브 빌드 통과. 이후 DB 브리지/기기 내 AI 변경은 별도 재빌드 확인 필요.
+- [f7fa8ea CI](https://github.com/kimps005/TTodo/actions/runs/43428618685): 새 시스템 SQLite 브리지와 Foundation Models 기기 내 AI를 포함한 iOS 앱/위젯 arm64 시뮬레이터 컴파일 통과. 실제 생성/기기 잠금 테스트와 구분.
 - iOS는 앱·단축어·위젯이 시스템 SQLite를 사용하도록 통일. 같은 파일을 서로 다른 SQLite 복사본으로 접근하지 않으며, JS 작업/트랜잭션을 순서대로 실행. Android 준비용 Expo 어댑터는 새 연결의 PRAGMA를 개별 설정.
 - 초기 지원 OS의 시스템 SQLite 버전을 고려해 rollback journal(DELETE)을 사용. 저장 성공을 우선하고 성능은 실기기에서 측정.
 - 임시 사진은 전용 캐시로 옮겨 화면 종료 시 삭제하고, 강제 종료 잔여 파일과 임시 내보내기는 다음 시작에 정리.
 - 24개 합성 한국어 OCR 정답셋 준비. 실제 이미지·모델 성능 측정 아님.
+- 개발 빌드의 설정에서 합성 24문장 기기 내 평가 실행/중단 및 결과 JSON 내보내기 가능. 정답을 모델에 주입하지 않으며 자동 정확도 점수를 표시하지 않음. 실제 평가 실행은 미실시.
+- 원문 무시 즉시 삭제, 만료 대기 제안 비식별화/저장 차단, 동의 철회 시 원문 근거 삭제, 날짜 기준일 없는 상대 날짜/연도 추정 제거, 마감의 실제 시각 정렬 보완.
+- 실제 Swift 저장소를 macOS에서 실행하는 마이그레이션·바인딩·개인정보 스냅샷·롤백 검사를 CI에 추가. 다음 실행 결과 확인 필요. App Group 권한과 파일 보호는 이 검사로 검증하지 않음.
 
 ## 아직 구현/검증이 필요한 P0
 - 스크린샷 이미지 입력 App Intent와 Share Extension, 액션형 제안 알림의 네이티브 백그라운드 저장.

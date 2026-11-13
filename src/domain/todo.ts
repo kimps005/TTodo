@@ -60,8 +60,13 @@ export function sortTodos(todos: Todo[], now = new Date()): Todo[] {
     if (day && day < today) return 1;
     return day ? 3 : 2;
   };
-  return [...todos].sort((a, b) => rank(a) - rank(b) ||
-    (a.due_at ?? '').localeCompare(b.due_at ?? '') || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+  const dueOrder = (a: Todo, b: Todo) => {
+    const day = (dueDay(a) ?? '').localeCompare(dueDay(b) ?? '');
+    if (day || !a.due_at || !b.due_at) return day;
+    if (a.due_precision !== b.due_precision) return a.due_precision === 'date' ? -1 : 1;
+    return a.due_precision === 'datetime' ? Date.parse(a.due_at) - Date.parse(b.due_at) : 0;
+  };
+  return [...todos].sort((a, b) => rank(a) - rank(b) || dueOrder(a, b) || a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
 }
 export function dueLabel(todo: Pick<Todo, 'due_at' | 'due_precision'>): string {
   if (!todo.due_at) return '마감 없음';

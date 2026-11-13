@@ -16,6 +16,7 @@ import { Review } from './src/ui/Review';
 import { Capture } from './src/ui/Capture';
 import { clearTemporaryFiles } from './src/data/temporaryFiles';
 import { availabilityLabels } from './src/ai/onDeviceProvider';
+import { ModelEvaluation } from './src/dev/ModelEvaluation';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function Application() {
@@ -30,6 +31,7 @@ function Application() {
   const [editing, setEditing] = useState<Todo | null>(null);
   const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[] } | null>(null);
   const [capture, setCapture] = useState(false);
+  const [evaluation, setEvaluation] = useState(false);
   const [privateLock, setPrivateLock] = useState(true);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState('확인 전');
@@ -78,9 +80,10 @@ function Application() {
           <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><View style={ui.row}><Text style={[ui.label, { flex: 1 }]}>잠금화면 제목 숨기기</Text><Switch accessibilityLabel="잠금화면 제목 숨기기" value={privateLock} disabled={busy} onValueChange={value => void run(() => repo.setPreference('private_lock', value ? 'yes' : 'no'))} /></View><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
           <View style={ui.card}><Text style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>자동화 지원 OS와 정확한 이미지 전달을 검증 중이에요. 아직 자동 설정이나 연결 완료를 안내하지 않아요.</Text></View>
           <View style={ui.card}><Text style={ui.section}>분석 결과 알림</Text><Text style={ui.subtitle}>권한: {permission}</Text><Button secondary title="알림 권한 요청" onPress={() => void run(async () => { await Notifications.requestPermissionsAsync(); })} disabled={busy} /></View>
-          <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI</Text><Text style={ui.subtitle}>{availabilityLabels[nativeBridge?.localAIAvailability() ?? 'missing_native'] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>외부 유료 API를 사용하지 않아요. 원문 근거는 동의한 경우에만 최대 7일 저장해요. 현재 한국어 정확도 검증 전이에요.</Text><Button title="AI 동의 철회" secondary disabled={busy} onPress={() => void run(() => repo.setPreference('ai_local_consent', 'no'))} /></View>
+          <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI</Text><Text style={ui.subtitle}>{availabilityLabels[nativeBridge?.localAIAvailability() ?? 'missing_native'] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>외부 유료 API를 사용하지 않아요. 원문 근거는 동의한 경우에만 최대 7일 저장해요. 현재 한국어 정확도 검증 전이에요.</Text><Button title="AI 중지 및 원문 근거 삭제" secondary disabled={busy} onPress={() => void run(() => repo.revokeLocalAIConsent())} /></View>
           <View style={ui.card}><Text style={ui.section}>개인정보와 데이터</Text><Text style={ui.subtitle}>이미지나 글자를 외부 AI 서버에 보내지 않아요. 할 일과 분석 제안은 기기에 저장돼요. 원본 이미지는 보관하지 않고 임시 파일은 화면 종료 또는 다음 앱 실행 때 정리해요.</Text><Button title="내 데이터 내보내기" secondary onPress={exportData} disabled={busy} /><Button title="모든 데이터 삭제" secondary disabled={busy} onPress={() => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => { await nativeBridge?.endActivities(); await repo.deleteAll(); }) }])} /></View>
           <Text style={ui.small}>TTodo 1.0.0 · 개발 중{'\n'}실기기 검증 및 App Store 출시 준비 전 버전이에요.</Text>
+          {__DEV__ && <Button secondary title="개발용 한국어 AI 평가" disabled={busy} onPress={() => setEvaluation(true)} />}
         </>}
       </ScrollView>
     </KeyboardAvoidingView>
@@ -88,6 +91,7 @@ function Application() {
     {editing && <TodoEditor key={editing.id} todo={editing} close={() => setEditing(null)} save={async input => { await repo.updateTodo(editing.id, input); await changed(); }} remove={async () => { await repo.removeTodo(editing.id); await changed(); }} />}
     {review && <Review key={review.id} analysisId={review.id} tasks={review.tasks} repository={repo} close={() => setReview(null)} changed={changed} />}
     {capture && <Capture repository={repo} close={() => setCapture(false)} analyzed={async id => { await changed(); const tasks = await repo.listExtracted(id); setCapture(false); if (tasks.length) setReview({ id, tasks }); else Alert.alert('발견한 할 일이 없어요', '필요한 내용은 직접 할 일로 입력할 수 있어요.'); }} />}
+    {__DEV__ && evaluation && <ModelEvaluation close={() => setEvaluation(false)} />}
   </SafeAreaView>;
 }
 export default function App() { return <SafeAreaProvider><Application /></SafeAreaProvider>; }

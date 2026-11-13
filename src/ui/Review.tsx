@@ -19,7 +19,7 @@ export function Review({ tasks, repository, analysisId, close, changed }: { task
       <TextInput accessibilityLabel="제안된 할 일 제목" editable={task.review_status === 'pending' && !busy} style={ui.input} value={task.title} onChangeText={title => edit(index, { title })} multiline maxLength={400} />
       <Text style={ui.label}>마감 · {dueLabel(task)}</Text><TextInput accessibilityLabel="제안 마감 날짜 수정 YYYY-MM-DD" editable={task.review_status === 'pending' && !busy} style={ui.input} placeholder="날짜 수정 YYYY-MM-DD" value={task.date} onChangeText={date => edit(index, { date, dateEdited: true })} maxLength={10} keyboardType="numbers-and-punctuation" />
       <Text style={ui.small}>날짜를 수정하면 시각 없이 저장해요. 입력 후 비우면 마감을 해제해요.</Text>
-      <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '개인정보 보존 기간이 지나 원문을 삭제했어요.'}</Text>
+      <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>
     </View>)}
     <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || !selected.length} onPress={() => void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, due_at: t.dateEdited ? t.date.trim() || null : t.due_at, due_precision: t.dateEdited ? t.date.trim() ? 'date' : 'unknown' : t.due_precision } }))))} />
     <Button secondary title="남은 제안 모두 무시" disabled={busy || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId))} />

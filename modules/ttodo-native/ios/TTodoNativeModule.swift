@@ -15,6 +15,7 @@ public class TTodoNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("TTodoNative")
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
+    Function("systemVersion") { ProcessInfo.processInfo.operatingSystemVersionString }
     AsyncFunction("extractTasks") { (text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String in
       try await OnDeviceExtraction.extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
     }

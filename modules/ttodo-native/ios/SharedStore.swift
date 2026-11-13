@@ -32,8 +32,9 @@ final class SharedStore {
     var url = directory; try url.setResourceValues(resource)
     return directory
   }
-  init() throws {
-    let path = try Self.directory().appendingPathComponent("ttodo.sqlite").path
+  init(directoryOverride: URL? = nil) throws {
+    let directory = try directoryOverride ?? Self.directory()
+    let path = directory.appendingPathComponent("ttodo.sqlite").path
     guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
       sqlite3_close(db); db = nil; throw StoreError.database
     }
@@ -49,9 +50,11 @@ final class SharedStore {
         try execute("COMMIT")
       } catch { try? execute("ROLLBACK"); throw error }
       // Existing DB and sidecars must follow the same policy as newly created files.
+      #if os(iOS)
       for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: path + suffix) {
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: path + suffix)
       }
+      #endif
     } catch { sqlite3_close(db); db = nil; throw error }
   }
   deinit { sqlite3_close(db) }
@@ -125,7 +128,7 @@ final class SharedStore {
       let count = try scalar("SELECT COUNT(*) FROM todos WHERE status='pending'")
       // Privacy defaults to hidden if unset or unavailable.
       let hide = try scalar("SELECT CASE WHEN (SELECT value FROM preferences WHERE key='private_lock')='no' THEN 0 ELSE 1 END") != 0
-      let stmt = try statement("WITH pending AS (SELECT *,CASE WHEN due_precision='datetime' THEN date(due_at,'localtime') ELSE substr(due_at,1,10) END AS due_day FROM todos WHERE status='pending') SELECT id,title FROM pending ORDER BY CASE WHEN due_day=date('now','localtime') THEN 0 WHEN due_day<date('now','localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_at,sort_order,created_at LIMIT 5")
+      let stmt = try statement("WITH pending AS (SELECT *,CASE WHEN due_precision='datetime' THEN date(due_at,'localtime') ELSE substr(due_at,1,10) END AS due_day FROM todos WHERE status='pending') SELECT id,title FROM pending ORDER BY CASE WHEN due_day=date('now','localtime') THEN 0 WHEN due_day<date('now','localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_day,CASE WHEN due_precision='date' THEN 0 ELSE 1 END,julianday(due_at),sort_order,created_at LIMIT 5")
       defer { sqlite3_finalize(stmt) }
       var tasks: [LockTask] = []
       var status = sqlite3_step(stmt)

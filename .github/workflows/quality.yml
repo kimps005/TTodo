@@ -37,6 +37,10 @@ jobs:
       - run: npm ci
       - name: Generate iOS projects
         run: npx expo prebuild --platform ios --no-install
+      - name: Test production Swift storage
+        run: |
+          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift native/tests/StoreSmoke.swift -o "$RUNNER_TEMP/ttodo-store-smoke"
+          "$RUNNER_TEMP/ttodo-store-smoke"
       - name: Install pods
         working-directory: ios
         run: pod install

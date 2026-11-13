@@ -55,6 +55,22 @@ test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 �
   assert.equal((await repo.listAnalyses())[0].status, 'saved');
   assert.equal((await repo.listExtracted(a.id))[1].review_status, 'ignored'); native.close();
 });
+test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안은 저장할 수 없다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const a = await repo.createAnalysis('private', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'evaluation');
+  await repo.ignoreAnalysis(a.id);
+  assert.equal((await repo.listExtracted(a.id))[0].evidence_text, '');
+  assert.equal((await repo.listExtracted(a.id))[0].title, '무시한 제안');
+  const b = await repo.createAnalysis('expires', 'manual', null);
+  await repo.finishAnalysis(b.id, [task], 'evaluation');
+  native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('2026-11-12T00:00:00Z', b.id);
+  await repo.pruneEvidence();
+  assert.equal((await repo.listExtracted(b.id))[0].review_status, 'ignored');
+  assert.equal((await repo.listExtracted(b.id))[0].evidence_text, '');
+  await assert.rejects(repo.approve(b.id, [{ id: (await repo.listExtracted(b.id))[0].id, input: { title: '만료됨' } }]));
+  native.close();
+});
 test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되돌린다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
@@ -111,4 +127,11 @@ test('오늘·기한 지남·마감 없음·미래·완료 순서로 정렬한�
     await repo.addTodo({ title, due_at: due, due_precision: due ? 'date' : 'unknown' });
   }
   assert.deepEqual(sortTodos(await repo.listTodos(), new Date('2026-11-13T12:00:00')).map(t => t.title), ['오늘','지남','없음','미래']); native.close();
+});
+test('서로 다른 시간대의 마감은 문자열 대신 실제 시각으로 비교한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.addTodo({ title: '먼저', due_at: '2026-11-13T17:00:00+09:00', due_precision: 'datetime' });
+  await repo.addTodo({ title: '나중', due_at: '2026-11-13T09:00:00Z', due_precision: 'datetime' });
+  assert.deepEqual(sortTodos(await repo.listTodos(), new Date('2026-11-13T12:00:00')).map(t => t.title), ['먼저','나중']);
+  native.close();
 });

@@ -34,3 +34,12 @@ export function containsSensitiveText(text: string): boolean {
   return /(?:비밀번호|패스워드|password|인증\s*(?:번호|코드)|보안\s*코드|계좌\s*번호|주민\s*등록)/i.test(text) ||
     /\b\d{6}\s*[-–]\s*[1-4]\d{6}\b/.test(text) || /\b(?:\d[ -]?){16}\b/.test(text);
 }
+export function enforceDateContext(tasks: TaskSuggestion[], context: ExtractionContext): TaskSuggestion[] {
+  if (context.message_date) return tasks;
+  return tasks.map(task => {
+    if (!task.due_at) return task;
+    const relative = /오늘|내일|모레|글피|이번\s*주|다음\s*주|다음\s*달|이번\s*달|일\s*뒤|일\s*후/.test(task.evidence_text);
+    const explicitYear = /\b\d{4}\s*(?:년|[-./])/.test(task.evidence_text);
+    return relative || !explicitYear ? { ...task, due_at: null, due_precision: 'unknown', needs_confirmation: 1 } : task;
+  });
+}
