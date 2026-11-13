@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -68,7 +68,7 @@ try {
       if (existsSync(candidate)) { database = candidate; break; }
     } catch { /* Wait for first App Group access. */ }
   }
-  sim('io', device, 'screenshot', path.join(output, '01-home-empty.png')); report.screenshots.push('01-home-empty.png');
+  sim('io', device, 'screenshot', path.join(output, '01-home-onboarding.png')); report.screenshots.push('01-home-onboarding.png');
   process.kill(initialPid, 0);
   if (!database) throw new Error('Shared SQLite was not initialized after launch. Inspect the home screenshot and crash logs.');
   // Stop the app before the host SQLite tool opens the file; do not inspect raw DB bytes
@@ -78,14 +78,18 @@ try {
   report.database_integrity = run('sqlite3', [database, 'PRAGMA integrity_check;']);
   if (report.database_integrity !== 'ok') throw new Error('SQLite integrity check failed.');
   report.schema_version = Number(run('sqlite3', [database, 'PRAGMA user_version;']));
+  const expectedSchema = JSON.parse(readFileSync(path.join(root, 'src/data/schema.json'), 'utf8')).version;
+  if (report.schema_version !== expectedSchema) throw new Error('Shared SQLite schema does not match the application schema.');
   const fixture = `
     BEGIN IMMEDIATE;
+    INSERT INTO preferences(key,value) VALUES('onboarded','yes');
     INSERT INTO todos(id,title,created_at,updated_at,sort_order) VALUES('00000000-0000-4000-8000-000000000001','CI 합성: 첫 번째 할 일','2026-11-13T00:00:00.000Z','2026-11-13T00:00:00.000Z',1);
     INSERT INTO todos(id,title,created_at,updated_at,sort_order) VALUES('00000000-0000-4000-8000-000000000002','CI 합성: 두 번째 할 일','2026-11-13T00:00:00.000Z','2026-11-13T00:00:00.000Z',2);
     INSERT INTO todos(id,title,status,created_at,updated_at,completed_at,sort_order) VALUES('00000000-0000-4000-8000-000000000003','CI 합성: 완료 항목','completed','2026-11-13T00:00:00.000Z','2026-11-13T00:00:00.000Z','2026-11-13T00:00:00.000Z',3);
     COMMIT;
   `;
   run('sqlite3', [database, fixture]);
+  report.onboarding_fixture = 'completed-via-synthetic-preference-not-ui';
   report.phase = 'fixture-relaunch';
   const fixturePid = launch(device, bundle); await wait(8000);
   process.kill(fixturePid, 0);
