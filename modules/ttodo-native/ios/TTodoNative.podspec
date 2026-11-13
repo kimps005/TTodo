@@ -10,6 +10,7 @@ Pod::Spec.new do |s|
   s.source = { :git => 'https://github.com/kimps005/TTodo.git' }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
+  s.dependency 'ExpoNotifications'
   s.frameworks = 'Vision', 'WidgetKit', 'ActivityKit', 'ImageIO'
   s.weak_frameworks = 'FoundationModels'
   s.libraries = 'sqlite3'

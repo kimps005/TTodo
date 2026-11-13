@@ -1,1 +1,1 @@
-{"platforms":["apple"],"apple":{"modules":["TTodoNativeModule"]}}
+{"platforms":["apple"],"apple":{"modules":["TTodoNativeModule"],"appDelegateSubscribers":["CaptureAppDelegateSubscriber"]}}

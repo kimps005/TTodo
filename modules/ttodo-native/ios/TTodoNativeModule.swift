@@ -41,6 +41,7 @@ public class TTodoNativeModule: Module {
       WidgetCenter.shared.reloadAllTimelines()
       Task { try? await TodoActivityManager.refresh() }
     }
+    AsyncFunction("clearCaptureNotifications") { () async in await CaptureNotifications.clearAll() }
     AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.start() }
     AsyncFunction("endActivities") { () async in await TodoActivityManager.end() }
   }

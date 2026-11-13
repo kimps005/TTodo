@@ -43,6 +43,12 @@ enum ExtractionValidator {
     guard let date = formatter.date(from: value) else { return false }
     return formatter.string(from: date) == value
   }
+  static func timestamp(_ value: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    if let date = formatter.date(from: value) { return date }
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.date(from: value)
+  }
   static func validDue(_ due: String?, precision: String) -> Bool {
     guard let due else { return precision == "unknown" }
     if precision == "date" { return validDate(due) }

@@ -48,6 +48,22 @@ struct CaptureSmoke {
     let relative = raw.replacingOccurrences(of: text, with: "내일 자료 보내줘.")
     let guarded = try ExtractionValidator.validate(relative, sourceText: "내일 자료 보내줘.", messageDate: nil)
     check(guarded[0].due_at == nil && guarded[0].needs_confirmation)
+    do { _ = try store.approveSingleCapture(id: first.id); fatalError("Ambiguous task was approved without review") }
+    catch CaptureError.reviewRequired { }
+    try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
+    let quick = try store.registerCapture(fingerprint: "quick", channel: "shortcuts")
+    let clear = raw.replacingOccurrences(of: #""assignee":null"#, with: #""assignee":"사용자""#).replacingOccurrences(of: #""needs_confirmation":true"#, with: #""needs_confirmation":false"#)
+    try store.finishCapture(id: quick.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only")
+    check(try store.approveSingleCapture(id: quick.id))
+    check(try !store.approveSingleCapture(id: quick.id))
+    check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 1)
+    try store.ignoreCapture(id: first.id)
+    check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [first.id]))[0]["evidence_text"] as? String == "")
+    let expired = try store.registerCapture(fingerprint: "expired", channel: "shortcuts")
+    try store.finishCapture(id: expired.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only")
+    try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
+    do { _ = try store.approveSingleCapture(id: expired.id); fatalError("Expired result was approved") }
+    catch CaptureError.reviewRequired { }
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }

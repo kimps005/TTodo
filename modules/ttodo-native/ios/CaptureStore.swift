@@ -53,4 +53,33 @@ extension SharedStore {
   func failCapture(id: String, code: String) throws {
     try runSQL("UPDATE analyses SET status='failed',error_code=? WHERE id=? AND status='processing'", params: [code, id])
   }
+  func approveSingleCapture(id: String, now: Date = Date()) throws -> Bool {
+    try transaction {
+      guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
+      if analysis["status"] as? String == "saved" { return false }
+      guard analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
+        let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
+      let tasks = try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=?", params: [id])
+      guard tasks.count == 1, let task = tasks.first, task["review_status"] as? String == "pending",
+        task["needs_confirmation"] as? Int64 == 0, let taskId = task["id"] as? String,
+        let title = task["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+        title.unicodeScalars.count <= 200, let precision = task["due_precision"] as? String,
+        ExtractionValidator.validDue(task["due_at"] as? String, precision: precision) else { throw CaptureError.reviewRequired }
+      let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [taskId]).first?["id"] as? String
+      let todoId = existing ?? UUID().uuidString.lowercased()
+      if existing == nil {
+        let time = ISO8601DateFormatter().string(from: now)
+        try runSQL("INSERT INTO todos(id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [todoId, title, task["description"] as? String, task["due_at"] as? String, precision, time, time, analysis["source_channel"] as? String == "share" ? "share" : "screenshot", taskId, String(now.timeIntervalSince1970 * 1000)])
+      }
+      try runSQL("UPDATE extracted_tasks SET review_status='saved',linked_todo_id=? WHERE id=?", params: [todoId, taskId])
+      try runSQL("UPDATE analyses SET status='saved' WHERE id=?", params: [id])
+      return existing == nil
+    }
+  }
+  func ignoreCapture(id: String) throws {
+    try transaction {
+      try runSQL("UPDATE extracted_tasks SET review_status='ignored',title='무시한 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0 WHERE analysis_id=? AND review_status='pending'", params: [id])
+      try runSQL("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=?", params: [id, id])
+    }
+  }
 }
