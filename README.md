@@ -26,7 +26,11 @@ Windows 앱 제어 정책이 Hermes 바이너리를 차단하면 보안 정책�
 
 ## iPhone 개발 빌드 준비
 
-1. Apple Developer Program과 Expo 계정을 준비합니다.
+무료 검증은 사용할 수 있는 Mac의 최신 Xcode와 무료 Apple Developer 계정으로 서명하는 경로를 먼저 확인합니다. Apple의 [현재 기능 지원 표](https://developer.apple.com/help/account/reference/supported-capabilities-ios)는 무료 Apple Developer 계정에도 App Groups 지원을 표시합니다. 실제 계정의 서명/프로비저닝 및 기기 동작은 아직 미검증입니다. Mac이 없다면 CI에서는 서명 없는 컴파일까지만 검증할 수 있습니다.
+
+EAS를 이용한 기기 배포 또는 향후 TestFlight/App Store 배포를 준비할 때는 아래 절차를 진행합니다. 현재는 무료 우선이므로 유료 가입이나 결제를 진행하지 않습니다.
+
+1. 해당 배포 경로에 필요한 Apple Developer Program과 Expo 계정을 준비합니다.
 2. `.env.example`을 참고해 사용할 Bundle ID와 EAS 프로젝트 ID를 확정합니다. 기본 `com.kimps005.ttodo`는 개발 식별자 후보입니다.
 3. EAS에 프로젝트를 연결하고 App Group `group.<Bundle ID>`와 위젯 `<Bundle ID>.widgets`를 같은 Apple Team에 등록합니다.
 4. `npx eas-cli build --platform ios --profile development`로 실제 기기용 서명 빌드를 만듭니다.

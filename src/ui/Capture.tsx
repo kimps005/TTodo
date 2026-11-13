@@ -61,7 +61,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   };
   const requestAnalysis = async () => {
     if (await repository.getPreference('ai_local_consent') === 'yes') { await analyze(); return; }
-    Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 최대 7일 보관해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 분석', onPress: () => { void repository.setPreference('ai_local_consent', 'yes').then(analyze).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
+    Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 분석', onPress: () => { void repository.setPreference('ai_local_consent', 'yes').then(analyze).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
   };
   const aiStatus = nativeBridge?.localAIAvailability() ?? 'missing_native';
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
