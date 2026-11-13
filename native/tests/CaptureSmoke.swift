@@ -21,6 +21,15 @@ struct CaptureSmoke {
     let factory = { try SharedStore(directoryOverride: directory) }
     let text = "2026년 11월 20일까지 자료 보내줘."
     let raw = #"[{"is_actionable":true,"title":"자료 전달","description":null,"due_at":"2026-11-20","due_precision":"date","assignee":null,"confidence":0.8,"evidence_text":"2026년 11월 20일까지 자료 보내줘.","needs_confirmation":true}]"#
+    for assignee in ["", " \n\t", "\u{00A0}", "  사용자  "] {
+      var rows = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [[String: Any]]
+      rows[0]["assignee"] = assignee; rows[0]["needs_confirmation"] = false
+      let json = String(decoding: try JSONSerialization.data(withJSONObject: rows), as: UTF8.self)
+      let result = try ExtractionValidator.validate(json, sourceText: text, messageDate: nil)[0]
+      let expected = assignee.trimmingCharacters(in: .whitespacesAndNewlines)
+      check(result.assignee == (expected.isEmpty ? nil : expected))
+      check(result.needs_confirmation == expected.isEmpty)
+    }
     var calls = 0
     let extract: CaptureProcessor.Extract = { _, _, _, _ in calls += 1; return raw }
     do {
@@ -192,6 +201,21 @@ struct CaptureSmoke {
     check(try store.captureNotificationIsCurrent(id: replacement.id, expectedTaskIds: currentIds))
     try store.ignoreCapture(id: replacement.id, expectedTaskIds: currentIds)
     check(try !store.captureNotificationIsCurrent(id: replacement.id, expectedTaskIds: currentIds))
+    let legacy = try store.registerCapture(fingerprint: "legacy-empty-assignee", channel: "shortcuts")
+    var legacyTask = firstTask
+    legacyTask.evidence_text = "보고서 9876543210번의 첨부 자료를 확인해서 제출해 주세요."
+    // Deliberately emulate a prior stored response with a wrong confirmation flag.
+    legacyTask.assignee = nil; legacyTask.needs_confirmation = false
+    try store.finishCapture(id: legacy.id, tasks: [legacyTask], provider: "test-only", token: legacy.token!)
+    let legacyId = try store.captureReviewItems(id: legacy.id)[0].id
+    check(try store.similarCaptures(id: legacy.id).isEmpty)
+    for assignee in [nil, "", " \n\t", "\u{00A0}"] as [String?] {
+      try store.runSQL("UPDATE extracted_tasks SET assignee=?,needs_confirmation=0 WHERE id=?", params: [assignee, legacyId])
+      check(try store.captureReviewItems(id: legacy.id)[0].needsConfirmation)
+      do { _ = try store.approveSingleCapture(id: legacy.id, expectedTaskId: legacyId); fatalError("Empty legacy assignee bypassed review") }
+      catch CaptureError.reviewRequired { }
+      check(try store.querySQL("SELECT id FROM todos WHERE source_id=?", params: [legacyId]).isEmpty)
+    }
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }

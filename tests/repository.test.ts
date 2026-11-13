@@ -195,6 +195,19 @@ test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 �
   await repo.initialize(); assert.equal((await repo.listAnalyses())[0].error_code, 'INTERRUPTED');
   await repo.ignoreAnalysis(a.id); await assert.rejects(repo.approve(a.id, [])); native.close();
 });
+
+test('과거에 확인 불필요로 저장된 빈 담당자도 검토 조회에서는 확인 필요로 표시한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('legacy-empty-assignee', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+  for (const assignee of [null, '', ' \n\t', '\u00a0']) {
+    native.prepare('UPDATE extracted_tasks SET assignee=?,needs_confirmation=0 WHERE analysis_id=?').run(assignee, a.id);
+    const [result] = await repo.listExtracted(a.id);
+    assert.equal(result.assignee, null); assert.equal(result.needs_confirmation, 1);
+  }
+  native.close();
+});
 test('v2 저장소를 보존하고 재시도 후 예전 결과와 실패 통지가 새 작업을 덮어쓰지 않는다', async () => {
   const { repo, native } = fixture();
   native.exec(schema.sql.replace('processing_token TEXT, ', '').replace('PRAGMA user_version = 3', 'PRAGMA user_version = 2'));

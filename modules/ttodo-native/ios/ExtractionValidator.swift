@@ -117,7 +117,9 @@ enum ExtractionValidator {
         let precision = value.due_precision, validDue(value.due_at, precision: precision),
         let confidence = value.confidence, confidence.isFinite, (0...1).contains(confidence),
         let confirmation = value.needs_confirmation else { throw ExtractionValidationError.invalid }
-      var task = NativeSuggestion(title: title, description: value.description.map { String($0.prefix(4000)) }, due_at: value.due_at, due_precision: precision, assignee: value.assignee, confidence: confidence, evidence_text: evidence, needs_confirmation: confirmation || value.assignee == nil)
+      let trimmedAssignee = value.assignee?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let assignee = trimmedAssignee?.isEmpty == false ? trimmedAssignee : nil
+      var task = NativeSuggestion(title: title, description: value.description.map { String($0.prefix(4000)) }, due_at: value.due_at, due_precision: precision, assignee: assignee, confidence: confidence, evidence_text: evidence, needs_confirmation: confirmation || assignee == nil)
       if messageDate == nil && task.due_at != nil {
         let relative = matches(evidence, "오늘|내일|모레|글피|이번\\s*주|다음\\s*주|다음\\s*달|이번\\s*달|일\\s*뒤|일\\s*후")
         let explicitYear = matches(evidence, "\\b\\d{4}\\s*(?:년|[-./])")

@@ -31,3 +31,12 @@ test('인증코드·비밀번호·주민번호·카드번호 의심 텍스트를
 test('Swift와 같은 전각·분해 한글·보이지 않는 문자 사례에 민감정보 제한을 적용한다', () => {
   for (const item of sensitiveSeed) assert.equal(containsSensitiveText(item.text), item.expected, JSON.stringify(item));
 });
+
+test('빈 담당자는 미지정과 확인 필요로 통일하고 명시한 담당자는 공백만 정리한다', () => {
+  for (const assignee of [null, '', ' \n\t', '\u00a0']) {
+    const [result] = validateExtraction([{ ...task, assignee, needs_confirmation: false }], task.evidence_text);
+    assert.equal(result.assignee, null); assert.equal(result.needs_confirmation, 1);
+  }
+  const [result] = validateExtraction([{ ...task, assignee: '  사용자  ', needs_confirmation: false }], task.evidence_text);
+  assert.equal(result.assignee, '사용자'); assert.equal(result.needs_confirmation, 0);
+});

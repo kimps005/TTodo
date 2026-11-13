@@ -16,11 +16,12 @@ enum CaptureNotifications {
       let analysis = try? store.querySQL("SELECT status,expires_at FROM analyses WHERE id=?", params: [outcome.id]).first,
       analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
       let expiry = ExtractionValidator.timestamp(expires), expiry > Date(),
-      let tasks = try? store.querySQL("SELECT id,title,needs_confirmation,review_status FROM extracted_tasks WHERE analysis_id=?", params: [outcome.id]),
+      let tasks = try? store.querySQL("SELECT id,title,assignee,needs_confirmation,review_status FROM extracted_tasks WHERE analysis_id=?", params: [outcome.id]),
       let snapshot = try? store.snapshot() else { return }
     let pending = tasks.filter { $0["review_status"] as? String == "pending" }
     guard !pending.isEmpty else { return }
-    let quick = !snapshot.hideTitles && tasks.count == 1 && pending[0]["needs_confirmation"] as? Int64 == 0 && (try? store.similarCaptures(id: outcome.id))?.isEmpty == true
+    let assignee = (pending[0]["assignee"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let quick = !snapshot.hideTitles && tasks.count == 1 && assignee?.isEmpty == false && pending[0]["needs_confirmation"] as? Int64 == 0 && (try? store.similarCaptures(id: outcome.id))?.isEmpty == true
     let open = UNNotificationAction(identifier: openAction, title: "확인하기", options: [.foreground])
     let add = UNNotificationAction(identifier: addAction, title: "추가", options: [])
     let ignore = UNNotificationAction(identifier: ignoreAction, title: "무시", options: [.destructive])

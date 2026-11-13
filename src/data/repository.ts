@@ -89,7 +89,10 @@ export class Repository {
       await this.pruneEvidenceInTransaction(tx, this.now());
       rows = await tx.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id);
     });
-    return rows;
+    return rows.map(task => {
+      const assignee = task.assignee?.trim() || null;
+      return { ...task, assignee, needs_confirmation: task.needs_confirmation || !assignee ? 1 : 0 };
+    });
   }
   async findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
     const rows = await this.db.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", id);

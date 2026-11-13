@@ -25,9 +25,10 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
     const due = t.due_at as string | null;
     const precision = t.due_precision as DuePrecision;
     validateDue(due, precision);
+    const assignee = (t.assignee as string | null)?.trim() || null;
     return [{ title: normalizeTitle(t.title), description: (t.description as string | null)?.slice(0, 4000) ?? null,
-      due_at: due, due_precision: precision, assignee: t.assignee as string | null, confidence: t.confidence,
-      evidence_text: t.evidence_text.slice(0, 4000), needs_confirmation: t.needs_confirmation || !t.assignee ? 1 : 0 }];
+      due_at: due, due_precision: precision, assignee, confidence: t.confidence,
+      evidence_text: t.evidence_text.slice(0, 4000), needs_confirmation: t.needs_confirmation || !assignee ? 1 : 0 }];
   });
 }
 export function containsSensitiveText(text: string): boolean {

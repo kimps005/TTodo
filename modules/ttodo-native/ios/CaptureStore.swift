@@ -149,6 +149,7 @@ extension SharedStore {
       let tasks = try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=?", params: [id])
       guard tasks.count == 1, let task = tasks.first, task["review_status"] as? String == "pending",
         task["needs_confirmation"] as? Int64 == 0, let taskId = task["id"] as? String, taskId == expectedTaskId,
+        let assignee = task["assignee"] as? String, !assignee.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         let title = task["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         title.unicodeScalars.count <= 200, let precision = task["due_precision"] as? String,
         ExtractionValidator.validDue(task["due_at"] as? String, precision: precision) else { throw CaptureError.reviewRequired }
@@ -188,7 +189,8 @@ extension SharedStore {
         guard let taskId = row["id"] as? String, let title = row["title"] as? String,
           let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
         let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
-        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: fields.day, timeText: fields.time)
+        let assignee = (row["assignee"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0 || assignee == nil || assignee?.isEmpty == true, dateText: fields.day, timeText: fields.time)
       }
     }
   }
