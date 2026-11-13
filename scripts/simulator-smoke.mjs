@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 if (process.platform !== 'darwin') throw new Error('이 검사는 macOS CI에서 실행합니다. Windows에서는 노트북 UI를 조작하지 않습니다.');
@@ -7,7 +8,7 @@ const root = process.cwd();
 const output = path.join(root, 'artifacts/simulator');
 mkdirSync(output, { recursive: true });
 const application = path.join(root, 'build/Build/Products/Release-iphonesimulator/TTodo.app');
-const run = (command, args, options = {}) => execFileSync(command, args, { encoding: 'utf8', timeout: 240000, ...options }).trim();
+const run = (command, args, options = {}) => execFileSync(command, args, { encoding: 'utf8', timeout: 240000, maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 const sim = (...args) => run('xcrun', ['simctl', ...args]);
 const info = (bundle, key) => run('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(bundle, 'Info.plist')]);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -20,6 +21,10 @@ const launch = (id, bundle) => {
   return pid;
 };
 let device;
+const diagnostic = (name, operation) => {
+  try { writeFileSync(path.join(output, name), operation()); }
+  catch (error) { writeFileSync(path.join(output, `${name}.error.txt`), String(error)); }
+};
 try {
   if (!existsSync(application)) throw new Error('Release simulator app bundle is missing.');
   const bundle = info(application, 'CFBundleIdentifier');
@@ -40,6 +45,7 @@ try {
     report.extensions.push(info(extension, 'CFBundleIdentifier'));
   }
   run('codesign', ['--force', '--sign', '-', '--entitlements', path.join(root, 'ios/TTodo/TTodo.entitlements'), '--generate-entitlement-der', application]);
+  diagnostic('signature.txt', () => run('codesign', ['--verify', '--deep', '--strict', '--verbose=4', application], { stdio: ['ignore', 'pipe', 'pipe'] }));
   const runtimes = JSON.parse(sim('list', 'runtimes', '--json')).runtimes.filter(item => item.isAvailable && item.identifier.includes('.iOS-'));
   runtimes.sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
   if (!runtimes[0]) throw new Error('No available iOS simulator runtime.');
@@ -83,6 +89,15 @@ try {
   report.completed = true;
 } catch (error) {
   report.completed = false; report.error = error instanceof Error ? error.message : String(error);
+  if (device && /^[0-9a-f-]{36}$/i.test(device)) {
+    diagnostic('failure-screen.txt', () => sim('io', device, 'screenshot', path.join(output, 'failure.png')));
+    diagnostic('simulator-system.log', () => sim('spawn', device, 'log', 'show', '--last', '8m', '--style', 'compact', '--predicate', 'process == "SpringBoard" OR process == "runningboardd" OR process == "amfid" OR process == "TTodo" OR eventMessage CONTAINS[c] "com.kimps005.ttodo"'));
+    diagnostic('host-simulator.log', () => run('log', ['show', '--last', '8m', '--style', 'compact', '--predicate', 'process == "Simulator" OR process == "SimulatorTrampoline" OR process == "CoreSimulatorService"']));
+    const crashes = path.join(os.homedir(), 'Library/Logs/DiagnosticReports');
+    if (existsSync(crashes)) for (const name of readdirSync(crashes).filter(name => /^(TTodo|SpringBoard|SimulatorTrampoline).*\.(ips|crash)$/.test(name))) {
+      copyFileSync(path.join(crashes, name), path.join(output, name));
+    }
+  }
   process.exitCode = 1;
 } finally {
   writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
