@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Repository, type Database, type SqlConnection, type SqlValue } from '../src/data/repository';
 import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
+import { createSerializedDatabase } from '../src/data/serializedDatabase';
+import schema from '../src/data/schema.json';
 
 function fixture() {
   const native = new DatabaseSync(':memory:');
@@ -13,10 +15,7 @@ function fixture() {
     getFirstAsync: async <T>(sql: string, ...params: SqlValue[]) => (native.prepare(sql).get(...params) as T) ?? null,
     getAllAsync: async <T>(sql: string, ...params: SqlValue[]) => native.prepare(sql).all(...params) as T[],
   };
-  const db: Database = { ...connection, withExclusiveTransactionAsync: async task => {
-    native.exec('BEGIN IMMEDIATE');
-    try { await task(connection); native.exec('COMMIT'); } catch (error) { native.exec('ROLLBACK'); throw error; }
-  } };
+  const db: Database = createSerializedDatabase(connection);
   const repo = new Repository(db, randomUUID, () => '2026-11-13T02:00:00.000Z');
   return { repo, native };
 }
@@ -64,6 +63,34 @@ test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되
   await assert.rejects(repo.approve(a.id, [{ id: tasks[0].id, input: { title: '정상' } }, { id: tasks[1].id, input: { title: ' ' } }]));
   assert.equal((await repo.listTodos()).length, 0);
   assert.ok((await repo.listExtracted(a.id)).every(t => t.review_status === 'pending')); native.close();
+});
+test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대기 작업은 계속 진행한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const a = await repo.createAnalysis('concurrent', 'manual', '2026-11-13T02:00:00Z');
+  await repo.finishAnalysis(a.id, [task], 'evaluation');
+  const selected = [{ id: (await repo.listExtracted(a.id))[0].id, input: { title: '동시 승인' } }];
+  await Promise.all([repo.approve(a.id, selected), repo.approve(a.id, selected)]);
+  assert.equal((await repo.listTodos()).length, 1);
+  await assert.rejects(repo.approve('missing', []));
+  await repo.addTodo({ title: '오류 이후 정상 입력' });
+  assert.equal((await repo.listTodos()).length, 2); native.close();
+});
+test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 사진을 v2에서 처리한다', async () => {
+  const { repo, native } = fixture();
+  native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('PRAGMA user_version = 2', 'PRAGMA user_version = 1'));
+  const todoId = await repo.addTodo({ title: '이전 버전 할 일' });
+  const old = await repo.createAnalysis('old-image', 'manual', '2026-11-12T02:00:00Z');
+  await repo.finishAnalysis(old.id, [task], 'old-model');
+  const oldTask = (await repo.listExtracted(old.id))[0];
+  await repo.approve(old.id, [{ id: oldTask.id, input: { title: task.title } }]);
+  await repo.initialize();
+  assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, 2);
+  assert.equal((await repo.listTodos()).length, 2);
+  assert.ok((await repo.listTodos()).some(t => t.id === todoId));
+  assert.equal((await repo.listExtracted(old.id))[0].linked_todo_id, (await repo.listTodos()).find(t => t.source_id === oldTask.id)!.id);
+  await repo.createAnalysis('unknown-time', 'manual', null);
+  assert.equal((await repo.listAnalyses()).find(a => a.image_fingerprint === 'unknown-time')!.captured_at, null);
+  native.close();
 });
 test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();

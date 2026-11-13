@@ -1,7 +1,7 @@
 import { normalizeTitle, validateDue, type DuePrecision } from '../domain/todo';
 import type { ExtractedTask } from '../data/repository';
 export type TaskSuggestion = Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>;
-export interface ExtractionContext { text: string; captured_at: string; timezone: string; message_date: string | null; }
+export interface ExtractionContext { text: string; captured_at: string | null; timezone: string; message_date: string | null; }
 export interface TaskExtractionProvider {
   readonly version: string;
   extract(context: ExtractionContext, signal: AbortSignal): Promise<TaskSuggestion[]>;
@@ -9,9 +9,11 @@ export interface TaskExtractionProvider {
 const clean = (value: string) => value.normalize('NFKC').replace(/\s+/g, ' ').trim();
 export function validateExtraction(raw: unknown, sourceText: string): TaskSuggestion[] {
   if (!Array.isArray(raw) || raw.length > 30) throw new Error('INVALID_RESPONSE');
-  return raw.map((item: unknown) => {
+  return raw.flatMap((item: unknown): TaskSuggestion[] => {
     if (!item || typeof item !== 'object') throw new Error('INVALID_RESPONSE');
     const t = item as Record<string, unknown>;
+    if (t.is_actionable === false) return [];
+    if (t.is_actionable !== true) throw new Error('INVALID_RESPONSE');
     if (typeof t.title !== 'string' || typeof t.evidence_text !== 'string' || !clean(t.evidence_text) ||
       !clean(sourceText).includes(clean(t.evidence_text)) ||
       typeof t.confidence !== 'number' || !Number.isFinite(t.confidence) || t.confidence < 0 || t.confidence > 1 ||
@@ -23,9 +25,9 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
     const due = t.due_at as string | null;
     const precision = t.due_precision as DuePrecision;
     validateDue(due, precision);
-    return { title: normalizeTitle(t.title), description: (t.description as string | null)?.slice(0, 4000) ?? null,
+    return [{ title: normalizeTitle(t.title), description: (t.description as string | null)?.slice(0, 4000) ?? null,
       due_at: due, due_precision: precision, assignee: t.assignee as string | null, confidence: t.confidence,
-      evidence_text: t.evidence_text.slice(0, 4000), needs_confirmation: t.needs_confirmation || !t.assignee ? 1 : 0 };
+      evidence_text: t.evidence_text.slice(0, 4000), needs_confirmation: t.needs_confirmation || !t.assignee ? 1 : 0 }];
   });
 }
 export function containsSensitiveText(text: string): boolean {

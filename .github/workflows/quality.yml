@@ -43,7 +43,7 @@ jobs:
       - name: Build iPhone simulator app and extension
         run: |
           set -o pipefail
-          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

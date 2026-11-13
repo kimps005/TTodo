@@ -4,7 +4,7 @@ const { withEntitlementsPlist, withInfoPlist, withXcodeProject } = require('expo
 const schema = require('../src/data/schema.json');
 
 function swiftConfiguration(group) {
-  return `// Generated from app config and src/data/schema.json.\nimport Foundation\nenum TTodoConfiguration {\n  static let appGroup = ${JSON.stringify(group)}\n  static let schemaVersion = ${schema.version}\n  static let schemaSQL = ${JSON.stringify(schema.sql)}\n}\n`;
+  return `// Generated from app config and src/data/schema.json.\nimport Foundation\nenum TTodoConfiguration {\n  static let appGroup = ${JSON.stringify(group)}\n  static let schemaVersion = ${schema.version}\n  static let schemaSQL = ${JSON.stringify(schema.sql)}\n  static let migrationFromOneSQL = ${JSON.stringify(schema.migration_from_1_before + schema.sql + schema.migration_from_1_after)}\n}\n`;
 }
 function plist(body) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>${body}</dict></plist>`;

@@ -29,7 +29,7 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     assert.ok(first.includes('TTodoWidgets/SharedStore.swift'));
     assert.ok(!first.includes('path = undefined'), 'Xcode 소스 그룹 경로가 undefined이면 실제 빌드에서 파일을 찾지 못한다');
     const generated = readFileSync(path.join(root, 'modules/ttodo-native/ios/TTodoConfiguration.swift'), 'utf8');
-    assert.ok(generated.includes('group.com.kimps005.ttodo')); assert.ok(generated.includes('PRAGMA user_version = 1;'));
+    assert.ok(generated.includes('group.com.kimps005.ttodo')); assert.ok(generated.includes('PRAGMA user_version = 2;'));
     const entitlements = await config.mods.ios.entitlements({ ...config, modResults: {}, modRequest: {} });
     assert.deepEqual(entitlements.modResults['com.apple.security.application-groups'], ['group.com.kimps005.ttodo']);
   } finally { rmSync(root, { recursive: true, force: true }); }

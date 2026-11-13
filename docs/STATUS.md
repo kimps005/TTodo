@@ -7,22 +7,35 @@
 - Windows에 Xcode/Swift가 없어 iOS 네이티브 빌드와 실기기 검증은 별도 macOS 빌드 및 iPhone이 필요.
 - 인증 없는 잠금화면 텍스트 입력·저장과 앱 강제 종료 조건은 실제 iPhone 검증 전까지 미완료.
 - Apple 공식 검색 결과에서 iOS 27 스크린샷 저장 자동화 트리거 존재 확인. 실제 이미지 전달과 잠금 실행은 미검증이며 자동 지원으로 홍보하지 않음.
-- AI 제공자·서버·개인정보 처리방침·지원 이메일·앱 아이콘·스토어 자료 확정 필요.
+- 사용자: iPhone 16 Pro / 최신 iOS / Apple Developer Program 미가입. 정확한 OS 버전은 실기기 QA 때 기록.
+- 무료 우선: 외부 유료 API와 서버 연결은 보류. Apple 기기 내 AI를 평가 후보로 구현하며 한국어 성능 통과 전 최종 모델로 확정하지 않음.
+- 개인정보 처리방침·지원 이메일·앱 아이콘·스토어 자료 확정 필요.
 
 ## 원칙
 로컬 기능과 네이티브 기술 검증부터 구현한다. 계정 없는 사용과 수동 입력을 AI 설정에 종속시키지 않는다.
 
 ## 구현 및 로컬 검증
 - Expo SDK 58 공식 TypeScript 템플릿, React Native 0.88 기반.
-- SQLite v1 스키마, CRUD, 오늘/지난 마감/미지정/미래/완료 정렬, 승인 트랜잭션과 중복 방지 구현.
+- SQLite v2 스키마, v1 보존 마이그레이션, CRUD, 오늘/지난 마감/미지정/미래/완료 정렬, 승인 트랜잭션과 중복 방지 구현. 촬영 시각을 모르는 사진은 null로 저장.
 - 홈, 할 일 편집, 분석함, 제안 검토, 설정 및 데이터 내보내기/삭제 UI 구현.
-- AI 제공자 인터페이스, 원문 근거·날짜·신뢰도 응답 검증, 민감 텍스트 전송 제한 검사 구현. 실제 모델은 미선정/미연결.
-- `npm test`: 실제 SQLite 기반 테스트 포함 9개 통과. `npm run typecheck`: 통과.
+- AI 제공자 인터페이스, 원문 근거·날짜·신뢰도·실제 할 일 여부 응답 검증, 민감 텍스트 제한 구현.
+- Apple Foundation Models 기기 내 추출 후보와 사진 선택→OCR→동의→추출→검토→승인 경로 연결. OS/기기/모델/한국어 준비 상태 확인. 외부 전송 없음. 실제 생성과 정확도는 미검증.
+- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋 검사 등 14개 통과. `npm run typecheck`: 통과.
 - Expo 전이 의존성 minimatch 취약점을 해당 의존성 범위의 override로 수정. 설치 시 보안 경고 0개.
 - UI는 아직 iPhone에서 실행·시각 검증하지 않음. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
 - App Group SQLite, 잠금 이후 접근 정책(재부팅 후 최초 인증 필요), AddTodo App Intent, Vision 한국어/영어 OCR, WidgetKit 및 Live Activity 코드 구현.
-- Expo autolinking에서 `TTodoNativeModule` 인식 확인. Xcode 프로젝트 타깃·소스 연결과 재적용 중복 방지 테스트 추가: 전체 10개 테스트 통과.
-- Windows에서는 Expo iOS prebuild가 지원되지 않음. GitHub macOS CI에서 iOS 생성·Pods·앱과 확장 컴파일을 검증하도록 구성. 아직 결과 확인 전.
+- Expo autolinking에서 `TTodoNativeModule` 인식 확인. Xcode 프로젝트 타깃·소스 연결과 재적용 중복 방지 테스트 통과.
+- Windows에서는 Expo iOS prebuild가 지원되지 않음. GitHub macOS CI에서 iOS 생성·Pods·앱과 확장 컴파일 검증.
 - Windows Hermes 실행 오류의 원인: 운영체제 애플리케이션 제어 정책이 `hermesc.exe`를 차단. 보안 정책을 변경하지 않고, 로컬 JS 번들 검사와 CI의 실제 Hermes 빌드를 구분한다.
 - 로컬 iOS JavaScript 번들 검사 통과. 첫 GitHub CI core 작업에서 타입·테스트·보안·실제 Hermes 바이트코드 모두 통과.
-- 첫 macOS CI에서 iOS 생성과 Pods 성공 후 위젯 소스 경로 오류 발견: Xcode 라이브러리가 생략된 그룹 경로를 `undefined`로 직렬화. 경로를 명시하고 회귀 검사 추가, 재빌드 예정.
+- 첫 macOS CI 소스 경로 오류를 수정하고 [299af4a CI](https://github.com/kimps005/TTodo/actions/runs/43426175047)에서 앱과 확장의 네이티브 빌드 통과. 이후 DB 브리지/기기 내 AI 변경은 별도 재빌드 확인 필요.
+- iOS는 앱·단축어·위젯이 시스템 SQLite를 사용하도록 통일. 같은 파일을 서로 다른 SQLite 복사본으로 접근하지 않으며, JS 작업/트랜잭션을 순서대로 실행. Android 준비용 Expo 어댑터는 새 연결의 PRAGMA를 개별 설정.
+- 초기 지원 OS의 시스템 SQLite 버전을 고려해 rollback journal(DELETE)을 사용. 저장 성공을 우선하고 성능은 실기기에서 측정.
+- 임시 사진은 전용 캐시로 옮겨 화면 종료 시 삭제하고, 강제 종료 잔여 파일과 임시 내보내기는 다음 시작에 정리.
+- 24개 합성 한국어 OCR 정답셋 준비. 실제 이미지·모델 성능 측정 아님.
+
+## 아직 구현/검증이 필요한 P0
+- 스크린샷 이미지 입력 App Intent와 Share Extension, 액션형 제안 알림의 네이티브 백그라운드 저장.
+- 실제 자동화 입력 이미지 및 앱 종료/잠금 상황에서 OCR·AI 실행.
+- 동일 바이트 지문 외 시간/텍스트 유사 중복 판단, 실패 외 명시적 재분석, 원문 기반 한국어 날짜/담당 정확도 평가.
+- 정식 개인정보/보존 정책, 접근성 실기기 QA, 위젯 만료/동기화 QA, TestFlight 및 스토어 심사.

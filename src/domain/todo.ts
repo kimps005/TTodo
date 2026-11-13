@@ -38,6 +38,11 @@ export function validateDue(due: string | null, precision: DuePrecision): void {
       throw new Error('날짜는 YYYY-MM-DD 형식으로 입력해 주세요.');
     }
   }
+  if (due && precision === 'datetime') {
+    const datePart = due.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)$/.test(due) ||
+      new Date(`${datePart}T12:00:00Z`).toISOString().slice(0, 10) !== datePart) throw new Error('시간대가 포함된 정확한 마감 시각을 지정해 주세요.');
+  }
 }
 export function localDay(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;

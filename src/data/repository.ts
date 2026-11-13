@@ -12,7 +12,7 @@ export interface Database extends SqlConnection {
   withExclusiveTransactionAsync(task: (tx: SqlConnection) => Promise<void>): Promise<void>;
 }
 export interface Analysis {
-  id: string; image_fingerprint: string; captured_at: string; received_at: string;
+  id: string; image_fingerprint: string; captured_at: string | null; received_at: string;
   status: 'queued' | 'processing' | 'review' | 'saved' | 'ignored' | 'failed' | 'empty';
   source_channel: 'shortcuts' | 'share' | 'manual'; model_version: string | null;
   error_code: string | null; expires_at: string;
@@ -26,11 +26,15 @@ export interface ExtractedTask {
 export class Repository {
   constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString()) {}
   async initialize() {
-    await this.db.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON;');
+    await this.db.execAsync('PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON; PRAGMA temp_store=MEMORY;');
     await this.db.withExclusiveTransactionAsync(async tx => {
       const version = await tx.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
       if ((version?.user_version ?? 0) > schema.version) throw new Error('새로운 앱 버전으로 데이터가 저장되었어요. 앱을 업데이트해 주세요.');
-      if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
+      if (version?.user_version === 1) {
+        await tx.execAsync(schema.migration_from_1_before);
+        await tx.execAsync(schema.sql);
+        await tx.execAsync(schema.migration_from_1_after);
+      } else if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
     });
     // A terminated OCR process cannot resume from an in-memory image. Keep a visible retry path.
     await this.db.runAsync("UPDATE analyses SET status='failed', error_code='INTERRUPTED' WHERE status IN ('queued','processing')");
@@ -62,7 +66,7 @@ export class Repository {
   removeTodo(id: string) { return this.db.runAsync('DELETE FROM todos WHERE id=?', id); }
   listAnalyses() { return this.db.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY received_at DESC'); }
   listExtracted(id: string) { return this.db.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id); }
-  async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string): Promise<{ id: string; created: boolean }> {
+  async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean }> {
     const id = this.uuid();
     let result = { id, created: false };
     const time = this.now();
@@ -77,6 +81,9 @@ export class Repository {
   }
   failAnalysis(id: string, code: string) {
     return this.db.runAsync("UPDATE analyses SET status='failed',error_code=? WHERE id=? AND status IN ('processing','queued')", code, id);
+  }
+  retryFailedAnalysis(id: string) {
+    return this.db.runAsync("UPDATE analyses SET status='processing',error_code=NULL,expires_at=? WHERE id=? AND status='failed'", new Date(Date.parse(this.now()) + 7 * 86400000).toISOString(), id);
   }
   async finishAnalysis(id: string, tasks: Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>[], model: string) {
     await this.db.withExclusiveTransactionAsync(async tx => {
@@ -134,7 +141,6 @@ export class Repository {
   }
   async deleteAll() {
     await this.db.withExclusiveTransactionAsync(async tx => { await tx.execAsync('DELETE FROM extracted_tasks; DELETE FROM analyses; DELETE FROM todos; DELETE FROM preferences;'); });
-    // Remove deleted content from WAL and unused pages as soon as possible.
-    await this.db.execAsync('PRAGMA wal_checkpoint(TRUNCATE); VACUUM;');
+    await this.db.execAsync('VACUUM;');
   }
 }

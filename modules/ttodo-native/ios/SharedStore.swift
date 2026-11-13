@@ -39,12 +39,13 @@ final class SharedStore {
     }
     do {
       sqlite3_busy_timeout(db, 5000)
-      try execute("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON;")
+      try execute("PRAGMA journal_mode=DELETE; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON; PRAGMA temp_store=MEMORY;")
       try execute("BEGIN IMMEDIATE")
       do {
         let version = try scalar("PRAGMA user_version")
         if version > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
-        if version < TTodoConfiguration.schemaVersion { try execute(TTodoConfiguration.schemaSQL) }
+        if version == 1 { try execute(TTodoConfiguration.migrationFromOneSQL) }
+        else if version < TTodoConfiguration.schemaVersion { try execute(TTodoConfiguration.schemaSQL) }
         try execute("COMMIT")
       } catch { try? execute("ROLLBACK"); throw error }
       // Existing DB and sidecars must follow the same policy as newly created files.
@@ -67,6 +68,43 @@ final class SharedStore {
     guard sqlite3_step(stmt) == SQLITE_ROW else { throw StoreError.database }
     return Int(sqlite3_column_int(stmt, 0))
   }
+  func execSQL(_ sql: String) throws { try execute(sql) }
+  private func bind(_ params: [String?], to stmt: OpaquePointer) throws {
+    guard sqlite3_bind_parameter_count(stmt) == params.count else { throw StoreError.database }
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    for (index, value) in params.enumerated() {
+      let status: Int32
+      if let value { status = sqlite3_bind_text(stmt, Int32(index + 1), value, -1, transient) }
+      else { status = sqlite3_bind_null(stmt, Int32(index + 1)) }
+      guard status == SQLITE_OK else { throw StoreError.database }
+    }
+  }
+  func runSQL(_ sql: String, params: [String?]) throws {
+    let stmt = try statement(sql); defer { sqlite3_finalize(stmt) }
+    try bind(params, to: stmt)
+    guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.database }
+  }
+  func querySQL(_ sql: String, params: [String?]) throws -> [[String: Any]] {
+    let stmt = try statement(sql); defer { sqlite3_finalize(stmt) }
+    try bind(params, to: stmt)
+    var rows: [[String: Any]] = []
+    var result = sqlite3_step(stmt)
+    while result == SQLITE_ROW {
+      var row: [String: Any] = [:]
+      for column in 0..<sqlite3_column_count(stmt) {
+        let name = String(cString: sqlite3_column_name(stmt, column))
+        switch sqlite3_column_type(stmt, column) {
+        case SQLITE_INTEGER: row[name] = sqlite3_column_int64(stmt, column)
+        case SQLITE_FLOAT: row[name] = sqlite3_column_double(stmt, column)
+        case SQLITE_TEXT: row[name] = String(cString: sqlite3_column_text(stmt, column))
+        default: row[name] = NSNull()
+        }
+      }
+      rows.append(row); result = sqlite3_step(stmt)
+    }
+    guard result == SQLITE_DONE else { throw StoreError.database }
+    return rows
+  }
   func add(title raw: String) throws {
     let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     // Unicode scalar count matches the JS/SQLite storage limit (including composed emoji).
@@ -87,7 +125,7 @@ final class SharedStore {
       let count = try scalar("SELECT COUNT(*) FROM todos WHERE status='pending'")
       // Privacy defaults to hidden if unset or unavailable.
       let hide = try scalar("SELECT CASE WHEN (SELECT value FROM preferences WHERE key='private_lock')='no' THEN 0 ELSE 1 END") != 0
-      let stmt = try statement("SELECT id,title FROM todos WHERE status='pending' ORDER BY CASE WHEN substr(due_at,1,10)=date('now','localtime') THEN 0 WHEN substr(due_at,1,10)<date('now','localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_at,sort_order,created_at LIMIT 5")
+      let stmt = try statement("WITH pending AS (SELECT *,CASE WHEN due_precision='datetime' THEN date(due_at,'localtime') ELSE substr(due_at,1,10) END AS due_day FROM todos WHERE status='pending') SELECT id,title FROM pending ORDER BY CASE WHEN due_day=date('now','localtime') THEN 0 WHEN due_day<date('now','localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_at,sort_order,created_at LIMIT 5")
       defer { sqlite3_finalize(stmt) }
       var tasks: [LockTask] = []
       var status = sqlite3_step(stmt)
