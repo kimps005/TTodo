@@ -27,6 +27,7 @@ const diagnostic = (name, operation) => {
 };
 try {
   if (!existsSync(application)) throw new Error('Release simulator app bundle is missing.');
+  report.phase = 'sign';
   const bundle = info(application, 'CFBundleIdentifier');
   const group = `group.${bundle}`;
   // Ad-hoc signing is for the disposable simulator only, with the app's real App Group
@@ -52,8 +53,17 @@ try {
   report.runtime = runtimes[0].identifier;
   device = sim('create', 'TTodo CI Smoke', 'com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro', runtimes[0].identifier);
   if (!/^[0-9a-f-]{36}$/i.test(device)) throw new Error('Unexpected simulator identifier.');
-  sim('boot', device); sim('bootstatus', device, '-b');
-  sim('install', device, application); const initialPid = launch(device, bundle);
+  report.phase = 'boot';
+  sim('boot', device);
+  // A fresh CI device must migrate its runtime data on first boot. Keep that
+  // bounded wait separate from app launch; a boot timeout is not an app crash.
+  const bootLog = run('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 600000 });
+  writeFileSync(path.join(output, 'boot.log'), bootLog);
+  report.phase = 'install';
+  sim('install', device, application);
+  report.phase = 'launch';
+  const initialPid = launch(device, bundle);
+  report.phase = 'database-initialization';
   let database;
   for (let attempt = 0; attempt < 30; attempt++) {
     await wait(2000);
@@ -69,6 +79,7 @@ try {
   // Stop the app before the host SQLite tool opens the file; do not inspect raw DB bytes
   // while the app's SQLite driver holds an open connection.
   sim('terminate', device, bundle);
+  report.phase = 'database-integrity';
   report.database_integrity = run('sqlite3', [database, 'PRAGMA integrity_check;']);
   if (report.database_integrity !== 'ok') throw new Error('SQLite integrity check failed.');
   report.schema_version = Number(run('sqlite3', [database, 'PRAGMA user_version;']));
@@ -80,6 +91,7 @@ try {
     COMMIT;
   `;
   run('sqlite3', [database, fixture]);
+  report.phase = 'fixture-relaunch';
   const fixturePid = launch(device, bundle); await wait(8000);
   process.kill(fixturePid, 0);
   sim('io', device, 'screenshot', path.join(output, '02-home-fixture.png')); report.screenshots.push('02-home-fixture.png');
@@ -87,6 +99,7 @@ try {
   report.persisted_todos = Number(run('sqlite3', [database, 'SELECT COUNT(*) FROM todos;']));
   if (report.persisted_todos !== 3) throw new Error('Synthetic records did not persist.');
   report.completed = true;
+  report.phase = 'complete';
 } catch (error) {
   report.completed = false; report.error = error instanceof Error ? error.message : String(error);
   if (device && /^[0-9a-f-]{36}$/i.test(device)) {
