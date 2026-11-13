@@ -51,6 +51,7 @@ struct TodoLiveActivity: Widget {
       } compactLeading: { Image(systemName: "checklist") }
         compactTrailing: { Text(context.state.hideContent == true ? "·" : "\(context.state.count)") }
         minimal: { Image(systemName: "checklist") }
+        .widgetURL(URL(string: "ttodo://today"))
     }
   }
 }

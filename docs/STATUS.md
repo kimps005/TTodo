@@ -152,3 +152,7 @@
 - 전각 password/카드번호·분해 한글·단어 사이의 보이지 않는 문자로 기존 제한을 우회하는 합성 사례를 재현했다. TypeScript/Swift의 민감정보 검사에 NFKC와 제한된 비표시 문자 정리를 적용한다. 검사용 문자열만 정규화하며 원문을 수정하거나 로그에 남기지 않는다.
 - 양쪽에서 같은 합성 사례 12개를 읽도록 회귀 검사 추가. 일반 날짜·시간·이모지 문장은 계속 허용하는 사례 포함 로컬 42개 테스트·타입 검사 통과. Swift 실행/앱·확장 컴파일은 새 macOS CI 확인 전이다.
 - 이 규칙이 모든 민감정보를 검출하거나 안전하게 제거한다고 보장하지 않는다. 외부 AI 미사용·명시 동의·저장 전 사용자 검토 정책은 그대로 유지한다.
+
+## Dynamic Island 목록 연결
+- 잠금화면 Live Activity와 별도로 Dynamic Island 구성에도 ttodo://today 기본 링크를 연결했다. [Apple 공식 DynamicIsland.widgetURL 문서](https://developer.apple.com/documentation/widgetkit/dynamicisland/widgeturl(_:))에서 각 표시 상태의 기본 앱 연결 API를 확인했다.
+- 기존 앱의 링크 경로 제한·작성/검토 중 이동 지연 정책을 그대로 사용한다. Swift API/위젯 컴파일은 새 macOS CI, compact/minimal/expanded 탭 이동은 iPhone QA 전이다.
