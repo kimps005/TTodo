@@ -46,22 +46,26 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     if (working.current || !fingerprint) return;
     working.current = true; setBusy(true);
     let analysisId: string | undefined;
+    let token: string | null = null;
     try {
       if (messageDate.trim()) validateDue(messageDate.trim(), 'date');
       if (containsSensitiveText(text)) throw new Error('민감한 정보가 있는 글자는 분석하지 않아요. 필요한 할 일을 직접 입력해 주세요.');
       if (Array.from(text).length > 3500) throw new Error('기기 내 AI는 3,500자 이하를 분석해요. 필요한 부분만 남겨 주세요.');
       const result = await repository.createAnalysis(fingerprint, 'manual', null);
       analysisId = result.id;
+      token = result.token;
       if (!result.created) {
         const previous = (await repository.listAnalyses()).find(item => item.id === result.id);
-        if (previous?.status === 'failed') await repository.retryFailedAnalysis(result.id);
+        if (previous?.status === 'failed') token = await repository.retryFailedAnalysis(result.id);
+        else if (previous?.status === 'processing' || previous?.status === 'queued') { Alert.alert('이미 분석 중이에요', '잠시 후 분석함에서 결과를 확인해 주세요.'); return; }
         else { await openReview(result.id); return; }
       }
+      if (!token) throw new Error('분석 상태가 변경되었어요. 다시 시도해 주세요.');
       const tasks = await onDeviceProvider.extract({ text, captured_at: null, message_date: messageDate.trim() || null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, new AbortController().signal);
-      await repository.finishAnalysis(result.id, tasks, onDeviceProvider.version);
+      await repository.finishAnalysis(result.id, tasks, onDeviceProvider.version, token);
       await openReview(result.id);
     } catch (error) {
-      if (analysisId) await repository.failAnalysis(analysisId, 'LOCAL_AI_FAILED');
+      if (analysisId && token) await repository.failAnalysis(analysisId, 'LOCAL_AI_FAILED', token);
       Alert.alert('분석하지 못했어요', error instanceof Error ? error.message : '기기 내 AI 준비 상태를 확인하고 다시 시도해 주세요.');
     } finally { working.current = false; setBusy(false); }
   };

@@ -46,7 +46,7 @@ test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 �
   await repo.setPreference('ai_local_consent', 'yes');
   const b = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:01Z');
   assert.equal(a.id, b.id); assert.equal(b.created, false);
-  await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation');
+  await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation', a.token!);
   const tasks = await repo.listExtracted(a.id);
   const selected = [{ id: tasks[0].id, input: { title: '수정된 제목' } }];
   await repo.approve(a.id, selected); await repo.approve(a.id, selected);
@@ -60,12 +60,12 @@ test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('private', 'manual', null);
   await repo.setPreference('ai_local_consent', 'yes');
-  await repo.finishAnalysis(a.id, [task], 'evaluation');
+  await repo.finishAnalysis(a.id, [task], 'evaluation', a.token!);
   await repo.ignoreAnalysis(a.id);
   assert.equal((await repo.listExtracted(a.id))[0].evidence_text, '');
   assert.equal((await repo.listExtracted(a.id))[0].title, '무시한 제안');
   const b = await repo.createAnalysis('expires', 'manual', null);
-  await repo.finishAnalysis(b.id, [task], 'evaluation');
+  await repo.finishAnalysis(b.id, [task], 'evaluation', b.token!);
   native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('2026-11-12T00:00:00Z', b.id);
   await repo.pruneEvidence();
   assert.equal((await repo.listExtracted(b.id))[0].review_status, 'ignored');
@@ -78,7 +78,7 @@ test('분석 중 동의를 철회하면 늦게 도착한 결과와 원문을 저
   await repo.setPreference('ai_local_consent', 'yes');
   const analysis = await repo.createAnalysis('revoked-during-extraction', 'manual', null);
   await repo.revokeLocalAIConsent();
-  await assert.rejects(repo.finishAnalysis(analysis.id, [task], 'late-model'), /동의/);
+  await assert.rejects(repo.finishAnalysis(analysis.id, [task], 'late-model', analysis.token!), /동의/);
   assert.deepEqual(await repo.listExtracted(analysis.id), []);
   assert.deepEqual(await repo.listTodos(), []);
   native.close();
@@ -88,7 +88,7 @@ test('검토 화면을 연 채 만료되면 정리 실행 전에도 승인을 �
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');
   const analysis = await repo.createAnalysis('expired-open-review', 'manual', null);
-  await repo.finishAnalysis(analysis.id, [task], 'evaluation');
+  await repo.finishAnalysis(analysis.id, [task], 'evaluation', analysis.token!);
   const proposal = (await repo.listExtracted(analysis.id))[0];
   native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('2026-11-13T01:59:59Z', analysis.id);
   await assert.rejects(repo.approve(analysis.id, [{ id: proposal.id, input: { title: '뒤늦은 승인' } }]), /보존 기간/);
@@ -103,7 +103,7 @@ test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
-  await repo.finishAnalysis(a.id, [task, task], 'evaluation');
+  await repo.finishAnalysis(a.id, [task, task], 'evaluation', a.token!);
   const tasks = await repo.listExtracted(a.id);
   await assert.rejects(repo.approve(a.id, [{ id: tasks[0].id, input: { title: '정상' } }, { id: tasks[1].id, input: { title: ' ' } }]));
   assert.equal((await repo.listTodos()).length, 0);
@@ -113,7 +113,7 @@ test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대�
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('concurrent', 'manual', '2026-11-13T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
-  await repo.finishAnalysis(a.id, [task], 'evaluation');
+  await repo.finishAnalysis(a.id, [task], 'evaluation', a.token!);
   const selected = [{ id: (await repo.listExtracted(a.id))[0].id, input: { title: '동시 승인' } }];
   await Promise.all([repo.approve(a.id, selected), repo.approve(a.id, selected)]);
   assert.equal((await repo.listTodos()).length, 1);
@@ -121,17 +121,17 @@ test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대�
   await repo.addTodo({ title: '오류 이후 정상 입력' });
   assert.equal((await repo.listTodos()).length, 2); native.close();
 });
-test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 사진을 v2에서 처리한다', async () => {
+test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 사진을 최신 스키마에서 처리한다', async () => {
   const { repo, native } = fixture();
-  native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('PRAGMA user_version = 2', 'PRAGMA user_version = 1'));
+  native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('PRAGMA user_version = 3', 'PRAGMA user_version = 1'));
   const todoId = await repo.addTodo({ title: '이전 버전 할 일' });
   const old = await repo.createAnalysis('old-image', 'manual', '2026-11-12T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
-  await repo.finishAnalysis(old.id, [task], 'old-model');
+  await repo.finishAnalysis(old.id, [task], 'old-model', old.token!);
   const oldTask = (await repo.listExtracted(old.id))[0];
   await repo.approve(old.id, [{ id: oldTask.id, input: { title: task.title } }]);
   await repo.initialize();
-  assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, 2);
+  assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, 3);
   assert.equal((await repo.listTodos()).length, 2);
   assert.ok((await repo.listTodos()).some(t => t.id === todoId));
   assert.equal((await repo.listExtracted(old.id))[0].linked_todo_id, (await repo.listTodos()).find(t => t.source_id === oldTask.id)!.id);
@@ -147,6 +147,30 @@ test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 �
   await repo.initialize(); assert.equal((await repo.listAnalyses())[0].error_code, 'INTERRUPTED');
   await repo.ignoreAnalysis(a.id); await assert.rejects(repo.approve(a.id, [])); native.close();
 });
+test('v2 저장소를 보존하고 재시도 후 예전 결과와 실패 통지가 새 작업을 덮어쓰지 않는다', async () => {
+  const { repo, native } = fixture();
+  native.exec(schema.sql.replace('processing_token TEXT, ', '').replace('PRAGMA user_version = 3', 'PRAGMA user_version = 2'));
+  await repo.addTodo({ title: 'v2에서 저장한 할 일' });
+  await repo.initialize();
+  assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, 3);
+  assert.equal((await repo.listTodos())[0].title, 'v2에서 저장한 할 일');
+  await repo.setPreference('ai_local_consent', 'yes');
+  const old = await repo.createAnalysis('retry-race', 'manual', null);
+  await repo.failAnalysis(old.id, 'INTERRUPTED', old.token!);
+  const attempts = await Promise.allSettled([repo.retryFailedAnalysis(old.id), repo.retryFailedAnalysis(old.id)]);
+  assert.equal(attempts.filter(a => a.status === 'fulfilled').length, 1);
+  const current = attempts.find(a => a.status === 'fulfilled') as PromiseFulfilledResult<string>;
+  assert.notEqual(current.value, old.token);
+  await assert.rejects(repo.finishAnalysis(old.id, [task], 'stale', old.token!), /상태/);
+  await repo.failAnalysis(old.id, 'STALE_ERROR', old.token!);
+  assert.equal((await repo.listAnalyses())[0].status, 'processing');
+  assert.deepEqual(await repo.listExtracted(old.id), []);
+  await repo.finishAnalysis(old.id, [task], 'current', current.value);
+  assert.equal((await repo.listExtracted(old.id)).length, 1);
+  assert.equal((await repo.listAnalyses())[0].model_version, 'current');
+  native.close();
+});
+
 test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 설정까지 제거한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.addTodo({ title: '개인 정보' }); await repo.setPreference('ai_consent', 'yes');

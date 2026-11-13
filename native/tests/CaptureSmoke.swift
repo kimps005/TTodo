@@ -54,14 +54,14 @@ struct CaptureSmoke {
     try store.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
     let quick = try store.registerCapture(fingerprint: "quick", channel: "shortcuts")
     let clear = raw.replacingOccurrences(of: #""assignee":null"#, with: #""assignee":"사용자""#).replacingOccurrences(of: #""needs_confirmation":true"#, with: #""needs_confirmation":false"#)
-    try store.finishCapture(id: quick.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only")
+    try store.finishCapture(id: quick.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: quick.token!)
     check(try store.approveSingleCapture(id: quick.id))
     check(try !store.approveSingleCapture(id: quick.id))
     check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 1)
     try store.ignoreCapture(id: first.id)
     check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [first.id]))[0]["evidence_text"] as? String == "")
     let expired = try store.registerCapture(fingerprint: "expired", channel: "shortcuts")
-    try store.finishCapture(id: expired.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only")
+    try store.finishCapture(id: expired.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: expired.token!)
     try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
     do { _ = try store.approveSingleCapture(id: expired.id); fatalError("Expired result was approved") }
     catch CaptureError.reviewRequired { }
@@ -71,7 +71,7 @@ struct CaptureSmoke {
     var firstTask = try ExtractionValidator.validate(clear, sourceText: text, messageDate: nil)[0]
     firstTask.title = "첫 번째 제안"
     var secondTask = firstTask; secondTask.title = "두 번째 제안"
-    try store.finishCapture(id: multi.id, tasks: [firstTask, secondTask], provider: "test-only")
+    try store.finishCapture(id: multi.id, tasks: [firstTask, secondTask], provider: "test-only", token: multi.token!)
     let review = try store.captureReviewItems(id: multi.id)
     let firstEdit = CaptureTaskEdit(id: review[0].id, title: "검토 후 수정", description: nil, dueAt: "2026-12-01", duePrecision: "date")
     do {
@@ -85,6 +85,16 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT source_type FROM todos WHERE source_id=?", params: [review[0].id]))[0]["source_type"] as? String == "share")
     try store.ignoreCapture(id: multi.id)
     check((try store.captureReviewItems(id: multi.id)).isEmpty)
+    let stale = try store.registerCapture(fingerprint: "retry-race", channel: "share")
+    try store.failCapture(id: stale.id, code: "INTERRUPTED", token: stale.token!)
+    let retried = try store.registerCapture(fingerprint: "retry-race", channel: "share", retryFailed: true)
+    check(retried.created && retried.token != stale.token)
+    do { try store.finishCapture(id: stale.id, tasks: [firstTask], provider: "stale", token: stale.token!); fatalError("Stale worker completed a new attempt") }
+    catch CaptureError.stateChanged { }
+    try store.failCapture(id: stale.id, code: "STALE_ERROR", token: stale.token!)
+    check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [stale.id]))[0]["status"] as? String == "processing")
+    try store.finishCapture(id: retried.id, tasks: [firstTask], provider: "current", token: retried.token!)
+    check((try store.captureReviewItems(id: retried.id)).count == 1)
     let local = try ExtractionValidator.localDeadline(day: "2026-11-20", time: "9:30")
     let fields = ExtractionValidator.deadlineFields(due: local.dueAt, precision: local.precision)
     check(fields.day == "2026-11-20" && fields.time == "09:30")

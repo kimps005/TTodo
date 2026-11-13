@@ -12,6 +12,7 @@ enum CaptureProcessor {
     let store = try storeFactory()
     let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed)
     if !registration.created { return CaptureOutcome(id: registration.id, count: 0, duplicate: true) }
+    guard let token = registration.token else { throw CaptureError.stateChanged }
     do {
       let text = try recognize(data)
       guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
@@ -22,7 +23,7 @@ enum CaptureProcessor {
         tasks = try ExtractionValidator.validate(json, sourceText: text, messageDate: messageDate)
       }
       try Task.checkCancellation()
-      try store.finishCapture(id: registration.id, tasks: tasks, provider: "apple-ondevice/prompt-v1")
+      try store.finishCapture(id: registration.id, tasks: tasks, provider: "apple-ondevice/prompt-v1", token: token)
       return CaptureOutcome(id: registration.id, count: tasks.count, duplicate: false)
     } catch {
       let code: String
@@ -31,7 +32,7 @@ enum CaptureProcessor {
       else if let validation = error as? ExtractionValidationError, validation == .sensitive { code = "SENSITIVE_TEXT" }
       else if error is CaptureError { code = "STATE_CHANGED" }
       else { code = "LOCAL_AI_FAILED" }
-      try? store.failCapture(id: registration.id, code: code)
+      try? store.failCapture(id: registration.id, code: code, token: token)
       throw error
     }
   }

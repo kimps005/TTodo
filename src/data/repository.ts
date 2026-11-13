@@ -16,6 +16,7 @@ export interface Analysis {
   status: 'queued' | 'processing' | 'review' | 'saved' | 'ignored' | 'failed' | 'empty';
   source_channel: 'shortcuts' | 'share' | 'manual'; model_version: string | null;
   error_code: string | null; expires_at: string;
+  processing_token: string | null;
 }
 export interface ExtractedTask {
   id: string; analysis_id: string; title: string; description: string | null;
@@ -34,7 +35,8 @@ export class Repository {
         await tx.execAsync(schema.migration_from_1_before);
         await tx.execAsync(schema.sql);
         await tx.execAsync(schema.migration_from_1_after);
-      } else if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
+      } else if (version?.user_version === 2) await tx.execAsync(schema.migration_from_2);
+      else if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
     });
     await this.pruneEvidence();
   }
@@ -64,38 +66,45 @@ export class Repository {
   removeTodo(id: string) { return this.db.runAsync('DELETE FROM todos WHERE id=?', id); }
   listAnalyses() { return this.db.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY received_at DESC'); }
   listExtracted(id: string) { return this.db.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id); }
-  async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean }> {
+  async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean; token: string | null }> {
     const id = this.uuid();
-    let result = { id, created: false };
+    const token = this.uuid();
+    let result: { id: string; created: boolean; token: string | null } = { id, created: false, token: null };
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
       const existing = await tx.getFirstAsync<{ id: string }>('SELECT id FROM analyses WHERE image_fingerprint=?', fingerprint);
-      if (existing) { result = { id: existing.id, created: false }; return; }
-      await tx.runAsync('INSERT INTO analyses (id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at) VALUES (?,?,?,?,?,?,?)',
-        id, fingerprint, capturedAt, time, 'processing', source, new Date(Date.parse(time) + 7 * 86400000).toISOString());
-      result.created = true;
+      if (existing) { result = { id: existing.id, created: false, token: null }; return; }
+      await tx.runAsync('INSERT INTO analyses (id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at,processing_token) VALUES (?,?,?,?,?,?,?,?)',
+        id, fingerprint, capturedAt, time, 'processing', source, new Date(Date.parse(time) + 7 * 86400000).toISOString(), token);
+      result = { id, created: true, token };
     });
     return result;
   }
-  failAnalysis(id: string, code: string) {
-    return this.db.runAsync("UPDATE analyses SET status='failed',error_code=? WHERE id=? AND status IN ('processing','queued')", code, id);
+  failAnalysis(id: string, code: string, token: string) {
+    return this.db.runAsync("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND processing_token=? AND status IN ('processing','queued')", code, id, token);
   }
-  retryFailedAnalysis(id: string) {
+  async retryFailedAnalysis(id: string): Promise<string> {
     const time = this.now();
-    return this.db.runAsync("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=? WHERE id=? AND status='failed'", time, new Date(Date.parse(time) + 7 * 86400000).toISOString(), id);
+    const token = this.uuid();
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
+      if (analysis?.status !== 'failed') throw new Error('이미 분석 중이거나 처리된 이미지예요. 분석함을 확인해 주세요.');
+      await tx.runAsync("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", time, new Date(Date.parse(time) + 7 * 86400000).toISOString(), token, id);
+    });
+    return token;
   }
-  async finishAnalysis(id: string, tasks: Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>[], model: string) {
+  async finishAnalysis(id: string, tasks: Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>[], model: string, token: string) {
     await this.db.withExclusiveTransactionAsync(async tx => {
       const consent = await tx.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key='ai_local_consent'");
       if (consent?.value !== 'yes') throw new Error('기기 내 AI 분석 동의가 변경되었어요. 설정을 확인해 주세요.');
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
-      if (!analysis || analysis.status !== 'processing') throw new Error('분석 상태가 변경되었어요. 다시 확인해 주세요.');
+      if (!analysis || analysis.status !== 'processing' || analysis.processing_token !== token) throw new Error('분석 상태가 변경되었어요. 다시 확인해 주세요.');
       for (const task of tasks) {
         validateDue(task.due_at, task.due_precision);
         await tx.runAsync('INSERT INTO extracted_tasks (id,analysis_id,title,description,due_at,due_precision,assignee,confidence,evidence_text,needs_confirmation) VALUES (?,?,?,?,?,?,?,?,?,?)',
           this.uuid(), id, normalizeTitle(task.title), task.description, task.due_at, task.due_precision, task.assignee, task.confidence, task.evidence_text, task.needs_confirmation);
       }
-      await tx.runAsync('UPDATE analyses SET status=?,model_version=?,error_code=NULL WHERE id=?', tasks.length ? 'review' : 'empty', model, id);
+      await tx.runAsync('UPDATE analyses SET status=?,model_version=?,error_code=NULL,processing_token=NULL WHERE id=?', tasks.length ? 'review' : 'empty', model, id);
     });
   }
   async approve(id: string, edits: { id: string; input: TodoInput }[]): Promise<void> {
@@ -143,7 +152,7 @@ export class Repository {
     await this.db.withExclusiveTransactionAsync(async tx => {
       // Opening the app must not cancel a live App Intent process using the same DB.
       // Only recover abandoned work after a grace period; never recreate its image implicitly.
-      await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED' WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());
+      await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED',processing_token=NULL WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());
       await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
       await tx.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
       await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review' AND expires_at<=?", time);

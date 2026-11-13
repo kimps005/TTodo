@@ -10,7 +10,7 @@ enum CaptureError: LocalizedError {
     }
   }
 }
-struct CaptureRegistration { let id: String; let created: Bool }
+struct CaptureRegistration { let id: String; let created: Bool; let token: String? }
 struct CaptureReviewItem: Identifiable {
   let id: String
   var title: String
@@ -47,31 +47,32 @@ extension SharedStore {
       let existing = try querySQL("SELECT id,status FROM analyses WHERE image_fingerprint=?", params: [fingerprint]).first
       let time = ISO8601DateFormatter().string(from: now)
       let expires = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86400))
+      let token = UUID().uuidString.lowercased()
       if let existing, let id = existing["id"] as? String {
         if retryFailed && existing["status"] as? String == "failed" {
-          try runSQL("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=? WHERE id=?", params: [time, expires, id])
-          return CaptureRegistration(id: id, created: true)
+          try runSQL("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", params: [time, expires, token, id])
+          return CaptureRegistration(id: id, created: true, token: token)
         }
-        return CaptureRegistration(id: id, created: false)
+        return CaptureRegistration(id: id, created: false, token: nil)
       }
       let id = UUID().uuidString.lowercased()
-      try runSQL("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at) VALUES(?,?,NULL,?,'processing',?,?)", params: [id, fingerprint, time, channel, expires])
-      return CaptureRegistration(id: id, created: true)
+      try runSQL("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at,processing_token) VALUES(?,?,NULL,?,'processing',?,?,?)", params: [id, fingerprint, time, channel, expires, token])
+      return CaptureRegistration(id: id, created: true, token: token)
     }
   }
-  func finishCapture(id: String, tasks: [NativeSuggestion], provider: String) throws {
+  func finishCapture(id: String, tasks: [NativeSuggestion], provider: String, token: String) throws {
     try transaction {
       guard try hasLocalAIConsent() else { throw CaptureError.consentRequired }
-      let current = try querySQL("SELECT status FROM analyses WHERE id=?", params: [id]).first?["status"] as? String
-      guard current == "processing" else { throw CaptureError.stateChanged }
+      let current = try querySQL("SELECT status,processing_token FROM analyses WHERE id=?", params: [id]).first
+      guard current?["status"] as? String == "processing", current?["processing_token"] as? String == token else { throw CaptureError.stateChanged }
       for task in tasks {
         try runSQL("INSERT INTO extracted_tasks(id,analysis_id,title,description,due_at,due_precision,assignee,confidence,evidence_text,needs_confirmation) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [UUID().uuidString.lowercased(), id, task.title, task.description, task.due_at, task.due_precision, task.assignee, String(task.confidence), task.evidence_text, task.needs_confirmation ? "1" : "0"])
       }
-      try runSQL("UPDATE analyses SET status=?,model_version=?,error_code=NULL WHERE id=?", params: [tasks.isEmpty ? "empty" : "review", provider, id])
+      try runSQL("UPDATE analyses SET status=?,model_version=?,error_code=NULL,processing_token=NULL WHERE id=?", params: [tasks.isEmpty ? "empty" : "review", provider, id])
     }
   }
-  func failCapture(id: String, code: String) throws {
-    try runSQL("UPDATE analyses SET status='failed',error_code=? WHERE id=? AND status='processing'", params: [code, id])
+  func failCapture(id: String, code: String, token: String) throws {
+    try runSQL("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND status='processing' AND processing_token=?", params: [code, id, token])
   }
   func approveSingleCapture(id: String, now: Date = Date()) throws -> Bool {
     try transaction {

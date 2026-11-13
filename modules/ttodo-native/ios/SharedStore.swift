@@ -47,6 +47,7 @@ final class SharedStore {
         let version = try scalar("PRAGMA user_version")
         if version > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
         if version == 1 { try execute(TTodoConfiguration.migrationFromOneSQL) }
+        else if version == 2 { try execute(TTodoConfiguration.migrationFromTwoSQL) }
         else if version < TTodoConfiguration.schemaVersion { try execute(TTodoConfiguration.schemaSQL) }
         try execute("COMMIT")
       } catch { try? execute("ROLLBACK"); throw error }
