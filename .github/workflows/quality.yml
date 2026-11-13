@@ -44,7 +44,8 @@ jobs:
       - name: Test native capture pipeline without model requests
         run: |
           swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/CaptureSmoke.swift -o "$RUNNER_TEMP/ttodo-capture-smoke"
-          "$RUNNER_TEMP/ttodo-capture-smoke"
+          TTODO_CONTRACT_OUTPUT="$RUNNER_TEMP/ttodo-native-extraction.json" "$RUNNER_TEMP/ttodo-capture-smoke"
+          npx tsx scripts/check-native-extraction.ts "$RUNNER_TEMP/ttodo-native-extraction.json"
       - name: Install pods
         working-directory: ios
         run: pod install

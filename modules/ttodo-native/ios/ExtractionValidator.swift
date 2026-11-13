@@ -10,6 +10,23 @@ struct NativeSuggestion: Codable {
   var confidence: Double
   var evidence_text: String
   var needs_confirmation: Bool
+  private enum CodingKeys: String, CodingKey {
+    case is_actionable, title, description, due_at, due_precision, assignee, confidence, evidence_text, needs_confirmation
+  }
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(is_actionable, forKey: .is_actionable)
+    try values.encode(title, forKey: .title)
+    // The JS boundary requires explicit nulls. Synthesized Optional encoding
+    // omits these keys and causes a valid native result to be rejected.
+    try values.encode(description, forKey: .description)
+    try values.encode(due_at, forKey: .due_at)
+    try values.encode(due_precision, forKey: .due_precision)
+    try values.encode(assignee, forKey: .assignee)
+    try values.encode(confidence, forKey: .confidence)
+    try values.encode(evidence_text, forKey: .evidence_text)
+    try values.encode(needs_confirmation, forKey: .needs_confirmation)
+  }
 }
 private struct RawSuggestion: Decodable {
   let is_actionable: Bool

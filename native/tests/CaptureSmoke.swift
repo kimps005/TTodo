@@ -48,6 +48,12 @@ struct CaptureSmoke {
     let relative = raw.replacingOccurrences(of: text, with: "내일 자료 보내줘.")
     let guarded = try ExtractionValidator.validate(relative, sourceText: "내일 자료 보내줘.", messageDate: nil)
     check(guarded[0].due_at == nil && guarded[0].needs_confirmation)
+    let bridgeData = try JSONEncoder().encode(guarded)
+    let bridgeRows = try JSONSerialization.jsonObject(with: bridgeData) as! [[String: Any]]
+    check(bridgeRows[0]["description"] is NSNull && bridgeRows[0]["due_at"] is NSNull && bridgeRows[0]["assignee"] is NSNull)
+    if let output = ProcessInfo.processInfo.environment["TTODO_CONTRACT_OUTPUT"] {
+      try bridgeData.write(to: URL(fileURLWithPath: output))
+    }
     do { _ = try store.approveSingleCapture(id: first.id); fatalError("Ambiguous task was approved without review") }
     catch CaptureError.reviewRequired { }
     try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
