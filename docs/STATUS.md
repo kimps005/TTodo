@@ -20,3 +20,7 @@
 - `npm test`: 실제 SQLite 기반 테스트 포함 9개 통과. `npm run typecheck`: 통과.
 - Expo 전이 의존성 minimatch 취약점을 해당 의존성 범위의 override로 수정. 설치 시 보안 경고 0개.
 - UI는 아직 iPhone에서 실행·시각 검증하지 않음. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
+- App Group SQLite, 잠금 이후 접근 정책(재부팅 후 최초 인증 필요), AddTodo App Intent, Vision 한국어/영어 OCR, WidgetKit 및 Live Activity 코드 구현.
+- Expo autolinking에서 `TTodoNativeModule` 인식 확인. Xcode 프로젝트 타깃·소스 연결과 재적용 중복 방지 테스트 추가: 전체 10개 테스트 통과.
+- Windows에서는 Expo iOS prebuild가 지원되지 않음. GitHub macOS CI에서 iOS 생성·Pods·앱과 확장 컴파일을 검증하도록 구성. 아직 결과 확인 전.
+- Windows Hermes 실행 오류의 원인: 운영체제 애플리케이션 제어 정책이 `hermesc.exe`를 차단. 보안 정책을 변경하지 않고, 로컬 JS 번들 검사와 CI의 실제 Hermes 빌드를 구분한다.

@@ -32,6 +32,10 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+.env.*
+!.env.example
+/modules/ttodo-native/ios/TTodoConfiguration.swift
 
 # typescript
 *.tsbuildinfo
