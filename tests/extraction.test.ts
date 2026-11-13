@@ -8,6 +8,7 @@ test('근거 없는 응답·잘못된 날짜·신뢰도 범위를 거부한다',
   assert.throws(() => validateExtraction([{ ...task, due_at: '2026-02-30', due_precision: 'date' }], task.evidence_text));
   assert.throws(() => validateExtraction([{ ...task, due_at: '2026-02-30T17:00:00+09:00', due_precision: 'datetime' }], task.evidence_text));
   assert.throws(() => validateExtraction([{ ...task, due_at: '2026-11-20T17:00:00', due_precision: 'datetime' }], task.evidence_text));
+  assert.throws(() => validateExtraction([{ ...task, due_at: '' }], task.evidence_text));
   assert.throws(() => validateExtraction([{ ...task, needs_confirmation: 'false' }], task.evidence_text));
   assert.equal(validateExtraction([task], task.evidence_text)[0].needs_confirmation, 1);
   assert.deepEqual(validateExtraction([], '일반 대화'), []);

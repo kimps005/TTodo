@@ -28,6 +28,11 @@ enum ExtractionValidationError: LocalizedError {
     self == .sensitive ? "민감한 정보가 있는 글자는 분석하지 않아요. 필요한 할 일을 직접 입력해 주세요." : "AI 결과의 날짜나 원문 근거를 확인하지 못했어요. 자동 저장하지 않았으니 다시 확인해 주세요."
   }
 }
+struct NativeDeadline { let dueAt: String?; let precision: String }
+enum DeadlineInputError: LocalizedError {
+  case invalid
+  var errorDescription: String? { "날짜는 2026-11-20, 시각은 17:30처럼 입력해 주세요. 해당 기기 시간대에서 사용할 수 있는 시각인지도 확인해 주세요." }
+}
 enum ExtractionValidator {
   static func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
   static func clean(_ value: String) -> String { value.precomposedStringWithCompatibilityMapping.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -56,6 +61,33 @@ enum ExtractionValidator {
     guard precision == "datetime", validDate(String(due.prefix(10))),
       matches(due, "^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,3})?)?(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$") else { return false }
     return timestamp(due) != nil
+  }
+  static func deadlineFields(due: String?, precision: String, timezone: TimeZone = .current) -> (day: String, time: String) {
+    guard let due else { return ("", "") }
+    if precision == "date" { return (due, "") }
+    guard let date = timestamp(due) else { return ("", "") }
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = timezone
+    formatter.dateFormat = "yyyy-MM-dd"; let day = formatter.string(from: date)
+    formatter.dateFormat = "HH:mm"; return (day, formatter.string(from: date))
+  }
+  static func localDeadline(day inputDay: String, time inputTime: String, timezone: TimeZone = .current) throws -> NativeDeadline {
+    let day = inputDay.trimmingCharacters(in: .whitespacesAndNewlines)
+    let time = inputTime.trimmingCharacters(in: .whitespacesAndNewlines)
+    if day.isEmpty && time.isEmpty { return NativeDeadline(dueAt: nil, precision: "unknown") }
+    guard validDate(day) else { throw DeadlineInputError.invalid }
+    if time.isEmpty { return NativeDeadline(dueAt: day, precision: "date") }
+    guard matches(time, "^([01]?\\d|2[0-3]):[0-5]\\d$") else { throw DeadlineInputError.invalid }
+    let parts = time.split(separator: ":")
+    guard let hour = Int(parts[0]), let minute = Int(parts[1]) else { throw DeadlineInputError.invalid }
+    let normalized = String(format: "%02d:%02d", hour, minute)
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = timezone
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"; formatter.isLenient = false
+    let input = day + "T" + normalized
+    guard let date = formatter.date(from: input), formatter.string(from: date) == input else { throw DeadlineInputError.invalid }
+    let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return NativeDeadline(dueAt: iso.string(from: date), precision: "datetime")
   }
   static func validate(_ json: String, sourceText: String, messageDate: String?) throws -> [NativeSuggestion] {
     guard !isSensitive(sourceText) else { throw ExtractionValidationError.sensitive }

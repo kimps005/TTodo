@@ -31,6 +31,7 @@ export function normalizeTitle(value: string): string {
   return title;
 }
 export function validateDue(due: string | null, precision: DuePrecision): void {
+  if (!['date', 'datetime', 'unknown'].includes(precision) || due === '') throw new Error('마감 날짜를 확인해 주세요.');
   if (!due && precision !== 'unknown') throw new Error('마감 날짜를 지정해 주세요.');
   if (due && (precision === 'unknown' || !Number.isFinite(Date.parse(due)))) throw new Error('마감 날짜를 확인해 주세요.');
   if (due && precision === 'date') {

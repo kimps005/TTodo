@@ -21,6 +21,7 @@ struct CaptureReviewItem: Identifiable {
   let needsConfirmation: Bool
   var selected = true
   var dateText: String
+  var timeText: String
   var dateEdited = false
 }
 struct CaptureTaskEdit {
@@ -106,7 +107,8 @@ extension SharedStore {
     try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=? AND review_status='pending' ORDER BY rowid", params: [id]).map { row in
       guard let taskId = row["id"] as? String, let title = row["title"] as? String,
         let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
-      return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: precision == "date" ? row["due_at"] as? String ?? "" : "")
+      let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
+      return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: fields.day, timeText: fields.time)
     }
   }
   func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], now: Date = Date()) throws -> Int {

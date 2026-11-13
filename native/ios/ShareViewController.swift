@@ -78,9 +78,9 @@ private struct CaptureShareView: View {
     guard !working, let analysisId else { return }
     working = true; failure = nil
     do {
-      let edits = items.filter(\.selected).map { item in
-        let date = item.dateText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: item.dateEdited ? (date.isEmpty ? nil : date) : item.dueAt, duePrecision: item.dateEdited ? (date.isEmpty ? "unknown" : "date") : item.duePrecision)
+      let edits = try items.filter(\.selected).map { item in
+        let deadline = item.dateEdited ? try ExtractionValidator.localDeadline(day: item.dateText, time: item.timeText) : NativeDeadline(dueAt: item.dueAt, precision: item.duePrecision)
+        return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
       }
       let count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits)
       items = try SharedStore().captureReviewItems(id: analysisId)
@@ -110,7 +110,8 @@ private struct CaptureShareView: View {
               TextField("할 일 제목", text: $item.title, axis: .vertical).textFieldStyle(.roundedBorder).accessibilityLabel("제안 제목")
               Text("제안 마감: \(dueLabel(item))").font(.caption)
               TextField("날짜 수정 YYYY-MM-DD", text: $item.dateText).textFieldStyle(.roundedBorder).keyboardType(.numbersAndPunctuation).onChange(of: item.dateText) { _, _ in item.dateEdited = true }
-              Text("날짜를 수정하면 시각 없이 저장해요. 입력 후 비우면 마감을 해제해요.").font(.caption).foregroundStyle(.secondary)
+              TextField("시각 수정 17:30 (선택)", text: $item.timeText).textFieldStyle(.roundedBorder).keyboardType(.numbersAndPunctuation).onChange(of: item.timeText) { _, _ in item.dateEdited = true }
+              Text("시각을 비우면 날짜만 저장해요. 둘 다 비우면 마감을 해제해요. 시각은 현재 기기 시간대를 사용해요.").font(.caption).foregroundStyle(.secondary)
               Text("원문 근거").font(.caption.bold())
               Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled)
             }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))

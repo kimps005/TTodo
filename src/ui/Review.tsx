@@ -5,8 +5,10 @@ import type { ExtractedTask, Repository } from '../data/repository';
 import { Button, Check } from './components';
 import { dueLabel } from '../domain/todo';
 import { ui } from './theme';
+import { composeDeadline, deadlineFields } from '../domain/deadline';
+import { DeadlineFields } from './DeadlineFields';
 export function Review({ tasks, repository, analysisId, close, changed }: { tasks: ExtractedTask[]; repository: Repository; analysisId: string; close: () => void; changed: () => Promise<void> }) {
-  const [items, setItems] = useState(tasks.map(task => ({ ...task, selected: task.review_status === 'pending', dateEdited: false, date: task.due_precision === 'date' ? task.due_at ?? '' : '' })));
+  const [items, setItems] = useState(tasks.map(task => ({ ...task, selected: task.review_status === 'pending', dateEdited: false, ...deadlineFields(task) })));
   const [busy, setBusy] = useState(false);
   const edit = (index: number, values: Partial<typeof items[number]>) => setItems(current => current.map((item, i) => i === index ? { ...item, ...values } : item));
   const run = async (operation: () => Promise<void>) => { setBusy(true); try { await operation(); await changed(); close(); } catch (e) { Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { setBusy(false); } };
@@ -17,11 +19,10 @@ export function Review({ tasks, repository, analysisId, close, changed }: { task
     {items.map((task, index) => <View key={task.id} style={ui.card}>
       <View style={ui.row}><Check checked={task.selected} label={`${task.title} 선택`} onPress={() => task.review_status === 'pending' && edit(index, { selected: !task.selected })} /><View style={ui.grow}><Text style={ui.pill}>{task.review_status === 'saved' ? '저장 완료' : task.review_status === 'ignored' ? '무시함' : task.needs_confirmation ? '확인 필요' : '추가 제안'}</Text><Text style={ui.small}>담당: {task.assignee ?? '확인 필요'}</Text></View></View>
       <TextInput accessibilityLabel="제안된 할 일 제목" editable={task.review_status === 'pending' && !busy} style={ui.input} value={task.title} onChangeText={title => edit(index, { title })} multiline maxLength={400} />
-      <Text style={ui.label}>마감 · {dueLabel(task)}</Text><TextInput accessibilityLabel="제안 마감 날짜 수정 YYYY-MM-DD" editable={task.review_status === 'pending' && !busy} style={ui.input} placeholder="날짜 수정 YYYY-MM-DD" value={task.date} onChangeText={date => edit(index, { date, dateEdited: true })} maxLength={10} keyboardType="numbers-and-punctuation" />
-      <Text style={ui.small}>날짜를 수정하면 시각 없이 저장해요. 입력 후 비우면 마감을 해제해요.</Text>
+      <Text style={ui.label}>마감 · {dueLabel(task)}</Text><DeadlineFields day={task.day} time={task.time} disabled={task.review_status !== 'pending' || busy} onDay={day => edit(index, { day, dateEdited: true })} onTime={time => edit(index, { time, dateEdited: true })} />
       <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>
     </View>)}
-    <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || !selected.length} onPress={() => void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, due_at: t.dateEdited ? t.date.trim() || null : t.due_at, due_precision: t.dateEdited ? t.date.trim() ? 'date' : 'unknown' : t.due_precision } }))))} />
+    <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || !selected.length} onPress={() => void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } }))))} />
     <Button secondary title="남은 제안 모두 무시" disabled={busy || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId))} />
     <Button secondary title="닫기" disabled={busy} onPress={close} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;

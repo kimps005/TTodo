@@ -83,6 +83,13 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT source_type FROM todos WHERE source_id=?", params: [review[0].id]))[0]["source_type"] as? String == "share")
     try store.ignoreCapture(id: multi.id)
     check((try store.captureReviewItems(id: multi.id)).isEmpty)
+    let local = try ExtractionValidator.localDeadline(day: "2026-11-20", time: "9:30")
+    let fields = ExtractionValidator.deadlineFields(due: local.dueAt, precision: local.precision)
+    check(fields.day == "2026-11-20" && fields.time == "09:30")
+    do { _ = try ExtractionValidator.localDeadline(day: "2026-11-20", time: "24:00"); fatalError("Invalid time accepted") }
+    catch DeadlineInputError.invalid { }
+    do { _ = try ExtractionValidator.localDeadline(day: "2026-03-08", time: "02:30", timezone: TimeZone(identifier: "America/New_York")!); fatalError("Nonexistent local time accepted") }
+    catch DeadlineInputError.invalid { }
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }
