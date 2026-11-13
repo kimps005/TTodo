@@ -56,6 +56,53 @@ test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 �
   assert.equal((await repo.listAnalyses())[0].status, 'saved');
   assert.equal((await repo.listExtracted(a.id))[1].review_status, 'ignored'); native.close();
 });
+test('할 일 삭제는 연결된 분석 본문을 지우며 나머지 제안과 중복 방지 상태를 보존한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const analysis = await repo.createAnalysis('deletion-policy', 'share', null);
+  await repo.finishAnalysis(analysis.id, [{ ...task, title: '지울 원래 제목', description: '지울 원래 설명', assignee: '지울 담당', evidence_text: '지울 원문' }, { ...task, title: '남길 저장 항목' }, { ...task, title: '남길 대기 항목' }], 'test', analysis.token!);
+  const proposals = await repo.listExtracted(analysis.id);
+  const edits = proposals.slice(0, 2).map(p => ({ id: p.id, input: { title: p.title, description: p.description } }));
+  await repo.approve(analysis.id, edits);
+  const todo = (await repo.listTodos()).find(t => t.source_id === proposals[0].id)!;
+  await repo.updateTodo(todo.id, { title: '지울 수정 제목', description: '지울 수정 메모' });
+  assert.deepEqual(await repo.removeTodo(todo.id), [analysis.id]);
+  const after = await repo.listExtracted(analysis.id);
+  assert.equal(after[0].title, '삭제한 할 일'); assert.equal(after[0].description, null);
+  assert.equal(after[0].evidence_text, ''); assert.equal(after[0].assignee, null);
+  assert.equal(after[0].due_at, null); assert.equal(after[0].due_precision, 'unknown');
+  assert.equal(after[0].linked_todo_id, null); assert.equal(after[0].review_status, 'saved');
+  assert.equal(after[1].title, '남길 저장 항목'); assert.equal(after[2].review_status, 'pending');
+  await repo.approve(analysis.id, edits);
+  assert.equal((await repo.listTodos()).length, 1);
+  assert.equal((await repo.createAnalysis('deletion-policy', 'share', null)).created, false);
+  const exported = await repo.exportData();
+  for (const value of ['지울 원래 제목', '지울 원래 설명', '지울 원문', '지울 담당', '지울 수정 제목', '지울 수정 메모']) assert.equal(exported.includes(value), false);
+  native.close();
+});
+
+test('삭제가 실패하면 연결된 분석 본문 정리도 롤백하며 과거 삭제 잔여 본문은 다음 접근 때 정리한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('delete-rollback', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+  const proposal = (await repo.listExtracted(a.id))[0];
+  await repo.approve(a.id, [{ id: proposal.id, input: { title: task.title } }]);
+  const todo = (await repo.listTodos())[0];
+  native.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON todos BEGIN SELECT RAISE(ABORT,'test-only-delete-failure'); END;");
+  await assert.rejects(repo.removeTodo(todo.id), /test-only-delete-failure/);
+  assert.equal((await repo.listTodos()).length, 1);
+  assert.equal((await repo.listExtracted(a.id))[0].evidence_text, task.evidence_text);
+  native.exec('DROP TRIGGER fail_delete');
+  native.prepare('DELETE FROM todos WHERE id=?').run(todo.id); // Old version's delete path.
+  assert.equal((await repo.listExtracted(a.id))[0].linked_todo_id, null);
+  await repo.initialize();
+  const cleaned = (await repo.listExtracted(a.id))[0];
+  assert.equal(cleaned.title, '삭제한 할 일'); assert.equal(cleaned.evidence_text, '');
+  assert.equal(cleaned.review_status, 'saved');
+  native.close();
+});
+
 test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안은 저장할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('private', 'manual', null);

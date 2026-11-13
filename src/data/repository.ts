@@ -63,7 +63,17 @@ export class Repository {
     const time = this.now();
     return this.db.runAsync('UPDATE todos SET status=?,completed_at=?,updated_at=? WHERE id=?', complete ? 'completed' : 'pending', complete ? time : null, time, id);
   }
-  removeTodo(id: string) { return this.db.runAsync('DELETE FROM todos WHERE id=?', id); }
+  async removeTodo(id: string) {
+    let analyses: string[] = [];
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      analyses = (await tx.getAllAsync<{ analysis_id: string }>('SELECT DISTINCT analysis_id FROM extracted_tasks WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)', id, id)).map(row => row.analysis_id);
+      // Keep the saved marker and image fingerprint so a cached approval cannot
+      // recreate the task. Remove both original and edited proposal content.
+      await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1,linked_todo_id=NULL WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)", id, id);
+      await tx.runAsync('DELETE FROM todos WHERE id=?', id);
+    });
+    return analyses;
+  }
   listAnalyses() { return this.db.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY received_at DESC'); }
   listExtracted(id: string) { return this.db.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id); }
   async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean; token: string | null }> {
@@ -150,6 +160,8 @@ export class Repository {
   async pruneEvidence() {
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
+      // Apply the user's deletion policy to saved proposals orphaned by older versions.
+      await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1 WHERE review_status='saved' AND linked_todo_id IS NULL AND (title<>'삭제한 할 일' OR description IS NOT NULL OR due_at IS NOT NULL OR assignee IS NOT NULL OR evidence_text<>'')");
       // Opening the app must not cancel a live App Intent process using the same DB.
       // Only recover abandoned work after a grace period; never recreate its image implicitly.
       await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED',processing_token=NULL WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());

@@ -26,7 +26,7 @@ export function TodoEditor({ todo, save, remove, close }: { todo: Todo; save: (i
       <Text style={ui.small}>{todo.source_type === 'manual' ? '직접 입력한 할 일이에요.' : '캡처 분석에서 승인한 할 일이에요.'}</Text>
       <Button title={busy ? '저장 중…' : '변경 저장'} disabled={busy} onPress={() => void act(() => save({ title, description, ...(dateEdited ? composeDeadline(date, time) : { due_at: todo.due_at, due_precision: todo.due_precision }) }))} />
       <Button title="닫기" secondary disabled={busy} onPress={close} />
-      <Button title="할 일 삭제" secondary disabled={busy} onPress={() => Alert.alert('할 일을 삭제할까요?', '삭제한 할 일은 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => void act(remove) }])} />
+      <Button title="할 일 삭제" secondary disabled={busy} onPress={() => Alert.alert('할 일을 삭제할까요?', todo.source_type === 'manual' ? '삭제한 할 일은 복구할 수 없어요.' : '연결된 AI 제안의 제목·설명·원문도 함께 삭제해요. 중복 방지용 지문과 처리 기록은 남으며, 삭제한 내용은 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '삭제', style: 'destructive', onPress: () => void act(remove) }])} />
     </ScrollView></KeyboardAvoidingView>
   </SafeAreaView></Modal>;
 }

@@ -8,6 +8,7 @@ interface NativeBridge {
   localAIAvailability(): string;
   systemVersion(): string;
   clearCaptureNotifications(): Promise<void>;
+  clearCaptureNotification(analysisId: string): void;
   extractTasks(text: string, capturedAt: string | null, timezone: string, messageDate: string | null): Promise<string>;
   recognizeText(uri: string): Promise<OCRResult>;
   reloadWidgets(): void;

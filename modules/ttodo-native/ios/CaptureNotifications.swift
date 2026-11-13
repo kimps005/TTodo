@@ -53,6 +53,12 @@ enum CaptureNotifications {
     center.removeDeliveredNotifications(withIdentifiers: delivered)
     center.removePendingNotificationRequests(withIdentifiers: pending)
   }
+  static func clearAnalysis(_ id: String) {
+    let identifiers = ["ttodo.capture.\(id)"]
+    let center = UNUserNotificationCenter.current()
+    center.removeDeliveredNotifications(withIdentifiers: identifiers)
+    center.removePendingNotificationRequests(withIdentifiers: identifiers)
+  }
   static func requestReviewAfterFailure(id: String) {
     let content = UNMutableNotificationContent()
     content.title = "분석함에서 내용을 확인해 주세요"

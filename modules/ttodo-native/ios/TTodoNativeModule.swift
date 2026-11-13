@@ -42,6 +42,7 @@ public class TTodoNativeModule: Module {
       Task { try? await TodoActivityManager.refresh() }
     }
     AsyncFunction("clearCaptureNotifications") { () async in await CaptureNotifications.clearAll() }
+    Function("clearCaptureNotification") { (id: String) in CaptureNotifications.clearAnalysis(id) }
     AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.start() }
     AsyncFunction("endActivities") { () async in await TodoActivityManager.end() }
   }
