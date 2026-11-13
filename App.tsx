@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { File, Paths } from 'expo-file-system';
@@ -19,6 +19,7 @@ import { availabilityLabels } from './src/ai/onDeviceProvider';
 import { ModelEvaluation } from './src/dev/ModelEvaluation';
 import { analysisReviewRoute } from './src/notifications/route';
 import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibilityChoices';
+import { isHomeLink } from './src/navigation/route';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function Application() {
@@ -37,6 +38,7 @@ function Application() {
   const [lockVisibility, setLockVisibility] = useState<LockVisibility>('count');
   const [localAIConsent, setLocalAIConsent] = useState(false);
   const [notificationReview, setNotificationReview] = useState<string | null>(null);
+  const [homeRequested, setHomeRequested] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState('확인 전');
   const refresh = useCallback(async (repository: Repository) => {
@@ -48,6 +50,18 @@ function Application() {
   }, []);
   const boot = useCallback(async () => { try { setError(''); clearTemporaryFiles(); const repository = await openRepository(); await refresh(repository); setRepo(repository); } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); } }, [refresh]);
   useEffect(() => { void boot(); }, [boot]);
+  useEffect(() => {
+    let alive = true;
+    const receive = (url: unknown) => { if (alive && isHomeLink(url)) setHomeRequested(true); };
+    const subscription = Linking.addEventListener('url', event => receive(event.url));
+    void Linking.getInitialURL().then(receive).catch(() => {});
+    return () => { alive = false; subscription.remove(); };
+  }, []);
+  useEffect(() => {
+    if (!repo || !homeRequested || editing || review || capture || evaluation || notificationReview) return;
+    setTab('today'); setHomeRequested(false);
+    void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.'));
+  }, [repo, homeRequested, editing, review, capture, evaluation, notificationReview, refresh]);
   useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active' && repo) void refresh(repo).catch(() => setError('최신 목록을 불러오지 못했어요. 다시 시도해 주세요.')); }); return () => sub.remove(); }, [repo, refresh]);
   useEffect(() => {
     if (!repo) return;
