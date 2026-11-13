@@ -24,6 +24,7 @@ test('CI UI 테스트 타깃은 앱에 포함되지 않으며 의존 방향·제
     const dependencies = project.hash.project.objects.PBXTargetDependency;
     assert.ok(target.dependencies.some((item: { value: string }) => dependencies[item.value].target === app.uuid));
     assert.equal(project.pbxFileReferenceSection()[target.productReference].path, 'TTodoUITests.xctest');
+    assert.equal(project.pbxFileReferenceSection()[target.productReference].name, '"TTodoUITests.xctest"');
     const configurations = project.pbxXCConfigurationList()[target.buildConfigurationList].buildConfigurations;
     for (const ref of configurations) {
       const settings = project.pbxXCBuildConfigurationSection()[ref.value].buildSettings;

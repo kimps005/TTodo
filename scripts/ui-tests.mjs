@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import resultValidation from './ui-test-result.cjs';
 
 if (process.platform !== 'darwin') throw new Error('이 검사는 GitHub macOS CI에서만 실행합니다.');
 const output = path.resolve('artifacts/ui-tests'); mkdirSync(output, { recursive: true });
+const resultPath = path.join(output, 'results.xcresult');
 const run = (command, args, options = {}) => execFileSync(command, args, { encoding: 'utf8', timeout: 240000, maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 const sim = (...args) => run('xcrun', ['simctl', ...args]);
 const report = { commit: process.env.GITHUB_SHA ?? null, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
@@ -19,7 +21,12 @@ try {
   sim('boot', device);
   writeFileSync(path.join(output, 'boot.log'), run('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 600000 }));
   report.phase = 'test'; console.log('UI tests: building and running the synthetic manual task flow');
-  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', path.join(output, 'results.xcresult'), '-parallel-testing-enabled', 'NO', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
+  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
+  const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', resultPath]));
+  const tests = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', resultPath]));
+  writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));
+  writeFileSync(path.join(output, 'tests.json'), JSON.stringify(tests, null, 2));
+  report.tests = resultValidation.validateManualUITestResult(summary, tests);
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
@@ -28,6 +35,14 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (existsSync(resultPath)) {
+    try { run('xcrun', ['xcresulttool', 'export', 'attachments', '--path', resultPath, '--output-path', path.join(output, 'attachments')]); }
+    catch (error) { report.attachment_export_error = error.message; }
+    // Failed test runs also need machine-readable diagnostics on Windows.
+    for (const name of ['summary', 'tests']) if (!existsSync(path.join(output, `${name}.json`))) {
+      try { writeFileSync(path.join(output, `${name}.json`), run('xcrun', ['xcresulttool', 'get', 'test-results', name, '--path', resultPath])); } catch {}
+    }
+  }
   writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
   if (device && /^[0-9a-f-]{36}$/i.test(device)) {
     try { sim('shutdown', device); } catch {}

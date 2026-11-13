@@ -30,7 +30,13 @@ function configureUITests(project, ios, root) {
   const target = targets[id];
   const product = project.pbxFileReferenceSection()[target.productReference];
   product.path = `${name}.xctest`;
+  product.name = `"${name}.xctest"`;
   product.explicitFileType = '"wrapper.cfbundle"';
+  target.productReference_comment = `${name}.xctest`;
+  project.pbxFileReferenceSection()[`${target.productReference}_comment`] = `${name}.xctest`;
+  for (const group of Object.values(project.hash.project.objects.PBXGroup)) {
+    if (Array.isArray(group?.children)) for (const child of group.children) if (child.value === target.productReference) child.comment = `${name}.xctest`;
+  }
   let group = project.findPBXGroupKey({ name });
   if (!group) {
     group = project.addPbxGroup([], name, '.').uuid;

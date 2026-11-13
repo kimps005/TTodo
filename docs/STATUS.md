@@ -184,3 +184,8 @@
 - 과거 DB의 확인 불필요 플래그가 잘못 남아도 앱/공유 검토에서는 빈 담당자를 확인 필요로 표시한다. 알림 직접 추가 생성과 실제 네이티브 승인 양쪽에서 담당자의 비어 있지 않은 값을 재확인한다. 의미상 실제 수행 주체가 맞는지는 여전히 사용자 검토와 AI 정확도 평가 대상이다.
 - 빈 문자열·공백·NBSP·명시된 담당자 정규화와 과거 기록 조회 회귀 검사 포함 로컬 45개 테스트·타입 검사 통과. Swift 출력/기존 기록의 직접 승인 차단 검사도 추가했으며 새 macOS CI 확인 전이다.
 - 이전 e7cb2d2 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43492444538)는 43개 테스트와 앱/두 확장 네이티브 작업 모두 성공했다. 이후 담당자 검증 변경은 이 결과에 포함하지 않는다. 별도 XCTest UI 실행은 아직 진행 중이다.
+
+## UI 검사 결과 집계와 산출물
+- UI 검사 완료는 xcodebuild 종료 코드만으로 결정하지 않는다. xcresulttool의 summary/tests 결과에서 지정한 수동 입력 흐름이 정확히 1개 실행·통과하고 실패/건너뜀이 없어야 완료로 표시한다. 0개·건너뜀·실패·다른 사례만 실행한 결과를 차단하는 로컬 회귀 검사를 추가했다.
+- XCTest 첨부 이미지를 CI에서 평면 파일로 내보내 Windows에서 확인할 수 있도록 보완했다. 테스트 생성기의 제품 표시 이름도 실제 xctest와 일치시키고, 기존 CI와 같은 arm64/활성 아키텍처만 빌드한다. 앱 배포 코드/서명 경로는 바꾸지 않는다.
+- [Apple Xcode 16.3 명령 안내](https://developer.apple.com/documentation/xcode-release-notes/xcode-16_3-release-notes)에 따라 xcresulttool get test-results/export attachments를 사용한다. 로컬 46개 테스트·타입·스크립트 구문 검사 통과. 실제 SDK 출력 계약과 UI runner 실행은 다음 수동 CI 확인 전이다.
