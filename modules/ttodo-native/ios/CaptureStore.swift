@@ -1,12 +1,13 @@
 import Foundation
 
 enum CaptureError: LocalizedError {
-  case consentRequired, stateChanged, reviewRequired
+  case consentRequired, stateChanged, reviewRequired, alreadyStored
   var errorDescription: String? {
     switch self {
     case .consentRequired: return "먼저 TTodo 앱에서 기기 내 AI 분석에 동의해 주세요."
     case .stateChanged: return "분석 상태가 변경되었어요. 앱의 분석함에서 확인해 주세요."
     case .reviewRequired: return "이 결과는 앱에서 내용을 확인한 뒤 저장해 주세요."
+    case .alreadyStored: return "한 번이라도 할 일을 저장한 캡처는 다시 분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요."
     }
   }
 }
@@ -40,7 +41,7 @@ extension SharedStore {
   func hasLocalAIConsent() throws -> Bool {
     try querySQL("SELECT value FROM preferences WHERE key='ai_local_consent'", params: []).first?["value"] as? String == "yes"
   }
-  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, now: Date = Date()) throws -> CaptureRegistration {
+  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, reanalyzeUnstored: Bool = false, now: Date = Date()) throws -> CaptureRegistration {
     guard ["manual", "share", "shortcuts"].contains(channel) else { throw CaptureError.stateChanged }
     return try transaction {
       guard try hasLocalAIConsent() else { throw CaptureError.consentRequired }
@@ -49,8 +50,13 @@ extension SharedStore {
       let expires = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86400))
       let token = UUID().uuidString.lowercased()
       if let existing, let id = existing["id"] as? String {
-        if retryFailed && existing["status"] as? String == "failed" {
-          try runSQL("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", params: [time, expires, token, id])
+        let status = existing["status"] as? String ?? ""
+        if reanalyzeUnstored || (retryFailed && status == "failed") {
+          let saved = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='saved' LIMIT 1", params: [id])
+          guard status != "saved", saved.isEmpty else { throw CaptureError.alreadyStored }
+          guard ["failed", "review", "empty", "ignored"].contains(status) else { throw CaptureError.stateChanged }
+          try runSQL("DELETE FROM extracted_tasks WHERE analysis_id=?", params: [id])
+          try runSQL("UPDATE analyses SET status='processing',model_version=NULL,error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", params: [time, expires, token, id])
           return CaptureRegistration(id: id, created: true, token: token)
         }
         return CaptureRegistration(id: id, created: false, token: nil)

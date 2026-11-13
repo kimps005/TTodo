@@ -93,13 +93,19 @@ export class Repository {
   failAnalysis(id: string, code: string, token: string) {
     return this.db.runAsync("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND processing_token=? AND status IN ('processing','queued')", code, id, token);
   }
-  async retryFailedAnalysis(id: string): Promise<string> {
+  retryFailedAnalysis(id: string) { return this.restartUnstoredAnalysis(id, true); }
+  async restartUnstoredAnalysis(id: string, failedOnly = false): Promise<string> {
     const time = this.now();
     const token = this.uuid();
     await this.db.withExclusiveTransactionAsync(async tx => {
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
-      if (analysis?.status !== 'failed') throw new Error('이미 분석 중이거나 처리된 이미지예요. 분석함을 확인해 주세요.');
-      await tx.runAsync("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", time, new Date(Date.parse(time) + 7 * 86400000).toISOString(), token, id);
+      const saved = await tx.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=? AND review_status='saved'", id);
+      if (analysis?.status === 'saved' || saved?.count) throw new Error('한 번이라도 할 일을 저장한 캡처는 다시 분석하지 않아요. 저장한 할 일은 목록에서 직접 수정해 주세요.');
+      if (!analysis || !(failedOnly ? ['failed'] : ['failed', 'review', 'empty', 'ignored']).includes(analysis.status)) throw new Error('이미 분석 중이거나 상태가 변경되었어요. 분석함을 확인해 주세요.');
+      const consent = await tx.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key='ai_local_consent'");
+      if (consent?.value !== 'yes') throw new Error('먼저 기기 내 AI 분석에 동의해 주세요.');
+      await tx.runAsync('DELETE FROM extracted_tasks WHERE analysis_id=?', id);
+      await tx.runAsync("UPDATE analyses SET status='processing',model_version=NULL,error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", time, new Date(Date.parse(time) + 7 * 86400000).toISOString(), token, id);
     });
     return token;
   }

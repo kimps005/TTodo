@@ -31,6 +31,8 @@ private struct CaptureShareView: View {
   @State private var items: [CaptureReviewItem] = []
   @State private var operation: Task<Void, Never>?
   @State private var preview: UIImage?
+  @State private var confirmReanalysis = false
+  @State private var hasSaved = false
   private func dueLabel(_ item: CaptureReviewItem) -> String {
     guard let due = item.dueAt else { return "마감 없음" }
     if item.duePrecision == "date" {
@@ -57,18 +59,19 @@ private struct CaptureShareView: View {
       }
     }
   }
-  private func analyze() {
+  private func analyze(reanalyze: Bool = false) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
     operation = Task {
       defer { working = false; operation = nil }
       do {
         let data = try await readImage(); try Task.checkCancellation()
         preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, extract: OnDeviceExtraction.extract)
+        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, extract: OnDeviceExtraction.extract)
         try Task.checkCancellation()
         let store = try SharedStore()
         let proposals = try store.captureReviewItems(id: result.id)
         analysisId = result.id; items = proposals
+        hasSaved = !(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='saved' LIMIT 1", params: [result.id])).isEmpty
         let status = try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [result.id]).first?["status"] as? String
         if status == "processing" || status == "queued" { message = "이 이미지는 이미 분석 중이에요. 잠시 후 앱 분석함에서 확인해 주세요." }
         else { message = proposals.isEmpty ? (result.duplicate ? "검토할 제안이 없어요. 이미 처리되었거나 보존 기간이 지난 결과는 앱 분석함에서 확인할 수 있어요." : "이 이미지에서 할 일을 찾지 못했어요.") : "제목·날짜·원문 근거를 확인하고 필요한 항목만 저장하세요." }
@@ -87,6 +90,7 @@ private struct CaptureShareView: View {
         return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
       }
       let count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits)
+      hasSaved = true
       items = try SharedStore().captureReviewItems(id: analysisId)
       message = "\(count)개를 저장했어요. 앱과 잠금화면 목록에 갱신을 요청해요."
       WidgetCenter.shared.reloadAllTimelines()
@@ -105,8 +109,12 @@ private struct CaptureShareView: View {
           if let failure { Text(failure).foregroundStyle(.red) }
           if working { ProgressView("처리 중") }
           if analysisId == nil {
-            Button("기기에서 분석", action: analyze).buttonStyle(.borderedProminent).disabled(working)
+            Button("기기에서 분석") { analyze() }.buttonStyle(.borderedProminent).disabled(working)
             Text("먼저 TTodo 앱 설정에서 기기 내 AI 분석에 동의해 주세요. 날짜 기준일을 모르는 ‘내일’ 같은 표현은 확정하지 않아요.").font(.caption).foregroundStyle(.secondary)
+          }
+          if analysisId != nil {
+            Text(hasSaved ? "저장한 기록이 있는 캡처는 재분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요." : "저장 전에는 같은 캡처를 다시 분석할 수 있어요. 기존 미저장 제안과 수정 내용은 교체돼요.").font(.caption).foregroundStyle(.secondary)
+            Button("이 사진 다시 분석") { confirmReanalysis = true }.disabled(working || hasSaved)
           }
           ForEach($items) { $item in
             VStack(alignment: .leading, spacing: 12) {
@@ -133,6 +141,10 @@ private struct CaptureShareView: View {
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기") { operation?.cancel(); close() } } }
         .onDisappear { operation?.cancel() }
+        .alert("다시 분석할까요?", isPresented: $confirmReanalysis) {
+          Button("취소", role: .cancel) { }
+          Button("다시 분석", role: .destructive) { analyze(reanalyze: true) }
+        } message: { Text("이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.") }
     }
   }
 }

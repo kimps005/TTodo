@@ -219,6 +219,64 @@ test('v2 저장소를 보존하고 재시도 후 예전 결과와 실패 통지�
   native.close();
 });
 
+test('저장 전 재분석은 기존 제안을 교체하고 예전 승인·결과를 차단한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('reanalyze-before-save', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'first', a.token!);
+  const old = (await repo.listExtracted(a.id))[0];
+  const token = await repo.restartUnstoredAnalysis(a.id);
+  assert.notEqual(token, a.token); assert.deepEqual(await repo.listExtracted(a.id), []);
+  await assert.rejects(repo.finishAnalysis(a.id, [task], 'stale', a.token!));
+  await repo.finishAnalysis(a.id, [{ ...task, title: '새 분석 제안' }], 'second', token);
+  await assert.rejects(repo.approve(a.id, [{ id: old.id, input: { title: '예전 화면 승인' } }]));
+  const fresh = (await repo.listExtracted(a.id))[0];
+  await repo.approve(a.id, [{ id: fresh.id, input: { title: fresh.title } }]);
+  await assert.rejects(repo.restartUnstoredAnalysis(a.id), /저장한 캡처/);
+  await repo.removeTodo((await repo.listTodos())[0].id);
+  await assert.rejects(repo.restartUnstoredAnalysis(a.id), /저장한 캡처/);
+  assert.deepEqual(await repo.listTodos(), []); native.close();
+});
+
+test('빈 결과·무시한 결과는 재분석하고 동의 철회·분석 중·부분 저장은 차단한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('reanalyze-states', 'share', null);
+  await assert.rejects(repo.restartUnstoredAnalysis(a.id), /분석 중/);
+  await repo.finishAnalysis(a.id, [], 'empty', a.token!);
+  let token = await repo.restartUnstoredAnalysis(a.id);
+  await repo.finishAnalysis(a.id, [task], 'review', token);
+  await repo.ignoreAnalysis(a.id);
+  token = await repo.restartUnstoredAnalysis(a.id);
+  await repo.finishAnalysis(a.id, [task, { ...task, title: '다른 제안' }], 'review', token);
+  await repo.revokeLocalAIConsent();
+  await assert.rejects(repo.restartUnstoredAnalysis(a.id), /동의/);
+  assert.equal((await repo.listExtracted(a.id)).length, 2);
+  await repo.setPreference('ai_local_consent', 'yes');
+  const first = (await repo.listExtracted(a.id))[0];
+  await repo.approve(a.id, [{ id: first.id, input: { title: first.title } }]);
+  assert.equal((await repo.listAnalyses())[0].status, 'review');
+  await assert.rejects(repo.restartUnstoredAnalysis(a.id), /저장한 캡처/);
+  assert.equal((await repo.listExtracted(a.id)).length, 2); native.close();
+});
+
+test('재분석과 승인이 동시에 와도 한쪽만 실행하고 저장한 제안을 지우지 않는다', async () => {
+  for (const approveFirst of [true, false]) {
+    const { repo, native } = fixture(); await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const a = await repo.createAnalysis('reanalyze-approval-race', 'manual', null);
+    await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+    const p = (await repo.listExtracted(a.id))[0];
+    const approve = () => repo.approve(a.id, [{ id: p.id, input: { title: p.title } }]);
+    const redo = () => repo.restartUnstoredAnalysis(a.id);
+    const results = await Promise.allSettled(approveFirst ? [approve(), redo()] : [redo(), approve()]);
+    assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+    assert.equal((await repo.listTodos()).length, approveFirst ? 1 : 0);
+    assert.equal((await repo.listExtracted(a.id)).length, approveFirst ? 1 : 0);
+    native.close();
+  }
+});
+
 test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 설정까지 제거한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.addTodo({ title: '개인 정보' }); await repo.setPreference('ai_consent', 'yes');

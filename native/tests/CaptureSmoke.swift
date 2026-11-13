@@ -101,6 +101,18 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [stale.id]))[0]["status"] as? String == "processing")
     try store.finishCapture(id: retried.id, tasks: [firstTask], provider: "current", token: retried.token!)
     check((try store.captureReviewItems(id: retried.id)).count == 1)
+    let redone = try store.registerCapture(fingerprint: "retry-race", channel: "share", reanalyzeUnstored: true)
+    check(redone.created && redone.token != retried.token)
+    check((try store.captureReviewItems(id: redone.id)).isEmpty)
+    do { try store.finishCapture(id: retried.id, tasks: [firstTask], provider: "stale", token: retried.token!); fatalError("Previous attempt overwrote reanalysis") }
+    catch CaptureError.stateChanged { }
+    try store.finishCapture(id: redone.id, tasks: [secondTask], provider: "redone", token: redone.token!)
+    check((try store.captureReviewItems(id: redone.id))[0].title == secondTask.title)
+    do { _ = try store.registerCapture(fingerprint: "share-multiple", channel: "share", reanalyzeUnstored: true); fatalError("Partially saved capture was reanalyzed") }
+    catch CaptureError.alreadyStored { }
+    try store.runSQL("DELETE FROM todos WHERE source_id=?", params: [review[0].id])
+    do { _ = try store.registerCapture(fingerprint: "share-multiple", channel: "share", reanalyzeUnstored: true); fatalError("Deleted saved item was reanalyzed") }
+    catch CaptureError.alreadyStored { }
     let local = try ExtractionValidator.localDeadline(day: "2026-11-20", time: "9:30")
     let fields = ExtractionValidator.deadlineFields(due: local.dueAt, precision: local.precision)
     check(fields.day == "2026-11-20" && fields.time == "09:30")
