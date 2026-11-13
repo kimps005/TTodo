@@ -3,6 +3,7 @@
 기준일: 2026-11-14 (한국 시간)
 
 ## 최근 검증 요약
+- ARM 실행기 미배정에 대응해 품질 수동 실행에 무료 표준 `macos-26-intel` 선택을 추가했다. 기본 push와 실제 UI 시뮬레이터는 ARM을 유지한다. Intel 실제 Swift/OCR 실행 및 arm64 교차 컴파일은 아직 실행 전이다.
 - 사진 삭제 경로 보완: 용량 초과 사진 거부도 앱 캐시 경로 검사를 거치며, 캐시 접두사만 같은 별도 폴더·상위 경로·사진 라이브러리 URI·인코딩된 우회 경로는 삭제하지 않는다. 로컬 49개 테스트·타입 통과. 실제 사진 선택/권한/OS 캐시 수명은 iPhone 미검증이다.
 - 재실행 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43503689019)는 core 성공/macOS 대기, [확장 UI](https://github.com/kimps005/TTodo/actions/runs/43503692908)는 macOS 대기다. 앞선 macOS 취소 주석은 호스팅 ARM 실행기 용량 부족과 실행기 미배정을 명시했다.
 - 최신 제품 변경 `621a3f2`: 로컬 48개 테스트·타입과 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43499930365)의 core 성공. macOS 작업은 단계 실행 없이 대기 중 취소되어 새 실제 Vision OCR 검사와 전체 삭제 후속 정리의 네이티브 검증은 아직 통과하지 않았다. 재실행으로 확인한다.

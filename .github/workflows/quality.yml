@@ -4,6 +4,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      macos_runner:
+        description: '네이티브 컴파일 실행기 (ARM 용량 부족 시 Intel 선택)'
+        type: choice
+        default: macos-26
+        options: [macos-26, macos-26-intel]
 permissions:
   contents: read
 concurrency:
@@ -24,7 +30,7 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npx expo export --platform ios
   ios:
-    runs-on: macos-26
+    runs-on: ${{ inputs.macos_runner || 'macos-26' }}
     timeout-minutes: 45
     env:
       CI: '1'

@@ -49,3 +49,8 @@
 [086295c 실행](https://github.com/kimps005/TTodo/actions/runs/43447613048): iOS 26.5 / iPhone 16 Pro 시뮬레이터, Xcode 자체 서명으로 앱 실행·App Group SQLite v3 초기화·무결성 ok·합성 데이터 3개 재실행 보존 통과. 초기 화면과 합성 목록 화면을 직접 시각 검토했고 한글·하단 탭·미완료 2개 표시를 확인했다. 목록 아래로 스크롤하거나 버튼을 조작한 검사는 아니다.
 
 이전 수동 서명 방식은 macOS taskgated가 앱 코드를 실행하기 전에 서명 오류로 종료했다. Xcode의 시뮬레이터용 권한 배치를 유지하는 빌드로 변경하여 해결했으며, App Group을 제거하거나 기기 보안 정책을 변경하지 않았다.
+## macOS 실행기 용량 부족 대응
+
+품질 검사의 수동 실행 `macos_runner`는 기본 `macos-26` 외에 `macos-26-intel`을 선택할 수 있다. GitHub가 ARM 호스팅 실행기 미배정/용량 부족으로 작업을 취소하면 Intel 표준 실행기로 Swift 저장소·캡처·실제 OCR 실행과 arm64 iOS 교차 컴파일을 확인한다. Intel에서 통과한 macOS OCR을 실제 iPhone이나 AI 모델 정확도 통과로 해석하지 않는다. 실제 iOS 시뮬레이터 UI 검사는 arm64 실행기를 유지한다.
+
+공식 [표준 실행기 사양](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)은 공개 저장소의 `macos-26-intel`을 무료 표준 실행기에 포함한다. 유료 `large`/`xlarge` 실행기를 사용하지 않는다.
