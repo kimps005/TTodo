@@ -115,6 +115,7 @@ function Application() {
   });
   const deleteData = () => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => {
     const deletion = await repo.deleteAll();
+    setDraft('');
     const cleanup = await Promise.allSettled([
       Promise.resolve().then(() => nativeBridge?.endActivities()),
       Promise.resolve().then(() => nativeBridge?.clearCaptureNotifications()),
