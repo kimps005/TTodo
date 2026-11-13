@@ -195,3 +195,8 @@
 - [기존 결과 번들 진단](https://github.com/kimps005/TTodo/actions/runs/43496640535) 성공. 실제 xcresulttool summary는 1개 실행/1개 실패였고, 접근성 트리의 저장 제목은 updatedCI manual task였다. 테스트는 다중 행 입력칸을 탭하면 항상 커서가 끝에 있다고 가정하여 CI manual task updated를 찾았다. 저장 실패로 단정하지 않는다.
 - 편집한 입력칸의 실제 값을 읽고 원래 제목과 다름/입력 문자열 포함을 확인한 뒤, 저장된 목록 값과 일치하는지 대조하도록 XCTest 기대를 수정했다. 입력 직후 스크린샷도 추가해 향후 실패를 직접 확인한다. 임의 대기나 제품 동작 우회는 추가하지 않는다.
 - 실제 SDK의 summary/tests JSON을 로컬 결과 검증기에 넣어 1개 실패 결과가 완료 처리되지 않음을 확인했다. 타입·diff 검사 통과. 수정 후 전체 UI 흐름은 새 수동 CI 검증 전이다.
+
+## 실제 Vision OCR 합성 이미지 검사 준비
+- 기존 캡처 처리 회귀 검사의 주입 OCR과 별도로, macOS CI에서 합성 한국어 PNG를 그려 실제 프로덕션 VisionOCR.recognize를 실행하는 검사를 추가한다. 한국어/날짜 문구 일치·빈 이미지의 빈 결과·잘못된 이미지 거부를 확인한다.
+- Apple AppKit/ImageIO로 화면 없는 비트맵을 생성하며 사용자 이미지/할 일을 읽지 않는다. 정답 문자열을 OCR 응답으로 주입하지 않고 실제 API 출력과 대조한다. OCR 출력은 로그에 남기지 않으며 합성 입력 이미지에 한해 진단 artifact를 보존한다.
+- workflow YAML·diff 검사 통과. Windows에서는 Swift/AppKit 실행 불가이므로 컴파일과 실제 OCR 실행은 새 macOS CI 확인 전이다. 실제 iPhone OCR·Foundation Models AI 정확도·다양한 캡처 품질 완료로 표시하지 않는다.

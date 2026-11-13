@@ -46,6 +46,10 @@ jobs:
           swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/CaptureSmoke.swift -o "$RUNNER_TEMP/ttodo-capture-smoke"
           TTODO_CONTRACT_OUTPUT="$RUNNER_TEMP/ttodo-native-extraction.json" "$RUNNER_TEMP/ttodo-capture-smoke"
           npx tsx scripts/check-native-extraction.ts "$RUNNER_TEMP/ttodo-native-extraction.json"
+      - name: Test actual Vision OCR with generated Korean image
+        run: |
+          swiftc modules/ttodo-native/ios/VisionOCR.swift native/tests/OCRSmoke.swift -framework AppKit -o "$RUNNER_TEMP/ttodo-ocr-smoke"
+          TTODO_OCR_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/artifacts/vision-ocr" "$RUNNER_TEMP/ttodo-ocr-smoke"
       - name: Install pods
         working-directory: ios
         run: pod install
@@ -57,5 +61,7 @@ jobs:
         if: always()
         with:
           name: ios-build-log
-          path: xcodebuild.log
+          path: |
+            xcodebuild.log
+            artifacts/vision-ocr/**
           retention-days: 7
