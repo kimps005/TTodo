@@ -22,6 +22,10 @@ import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibil
 import { isHomeLink } from './src/navigation/route';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
+function requestLockRefresh() {
+  try { nativeBridge?.reloadWidgets(); }
+  catch { Alert.alert('잠금화면 갱신을 요청하지 못했어요', '앱의 데이터는 유지돼요. 앱으로 돌아오거나 다음 변경 때 갱신을 다시 요청해요.'); }
+}
 function Application() {
   const [repo, setRepo] = useState<Repository | null>(null);
   const [error, setError] = useState('');
@@ -49,7 +53,7 @@ function Application() {
     // Notification settings must not prevent offline tasks from opening.
     setPermission(await Notifications.getPermissionsAsync().catch(() => null));
   }, []);
-  const boot = useCallback(async () => { try { setError(''); clearTemporaryFiles(); const repository = await openRepository(); await refresh(repository); setRepo(repository); } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); } }, [refresh]);
+  const boot = useCallback(async () => { try { setError(''); clearTemporaryFiles(); const repository = await openRepository(); await refresh(repository); setRepo(repository); requestLockRefresh(); } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); } }, [refresh]);
   useEffect(() => { void boot(); }, [boot]);
   useEffect(() => {
     let alive = true;
@@ -63,7 +67,7 @@ function Application() {
     setTab('today'); setHomeRequested(false);
     void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.'));
   }, [repo, homeRequested, editing, review, capture, evaluation, notificationReview, refresh]);
-  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active' && repo) void refresh(repo).catch(() => setError('최신 목록을 불러오지 못했어요. 다시 시도해 주세요.')); }); return () => sub.remove(); }, [repo, refresh]);
+  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active' && repo) void refresh(repo).then(requestLockRefresh).catch(() => Alert.alert('최신 목록을 불러오지 못했어요', '입력 중인 내용은 유지돼요. 화면을 닫은 뒤 탭을 다시 눌러 갱신해 주세요.')); }); return () => sub.remove(); }, [repo, refresh]);
   useEffect(() => {
     if (!repo) return;
     let alive = true;
@@ -88,7 +92,13 @@ function Application() {
     }).catch(() => { if (alive) setNotificationReview(null); });
     return () => { alive = false; };
   }, [repo, notificationReview, editing, capture, evaluation, review]);
-  const changed = async () => { if (repo) await refresh(repo); nativeBridge?.reloadWidgets(); };
+  const changed = async () => {
+    // The operation has already committed. A display refresh must not report a
+    // failed save or invite the user to repeat a successful manual insertion.
+    try { if (repo) await refresh(repo); }
+    catch { Alert.alert('처리는 완료됐어요', '최신 목록을 불러오지 못했어요. 탭을 다시 눌러 확인해 주세요.'); }
+    requestLockRefresh();
+  };
   const run = async (action: () => Promise<unknown>) => { if (mutationInFlight.current) return; mutationInFlight.current = true; setBusy(true); try { await action(); await changed(); } catch (e) { Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '잠시 후 다시 시도해 주세요.'); } finally { mutationInFlight.current = false; setBusy(false); } };
   if (error) return <SafeAreaView style={ui.screen}><View style={ui.body}><Text style={ui.title}>준비가 필요해요</Text><Text style={ui.subtitle}>{error}</Text><Button title="다시 시도" onPress={() => void boot()} /></View></SafeAreaView>;
   if (!repo) return <SafeAreaView style={[ui.screen, { justifyContent: 'center' }]}><ActivityIndicator size="large" color={colors.accent} accessibilityLabel="할 일 불러오는 중" /></SafeAreaView>;
