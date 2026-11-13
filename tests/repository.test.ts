@@ -7,7 +7,7 @@ import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
 import { createSerializedDatabase } from '../src/data/serializedDatabase';
 import schema from '../src/data/schema.json';
 
-function fixture() {
+function fixture(now = () => '2026-11-13T02:00:00.000Z') {
   const native = new DatabaseSync(':memory:');
   const connection: SqlConnection = {
     execAsync: async sql => { native.exec(sql); },
@@ -16,7 +16,7 @@ function fixture() {
     getAllAsync: async <T>(sql: string, ...params: SqlValue[]) => native.prepare(sql).all(...params) as T[],
   };
   const db: Database = createSerializedDatabase(connection);
-  const repo = new Repository(db, randomUUID, () => '2026-11-13T02:00:00.000Z');
+  const repo = new Repository(db, randomUUID, now);
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
@@ -140,7 +140,7 @@ test('검토 화면을 연 채 만료되면 정리 실행 전에도 승인을 �
   native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('2026-11-13T01:59:59Z', analysis.id);
   await assert.rejects(repo.approve(analysis.id, [{ id: proposal.id, input: { title: '뒤늦은 승인' } }]), /보존 기간/);
   assert.deepEqual(await repo.listTodos(), []);
-  assert.equal((await repo.listExtracted(analysis.id))[0].review_status, 'pending');
+  assert.equal(native.prepare('SELECT review_status FROM extracted_tasks WHERE id=?').get(proposal.id)!.review_status, 'pending');
   await repo.pruneEvidence();
   assert.equal((await repo.listExtracted(analysis.id))[0].evidence_text, '');
   native.close();
@@ -176,7 +176,7 @@ test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 �
   const old = { id: 'legacy-analysis' };
   native.prepare("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,model_version,expires_at) VALUES(?,?,?,?,?,?,?,?)").run(old.id, 'old-image', '2026-11-12T02:00:00Z', '2026-11-13T02:00:00Z', 'review', 'manual', 'old-model', '2026-11-20T02:00:00Z');
   native.prepare("INSERT INTO extracted_tasks(id,analysis_id,title,due_precision,confidence,evidence_text) VALUES(?,?,?,?,?,?)").run('legacy-task', old.id, task.title, 'unknown', .9, task.evidence_text);
-  const oldTask = (await repo.listExtracted(old.id))[0];
+  const oldTask = { id: 'legacy-task' };
   await repo.approve(old.id, [{ id: oldTask.id, input: { title: task.title } }]);
   await repo.initialize();
   assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, 3);
@@ -306,6 +306,58 @@ test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 �
   assert.equal(JSON.parse(await repo.exportData()).todos.length, 1);
   await repo.deleteAll(); assert.deepEqual(await repo.listTodos(), []);
   assert.equal(await repo.getPreference('ai_consent'), null); native.close();
+});
+
+test('앱 재실행 없이 만료 시점에 조회·내보내기해도 원문과 미저장 본문을 정리한다', async () => {
+  for (const read of ['analyses', 'extracted', 'export'] as const) {
+    let now = '2026-11-13T02:00:00.000Z';
+    const { repo, native } = fixture(() => now); await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const a = await repo.createAnalysis(`retention-${read}`, 'manual', null);
+    await repo.finishAnalysis(a.id, [task, { ...task, title: '지울 대기 제목', description: '지울 설명', assignee: '지울 담당', evidence_text: '지울 대기 근거' }], 'test', a.token!);
+    const saved = (await repo.listExtracted(a.id))[0];
+    await repo.approve(a.id, [{ id: saved.id, input: { title: saved.title, due_at: saved.due_at, due_precision: saved.due_precision } }]);
+    // A separate, unexpired capture must retain its review contents.
+    now = '2026-11-14T02:00:00.000Z';
+    const fresh = await repo.createAnalysis(`fresh-${read}`, 'share', null);
+    await repo.finishAnalysis(fresh.id, [task], 'test', fresh.token!);
+    now = '2026-11-20T01:59:59.999Z';
+    assert.equal((await repo.listExtracted(a.id))[1].title, '지울 대기 제목');
+    now = '2026-11-20T02:00:00.000Z';
+    if (read === 'analyses') assert.equal((await repo.listAnalyses()).find(row => row.id === a.id)!.status, 'saved');
+    else if (read === 'extracted') assert.equal((await repo.listExtracted(a.id))[1].review_status, 'ignored');
+    else {
+      const data = await repo.exportData();
+      for (const text of ['지울 대기 제목', '지울 설명', '지울 담당', '지울 대기 근거']) assert.ok(!data.includes(text));
+      const exported = JSON.parse(data).extracted_tasks.filter((row: { analysis_id: string }) => row.analysis_id === a.id);
+      assert.ok(exported.every((row: { evidence_text: string }) => row.evidence_text === ''));
+    }
+    const rows = native.prepare('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid').all(a.id);
+    assert.equal(rows[0].evidence_text, ''); assert.equal(rows[0].title, saved.title);
+    assert.equal(rows[1].title, '보존 기간이 지난 제안');
+    for (const field of ['description', 'due_at', 'assignee']) assert.equal(rows[1][field], null);
+    assert.equal(rows[1].evidence_text, ''); assert.equal(rows[1].review_status, 'ignored');
+    assert.equal((await repo.listTodos())[0].title, saved.title);
+    assert.equal((await repo.listExtracted(fresh.id))[0].evidence_text, task.evidence_text);
+    await assert.rejects(repo.restartUnstoredAnalysis(a.id), /저장한 캡처/);
+    native.close();
+  }
+});
+
+test('내보내기 정리에 실패하면 본문을 반환하지 않고 변경도 롤백한다', async () => {
+  let now = '2026-11-13T02:00:00.000Z';
+  const { repo, native } = fixture(() => now); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('export-cleanup-failure', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+  now = '2026-11-20T02:00:00.000Z';
+  native.exec("CREATE TRIGGER fail_cleanup BEFORE UPDATE OF evidence_text ON extracted_tasks BEGIN SELECT RAISE(ABORT, 'cleanup failed'); END;");
+  await assert.rejects(repo.exportData(), /cleanup failed/);
+  const row = native.prepare('SELECT * FROM extracted_tasks WHERE analysis_id=?').get(a.id)!;
+  assert.equal(row.title, task.title); assert.equal(row.review_status, 'pending'); assert.equal(row.evidence_text, task.evidence_text);
+  native.exec('DROP TRIGGER fail_cleanup');
+  assert.ok(!(await repo.exportData()).includes(task.evidence_text));
+  native.close();
 });
 test('잠금화면 제목·개수·전체 숨김 정책은 기존 설정과 일관되게 저장한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
