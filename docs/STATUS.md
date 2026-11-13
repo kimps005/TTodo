@@ -190,3 +190,8 @@
 - UI 검사 완료는 xcodebuild 종료 코드만으로 결정하지 않는다. xcresulttool의 summary/tests 결과에서 지정한 수동 입력 흐름이 정확히 1개 실행·통과하고 실패/건너뜀이 없어야 완료로 표시한다. 0개·건너뜀·실패·다른 사례만 실행한 결과를 차단하는 로컬 회귀 검사를 추가했다.
 - XCTest 첨부 이미지를 CI에서 평면 파일로 내보내 Windows에서 확인할 수 있도록 보완했다. 테스트 생성기의 제품 표시 이름도 실제 xctest와 일치시키고, 기존 CI와 같은 arm64/활성 아키텍처만 빌드한다. 앱 배포 코드/서명 경로는 바꾸지 않는다.
 - [Apple Xcode 16.3 명령 안내](https://developer.apple.com/documentation/xcode-release-notes/xcode-16_3-release-notes)에 따라 xcresulttool get test-results/export attachments를 사용한다. 로컬 46개 테스트·타입·스크립트 구문 검사 통과. 실제 SDK 출력 계약과 UI runner 실행은 다음 수동 CI 확인 전이다.
+
+## 첫 실제 UI 검사 실패 진단
+- [기존 결과 번들 진단](https://github.com/kimps005/TTodo/actions/runs/43496640535) 성공. 실제 xcresulttool summary는 1개 실행/1개 실패였고, 접근성 트리의 저장 제목은 updatedCI manual task였다. 테스트는 다중 행 입력칸을 탭하면 항상 커서가 끝에 있다고 가정하여 CI manual task updated를 찾았다. 저장 실패로 단정하지 않는다.
+- 편집한 입력칸의 실제 값을 읽고 원래 제목과 다름/입력 문자열 포함을 확인한 뒤, 저장된 목록 값과 일치하는지 대조하도록 XCTest 기대를 수정했다. 입력 직후 스크린샷도 추가해 향후 실패를 직접 확인한다. 임의 대기나 제품 동작 우회는 추가하지 않는다.
+- 실제 SDK의 summary/tests JSON을 로컬 결과 검증기에 넣어 1개 실패 결과가 완료 처리되지 않음을 확인했다. 타입·diff 검사 통과. 수정 후 전체 UI 흐름은 새 수동 CI 검증 전이다.

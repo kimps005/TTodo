@@ -32,10 +32,16 @@ final class TTodoUITests: XCTestCase {
     let title = app.textViews["할 일 제목"]
     XCTAssertTrue(title.waitForExistence(timeout: 15))
     title.tap(); title.typeText(" updated")
+    // Tapping a multiline field does not promise an insertion point at the end.
+    // Compare what the user actually entered with what the app later stores.
+    let editedTitle = try XCTUnwrap(title.value as? String).trimmingCharacters(in: .whitespacesAndNewlines)
+    XCTAssertNotEqual(editedTitle, "CI manual task")
+    XCTAssertTrue(editedTitle.contains("updated"))
+    screenshot(app, name: "02-title-input")
     tap(app.buttons["변경 저장"], in: app)
-    let edited = app.buttons["CI manual task updated, 마감 없음, 상세 편집"]
+    let edited = app.buttons["\(editedTitle), 마감 없음, 상세 편집"]
     XCTAssertTrue(edited.waitForExistence(timeout: 15))
-    screenshot(app, name: "02-edited-task")
+    screenshot(app, name: "03-edited-task")
     tap(edited, in: app)
     tap(app.buttons["할 일 삭제"], in: app)
     tap(app.alerts.buttons["취소"], in: app)
@@ -47,6 +53,6 @@ final class TTodoUITests: XCTestCase {
     app.terminate(); app.launch()
     XCTAssertTrue(app.staticTexts["머릿속을 조금 비워 보세요"].waitForExistence(timeout: 30))
     XCTAssertFalse(edited.exists, "Deletion must survive a real process relaunch.")
-    screenshot(app, name: "03-deleted-task")
+    screenshot(app, name: "04-deleted-task")
   }
 }
