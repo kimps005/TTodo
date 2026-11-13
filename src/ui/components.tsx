@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, Text, type StyleProp, type ViewStyle } from 'react-native';
 import { ui } from './theme';
 export function Button({ title, onPress, secondary = false, disabled = false, style }: { title: string; onPress: () => void; secondary?: boolean; disabled?: boolean; style?: StyleProp<ViewStyle> }) {
-  return <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={({ pressed }) => [ui.button, secondary && ui.secondary, (pressed || disabled) && ui.disabled, style]}>
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [ui.button, secondary && ui.secondary, (pressed || disabled) && ui.disabled, style]}>
     <Text style={[ui.buttonText, secondary && ui.secondaryText]}>{title}</Text>
   </Pressable>;
 }
