@@ -31,8 +31,9 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
   });
 }
 export function containsSensitiveText(text: string): boolean {
-  return /(?:비밀번호|패스워드|password|인증\s*(?:번호|코드)|보안\s*코드|계좌\s*번호|주민\s*등록)/i.test(text) ||
-    /\b\d{6}\s*[-–]\s*[1-4]\d{6}\b/.test(text) || /\b(?:\d[ -]?){16}\b/.test(text);
+  const normalized = text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '');
+  return /(?:비밀번호|패스워드|password|인증\s*(?:번호|코드)|보안\s*코드|계좌\s*번호|주민\s*등록)/i.test(normalized) ||
+    /\b\d{6}\s*[-–]\s*[1-4]\d{6}\b/.test(normalized) || /\b(?:\d[ -]?){16}\b/.test(normalized);
 }
 export function enforceDateContext(tasks: TaskSuggestion[], context: ExtractionContext): TaskSuggestion[] {
   if (context.message_date) return tasks;

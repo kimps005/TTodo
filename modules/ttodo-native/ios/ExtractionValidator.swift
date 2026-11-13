@@ -54,8 +54,9 @@ enum ExtractionValidator {
   static func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
   static func clean(_ value: String) -> String { value.precomposedStringWithCompatibilityMapping.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
   static func isSensitive(_ text: String) -> Bool {
-    matches(text, "(?i)(비밀번호|패스워드|password|인증\\s*(번호|코드)|보안\\s*코드|계좌\\s*번호|주민\\s*등록)") ||
-      matches(text, "\\b\\d{6}\\s*[-–]\\s*[1-4]\\d{6}\\b") || matches(text, "\\b(?:\\d[ -]?){16}\\b")
+    let normalized = text.precomposedStringWithCompatibilityMapping.replacingOccurrences(of: "[\u{200B}-\u{200D}\u{FEFF}]", with: "", options: .regularExpression)
+    return matches(normalized, "(?i)(비밀번호|패스워드|password|인증\\s*(번호|코드)|보안\\s*코드|계좌\\s*번호|주민\\s*등록)") ||
+      matches(normalized, "\\b\\d{6}\\s*[-–]\\s*[1-4]\\d{6}\\b") || matches(normalized, "\\b(?:\\d[ -]?){16}\\b")
   }
   static func validDate(_ value: String) -> Bool {
     guard matches(value, "^\\d{4}-\\d{2}-\\d{2}$") else { return false }

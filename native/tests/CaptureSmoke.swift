@@ -4,6 +4,11 @@ import Foundation
 struct CaptureSmoke {
   static func check(_ condition: Bool) { precondition(condition) }
   static func main() async throws {
+    struct SensitiveCase: Decodable { let text: String; let expected: Bool }
+    let sensitiveData = try Data(contentsOf: URL(fileURLWithPath: "evaluation/sensitive-seed.json"))
+    for item in try JSONDecoder().decode([SensitiveCase].self, from: sensitiveData) {
+      check(ExtractionValidator.isSensitive(item.text) == item.expected)
+    }
     struct DuplicateCase: Decodable { let source: String; let evidence: String; let expected: Bool }
     let duplicateData = try Data(contentsOf: URL(fileURLWithPath: "evaluation/duplicate-seed.json"))
     for item in try JSONDecoder().decode([DuplicateCase].self, from: duplicateData) {
