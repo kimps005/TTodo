@@ -1,0 +1,87 @@
+import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Repository, type Database, type SqlConnection, type SqlValue } from '../src/data/repository';
+import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
+
+function fixture() {
+  const native = new DatabaseSync(':memory:');
+  const connection: SqlConnection = {
+    execAsync: async sql => { native.exec(sql); },
+    runAsync: async (sql, ...params) => native.prepare(sql).run(...params),
+    getFirstAsync: async <T>(sql: string, ...params: SqlValue[]) => (native.prepare(sql).get(...params) as T) ?? null,
+    getAllAsync: async <T>(sql: string, ...params: SqlValue[]) => native.prepare(sql).all(...params) as T[],
+  };
+  const db: Database = { ...connection, withExclusiveTransactionAsync: async task => {
+    native.exec('BEGIN IMMEDIATE');
+    try { await task(connection); native.exec('COMMIT'); } catch (error) { native.exec('ROLLBACK'); throw error; }
+  } };
+  const repo = new Repository(db, randomUUID, () => '2026-11-13T02:00:00.000Z');
+  return { repo, native };
+}
+const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+test('빈 입력·200자 초과·유효하지 않은 날짜를 거부한다', () => {
+  assert.throws(() => normalizeTitle(' \n '));
+  assert.throws(() => normalizeTitle('가'.repeat(201)));
+  assert.equal(normalizeTitle('  택배 보내기  '), '택배 보내기');
+  assert.throws(() => validateDue('2026-02-30', 'date'));
+  assert.throws(() => validateDue('2026-11-13', 'unknown'));
+});
+test('수동 중복 입력은 허용하고 완료·수정·삭제를 보존한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const first = await repo.addTodo({ title: '  택배 보내기  ' });
+  await repo.addTodo({ title: '택배 보내기' });
+  assert.equal((await repo.listTodos()).length, 2);
+  await repo.setCompleted(first, true);
+  await repo.updateTodo(first, { title: "보고서 '검토'", due_at: '2026-11-14', due_precision: 'date' });
+  await repo.initialize();
+  const saved = (await repo.listTodos()).find(t => t.id === first)!;
+  assert.equal(saved.status, 'completed'); assert.equal(saved.title, "보고서 '검토'");
+  assert.equal(saved.visibility, 'private');
+  await repo.removeTodo(first); assert.equal((await repo.listTodos()).length, 1); native.close();
+});
+test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const a = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:00Z');
+  const b = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:01Z');
+  assert.equal(a.id, b.id); assert.equal(b.created, false);
+  await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation');
+  const tasks = await repo.listExtracted(a.id);
+  const selected = [{ id: tasks[0].id, input: { title: '수정된 제목' } }];
+  await repo.approve(a.id, selected); await repo.approve(a.id, selected);
+  assert.equal((await repo.listTodos()).length, 1);
+  assert.equal((await repo.listAnalyses())[0].status, 'review');
+  await repo.ignoreAnalysis(a.id);
+  assert.equal((await repo.listAnalyses())[0].status, 'saved');
+  assert.equal((await repo.listExtracted(a.id))[1].review_status, 'ignored'); native.close();
+});
+test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되돌린다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
+  await repo.finishAnalysis(a.id, [task, task], 'evaluation');
+  const tasks = await repo.listExtracted(a.id);
+  await assert.rejects(repo.approve(a.id, [{ id: tasks[0].id, input: { title: '정상' } }, { id: tasks[1].id, input: { title: ' ' } }]));
+  assert.equal((await repo.listTodos()).length, 0);
+  assert.ok((await repo.listExtracted(a.id)).every(t => t.review_status === 'pending')); native.close();
+});
+test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 수 없다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  const a = await repo.createAnalysis('interrupted', 'manual', '2026-11-13T02:00:00Z');
+  await repo.initialize(); assert.equal((await repo.listAnalyses())[0].error_code, 'INTERRUPTED');
+  await repo.ignoreAnalysis(a.id); await assert.rejects(repo.approve(a.id, [])); native.close();
+});
+test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 설정까지 제거한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.addTodo({ title: '개인 정보' }); await repo.setPreference('ai_consent', 'yes');
+  assert.equal(JSON.parse(await repo.exportData()).todos.length, 1);
+  await repo.deleteAll(); assert.deepEqual(await repo.listTodos(), []);
+  assert.equal(await repo.getPreference('ai_consent'), null); native.close();
+});
+test('오늘·기한 지남·마감 없음·미래·완료 순서로 정렬한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  for (const [title, due] of [['미래','2026-11-14'],['지남','2026-11-12'],['오늘','2026-11-13'],['없음',null]] as const) {
+    await repo.addTodo({ title, due_at: due, due_precision: due ? 'date' : 'unknown' });
+  }
+  assert.deepEqual(sortTodos(await repo.listTodos(), new Date('2026-11-13T12:00:00')).map(t => t.title), ['오늘','지남','없음','미래']); native.close();
+});

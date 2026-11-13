@@ -1,20 +1,89 @@
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as Notifications from 'expo-notifications';
+import { openRepository } from './src/data/open';
+import type { Analysis, ExtractedTask, Repository } from './src/data/repository';
+import { dueLabel, sortTodos, type Todo } from './src/domain/todo';
+import { nativeBridge } from './src/native/bridge';
+import { colors, ui } from './src/ui/theme';
+import { Button, Check } from './src/ui/components';
+import { TodoEditor } from './src/ui/TodoEditor';
+import { Review } from './src/ui/Review';
+import { Capture } from './src/ui/Capture';
 
-export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
+const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
+function Application() {
+  const [repo, setRepo] = useState<Repository | null>(null);
+  const [error, setError] = useState('');
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [analyses, setAnalyses] = useState<Analysis[]>([]);
+  const [tab, setTab] = useState<'today' | 'inbox' | 'settings'>('today');
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<Todo | null>(null);
+  const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[] } | null>(null);
+  const [capture, setCapture] = useState(false);
+  const [privateLock, setPrivateLock] = useState(true);
+  const [onboarded, setOnboarded] = useState(false);
+  const [permission, setPermission] = useState('확인 전');
+  const refresh = useCallback(async (repository: Repository) => {
+    await repository.pruneEvidence();
+    const [all, captures, privacy, intro] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded')]);
+    setTodos(sortTodos(all)); setAnalyses(captures); setPrivateLock(privacy !== 'no'); setOnboarded(intro === 'yes');
+    setPermission((await Notifications.getPermissionsAsync()).granted ? '허용됨' : '허용되지 않음');
+  }, []);
+  const boot = useCallback(async () => { try { setError(''); const repository = await openRepository(); await refresh(repository); setRepo(repository); } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); } }, [refresh]);
+  useEffect(() => { void boot(); }, [boot]);
+  useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active' && repo) void refresh(repo).catch(() => setError('최신 목록을 불러오지 못했어요. 다시 시도해 주세요.')); }); return () => sub.remove(); }, [repo, refresh]);
+  const changed = async () => { if (repo) await refresh(repo); nativeBridge?.reloadWidgets(); };
+  const run = async (action: () => Promise<unknown>) => { if (busy) return; setBusy(true); try { await action(); await changed(); } catch (e) { Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '잠시 후 다시 시도해 주세요.'); } finally { setBusy(false); } };
+  if (error) return <SafeAreaView style={ui.screen}><View style={ui.body}><Text style={ui.title}>준비가 필요해요</Text><Text style={ui.subtitle}>{error}</Text><Button title="다시 시도" onPress={() => void boot()} /></View></SafeAreaView>;
+  if (!repo) return <SafeAreaView style={[ui.screen, { justifyContent: 'center' }]}><ActivityIndicator size="large" color={colors.accent} accessibilityLabel="할 일 불러오는 중" /></SafeAreaView>;
+  const pending = todos.filter(t => t.status === 'pending');
+  const completed = todos.filter(t => t.status === 'completed');
+  const add = () => void run(async () => { await repo.addTodo({ title: draft }); setDraft(''); });
+  const exportData = () => void run(async () => {
+    if (!(await Sharing.isAvailableAsync())) throw new Error('이 기기에서는 파일 공유를 사용할 수 없어요.');
+    const file = new File(Paths.cache, 'TTodo-export.json');
+    try { file.create({ overwrite: true }); file.write(await repo.exportData()); await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }); }
+    finally { if (file.exists) file.delete(); }
+  });
+  return <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}><StatusBar style="dark" />
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
+        <View style={[ui.row, { justifyContent: 'space-between' }]}><Text style={ui.eyebrow}>TTODO</Text><Text style={ui.small}>생각난 순간, 가볍게.</Text></View>
+        {tab === 'today' && <>
+          <View style={{ gap: 7 }}><Text style={ui.subtitle}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</Text><Text style={ui.title}>오늘의 할 일</Text><Text style={ui.subtitle}>앞으로 할 일 <Text style={{ color: colors.accent, fontWeight: '700' }}>{pending.length}개</Text></Text></View>
+          {!onboarded && <View style={[ui.card, { backgroundColor: colors.pale }]}><Text style={ui.section}>잊기 전에 적어 두세요</Text><Text style={ui.subtitle}>할 일은 기기에 저장돼요. 잠금화면과 캡처 기능은 설정에서 준비 상태를 확인할 수 있어요.</Text><Button secondary title="시작하기" onPress={() => void run(() => repo.setPreference('onboarded', 'yes'))} /></View>}
+          <View style={ui.card}><TextInput accessibilityLabel="새 할 일" placeholder="어떤 일을 해야 하나요?" placeholderTextColor={colors.muted} value={draft} onChangeText={setDraft} style={ui.input} returnKeyType="done" onSubmitEditing={add} maxLength={400} editable={!busy} /><Button title="할 일 추가" disabled={busy || !draft.trim()} onPress={add} /></View>
+          {!pending.length && <View style={[ui.card, { paddingVertical: 36 }]}><Text style={{ fontSize: 30, color: colors.accent }}>✓</Text><Text style={ui.section}>머릿속을 조금 비워 보세요</Text><Text style={ui.subtitle}>할 일을 하나 적어 두면 기억하는 대신 지금 하는 일에 집중할 수 있어요.</Text></View>}
+          {pending.map(todo => <View key={todo.id} style={[ui.card, ui.row, { padding: 12 }]}><Check checked={false} label={`${todo.title} 완료하기`} onPress={() => void run(() => repo.setCompleted(todo.id, true))} /><Pressable accessibilityRole="button" accessibilityLabel={`${todo.title}, ${dueLabel(todo)}, 상세 편집`} style={[ui.grow, { paddingVertical: 7 }]} onPress={() => setEditing(todo)}><Text style={{ fontSize: 17, color: colors.ink, lineHeight: 25 }}>{todo.title}</Text><View style={ui.row}><Text style={ui.small}>{dueLabel(todo)}</Text>{todo.source_type !== 'manual' && <Text style={ui.pill}>AI 제안</Text>}</View></Pressable></View>)}
+          {!!completed.length && <><Text style={ui.section}>마친 일 · {completed.length}</Text>{completed.map(todo => <View key={todo.id} style={[ui.row, { paddingVertical: 3 }]}><Check checked label={`${todo.title} 미완료로 되돌리기`} onPress={() => void run(() => repo.setCompleted(todo.id, false))} /><Pressable style={ui.grow} accessibilityRole="button" onPress={() => setEditing(todo)}><Text style={{ color: colors.muted, fontSize: 16, textDecorationLine: 'line-through' }}>{todo.title}</Text></Pressable></View>)}</>}
+        </>}
+        {tab === 'inbox' && <>
+          <Text style={ui.title}>캡처 분석함</Text><Text style={ui.subtitle}>캡처에서 찾은 제안은 확인한 뒤 저장돼요.</Text><Button title="사진에서 글자 읽기" onPress={() => setCapture(true)} />
+          {!analyses.length && <View style={ui.card}><Text style={ui.section}>아직 분석 내역이 없어요</Text><Text style={ui.subtitle}>기기 내 글자 인식을 먼저 시험할 수 있어요. AI 자동 추출은 한국어 모델 평가와 서버 연결 후 제공해요.</Text></View>}
+          {analyses.map(item => <Pressable key={item.id} accessibilityRole="button" onPress={() => void run(async () => setReview({ id: item.id, tasks: await repo.listExtracted(item.id) }))} style={ui.card}><Text style={ui.pill}>{statusLabels[item.status]}</Text><Text style={ui.section}>{new Date(item.received_at).toLocaleString('ko-KR')}</Text>{item.status === 'failed' && <Text style={ui.subtitle}>분석을 마치지 못했어요. 원본 사진을 다시 선택해 주세요.</Text>}</Pressable>)}
+        </>}
+        {tab === 'settings' && <>
+          <Text style={ui.title}>내 방식으로</Text><Text style={ui.subtitle}>빠른 기록과 개인정보를 함께 챙겨요.</Text>
+          <View style={ui.card}><Text style={ui.section}>잠금화면 빠른 추가</Text><Text style={ui.subtitle}>단축어에서 ‘입력 요청’ 다음에 ‘TTodo에 할 일 추가’를 연결하세요. 잠긴 상태에서 인증 없는 입력은 실제 iPhone 검증이 필요해요.</Text><Text style={ui.small}>설정 안내를 읽은 것만으로 연결 완료로 처리하지 않아요.</Text></View>
+          <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><View style={ui.row}><Text style={[ui.label, { flex: 1 }]}>잠금화면 제목 숨기기</Text><Switch accessibilityLabel="잠금화면 제목 숨기기" value={privateLock} disabled={busy} onValueChange={value => void run(() => repo.setPreference('private_lock', value ? 'yes' : 'no'))} /></View><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
+          <View style={ui.card}><Text style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>자동화 지원 OS와 정확한 이미지 전달을 검증 중이에요. 아직 자동 설정이나 연결 완료를 안내하지 않아요.</Text></View>
+          <View style={ui.card}><Text style={ui.section}>분석 결과 알림</Text><Text style={ui.subtitle}>권한: {permission}</Text><Button secondary title="알림 권한 요청" onPress={() => void run(async () => { await Notifications.requestPermissionsAsync(); })} disabled={busy} /></View>
+          <View style={ui.card}><Text style={ui.section}>개인정보와 데이터</Text><Text style={ui.subtitle}>현재 외부 AI 전송은 꺼져 있어요. 수동 할 일은 기기에만 저장되며, AI 연결 전 전송 항목과 처리 업체를 안내하고 별도 동의를 받을 예정이에요.</Text><Button title="내 데이터 내보내기" secondary onPress={exportData} disabled={busy} /><Button title="모든 데이터 삭제" secondary disabled={busy} onPress={() => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => { await nativeBridge?.endActivities(); await repo.deleteAll(); }) }])} /></View>
+          <Text style={ui.small}>TTodo 1.0.0 · 개발 중{'\n'}실기기 검증 및 App Store 출시 준비 전 버전이에요.</Text>
+        </>}
+      </ScrollView>
+    </KeyboardAvoidingView>
+    <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line }}>{([['today', '할 일'], ['inbox', '분석함'], ['settings', '설정']] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityState={{ selected: tab === key }} style={{ flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', padding: 10 }} onPress={() => setTab(key)}><Text style={{ color: tab === key ? colors.accent : colors.muted, fontWeight: tab === key ? '800' : '500', fontSize: 15 }}>{label}{key === 'inbox' && analyses.some(a => a.status === 'review') ? ' •' : ''}</Text></Pressable>)}</View>
+    {editing && <TodoEditor key={editing.id} todo={editing} close={() => setEditing(null)} save={async input => { await repo.updateTodo(editing.id, input); await changed(); }} remove={async () => { await repo.removeTodo(editing.id); await changed(); }} />}
+    {review && <Review key={review.id} analysisId={review.id} tasks={review.tasks} repository={repo} close={() => setReview(null)} changed={changed} />}
+    {capture && <Capture close={() => setCapture(false)} />}
+  </SafeAreaView>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default function App() { return <SafeAreaProvider><Application /></SafeAreaProvider>; }
