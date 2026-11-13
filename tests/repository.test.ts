@@ -123,6 +123,16 @@ test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 �
   await repo.deleteAll(); assert.deepEqual(await repo.listTodos(), []);
   assert.equal(await repo.getPreference('ai_consent'), null); native.close();
 });
+test('잠금화면 제목·개수·전체 숨김 정책은 기존 설정과 일관되게 저장한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  assert.equal(await repo.getPreference('private_lock'), null);
+  await repo.setLockVisibility('titles');
+  assert.equal(await repo.getPreference('private_lock'), 'no'); assert.equal(await repo.getPreference('hide_lock_content'), 'no');
+  await repo.setLockVisibility('hidden');
+  assert.equal(await repo.getPreference('private_lock'), 'yes'); assert.equal(await repo.getPreference('hide_lock_content'), 'yes');
+  await repo.setLockVisibility('count');
+  assert.equal(await repo.getPreference('private_lock'), 'yes'); assert.equal(await repo.getPreference('hide_lock_content'), 'no'); native.close();
+});
 test('오늘·기한 지남·마감 없음·미래·완료 순서로 정렬한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   for (const [title, due] of [['미래','2026-11-14'],['지남','2026-11-12'],['오늘','2026-11-13'],['없음',null]] as const) {

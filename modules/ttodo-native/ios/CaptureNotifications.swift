@@ -30,7 +30,7 @@ enum CaptureNotifications {
     categories = Set(categories.filter { ![category, singleCategory].contains($0.identifier) }); categories.insert(review); categories.insert(single)
     center.setNotificationCategories(categories)
     let content = UNMutableNotificationContent()
-    content.title = "할 일 \(pending.count)개를 발견했어요"
+    content.title = snapshot.hideContent ? "새 분석 결과가 있어요" : "할 일 \(pending.count)개를 발견했어요"
     content.body = quick ? pending[0]["title"] as? String ?? "분석함에서 내용을 확인하세요." : "분석함에서 내용을 확인하고 필요한 항목만 저장하세요."
     content.categoryIdentifier = quick ? singleCategory : category
     content.userInfo = ["analysis_id": outcome.id]
@@ -38,10 +38,12 @@ enum CaptureNotifications {
     guard (try? store.hasLocalAIConsent()) == true,
       (try? store.querySQL("SELECT status FROM analyses WHERE id=?", params: [outcome.id]).first?["status"] as? String) == "review" else { return }
     // Settings may change while notification categories are being loaded.
-    if (try? store.snapshot().hideTitles) != false {
+    let latestPrivacy = try? store.snapshot()
+    if latestPrivacy?.hideTitles != false {
       content.body = "분석함에서 내용을 확인하고 필요한 항목만 저장하세요."
       content.categoryIdentifier = category
     }
+    if latestPrivacy?.hideContent != false { content.title = "새 분석 결과가 있어요" }
     try? await center.add(UNNotificationRequest(identifier: "ttodo.capture.\(outcome.id)", content: content, trigger: nil))
   }
   static func clearAll() async {

@@ -78,6 +78,7 @@ extension SharedStore {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       if analysis["status"] as? String == "saved" { return false }
       guard try querySQL("SELECT value FROM preferences WHERE key='private_lock'", params: []).first?["value"] as? String == "no" else { throw CaptureError.reviewRequired }
+      guard try querySQL("SELECT value FROM preferences WHERE key='hide_lock_content'", params: []).first?["value"] as? String != "yes" else { throw CaptureError.reviewRequired }
       guard analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
       let tasks = try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=?", params: [id])

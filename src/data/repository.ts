@@ -128,6 +128,13 @@ export class Repository {
     return (await this.db.getFirstAsync<{ value: string }>('SELECT value FROM preferences WHERE key=?', key))?.value ?? null;
   }
   setPreference(key: string, value: string) { return this.db.runAsync('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value); }
+  async setLockVisibility(value: 'titles' | 'count' | 'hidden') {
+    if (!['titles', 'count', 'hidden'].includes(value)) throw new Error('잠금화면 표시 설정을 확인해 주세요.');
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await tx.runAsync("INSERT INTO preferences(key,value) VALUES('private_lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", value === 'titles' ? 'no' : 'yes');
+      await tx.runAsync("INSERT INTO preferences(key,value) VALUES('hide_lock_content',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", value === 'hidden' ? 'yes' : 'no');
+    });
+  }
   async pruneEvidence() {
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {

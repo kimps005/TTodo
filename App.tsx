@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { File, Paths } from 'expo-file-system';
@@ -33,15 +33,15 @@ function Application() {
   const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[] } | null>(null);
   const [capture, setCapture] = useState(false);
   const [evaluation, setEvaluation] = useState(false);
-  const [privateLock, setPrivateLock] = useState(true);
+  const [lockVisibility, setLockVisibility] = useState<'titles' | 'count' | 'hidden'>('count');
   const [localAIConsent, setLocalAIConsent] = useState(false);
   const [notificationReview, setNotificationReview] = useState<string | null>(null);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState('확인 전');
   const refresh = useCallback(async (repository: Repository) => {
     await repository.pruneEvidence();
-    const [all, captures, privacy, intro] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded')]);
-    setTodos(sortTodos(all)); setAnalyses(captures); setPrivateLock(privacy !== 'no'); setOnboarded(intro === 'yes');
+    const [all, captures, privacy, intro, hidden] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content')]);
+    setTodos(sortTodos(all)); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
     setLocalAIConsent(await repository.getPreference('ai_local_consent') === 'yes');
     setPermission((await Notifications.getPermissionsAsync()).granted ? '허용됨' : '허용되지 않음');
   }, []);
@@ -105,7 +105,7 @@ function Application() {
         {tab === 'settings' && <>
           <Text style={ui.title}>내 방식으로</Text><Text style={ui.subtitle}>빠른 기록과 개인정보를 함께 챙겨요.</Text>
           <View style={ui.card}><Text style={ui.section}>잠금화면 빠른 추가</Text><Text style={ui.subtitle}>단축어에서 ‘입력 요청’ 다음에 ‘TTodo에 할 일 추가’를 연결하세요. 잠긴 상태에서 인증 없는 입력은 실제 iPhone 검증이 필요해요.</Text><Text style={ui.small}>설정 안내를 읽은 것만으로 연결 완료로 처리하지 않아요.</Text></View>
-          <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><View style={ui.row}><Text style={[ui.label, { flex: 1 }]}>잠금화면 제목 숨기기</Text><Switch accessibilityLabel="잠금화면 제목 숨기기" value={privateLock} disabled={busy} onValueChange={value => void run(async () => { await repo.setPreference('private_lock', value ? 'yes' : 'no'); if (value) await nativeBridge?.clearCaptureNotifications(); })} /></View><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
+          <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><Text style={ui.small}>기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. iOS 갱신에는 시간이 걸릴 수 있어요.</Text>{([['titles', '제목 표시'], ['count', '개수만 표시'], ['hidden', '내용 숨김']] as const).map(([value, label]) => <Button key={value} title={`${lockVisibility === value ? '✓ ' : ''}${label}`} secondary={lockVisibility !== value} disabled={busy} onPress={() => void run(async () => { await repo.setLockVisibility(value); if (value !== 'titles') await nativeBridge?.clearCaptureNotifications(); })} />)}<Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
           <View style={ui.card}><Text style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>단축어의 ‘TTodo에서 캡처 분석’에 이미지를 직접 전달하세요. 스크린샷 자동화가 없는 환경에서는 사진 선택 단축어로 시험할 수 있어요.</Text><Text style={ui.small}>실제 스크린샷 전달·잠금 실행·AI 정확도는 미검증이에요. 최신 사진을 임의로 가져오지 않으며, 설정 화면 방문만으로 연결 완료로 처리하지 않아요.</Text></View>
           <View style={ui.card}><Text style={ui.section}>분석 결과 알림</Text><Text style={ui.subtitle}>권한: {permission}</Text><Button secondary title="알림 권한 요청" onPress={() => void run(async () => { await Notifications.requestPermissionsAsync(); })} disabled={busy} /></View>
           <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI</Text><Text style={ui.subtitle}>{availabilityLabels[nativeBridge?.localAIAvailability() ?? 'missing_native'] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>분석 동의: {localAIConsent ? '켜짐' : '꺼짐'}{'\n'}외부 유료 API를 사용하지 않아요. 원문 근거는 동의한 경우에만 저장하며, 7일 지난 내용은 다음 앱 실행·확인 때 삭제해요. 현재 한국어 정확도 검증 전이에요.</Text>{!localAIConsent && <Button title="기기 내 AI 분석 켜기" disabled={busy} onPress={() => Alert.alert('기기 내 AI 분석을 켤까요?', '직접 선택하거나 단축어로 전달한 이미지에서만 글자를 분석해요. 외부 AI 서버로 보내지 않아요. 제안 검토를 위한 원문 근거를 저장하며, 7일이 지나면 다음 앱 실행·확인 때 정리해요. 저장 전 내용을 직접 확인해 주세요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 켜기', onPress: () => void run(() => repo.setPreference('ai_local_consent', 'yes')) }])} />}<Button title="AI 중지 및 원문 근거 삭제" secondary disabled={busy || !localAIConsent} onPress={() => void run(() => repo.revokeLocalAIConsent())} /></View>

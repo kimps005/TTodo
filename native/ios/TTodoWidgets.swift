@@ -7,6 +7,7 @@ struct TodoEntry: TimelineEntry {
   var tasks: [LockTask]
   var count: Int
   var hidden: Bool
+  var contentHidden = false
   var unavailable = false
 }
 struct TodoProvider: TimelineProvider {
@@ -16,7 +17,7 @@ struct TodoProvider: TimelineProvider {
     completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(900))))
   }
   private func entry() -> TodoEntry {
-    do { let value = try SharedStore().snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles) }
+    do { let value = try SharedStore().snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles, contentHidden: value.hideContent) }
     catch { return .init(date: Date(), tasks: [], count: 0, hidden: true, unavailable: true) }
   }
 }
@@ -24,7 +25,7 @@ struct TodoWidget: Widget {
   var body: some WidgetConfiguration {
     StaticConfiguration(kind: "TTodoLock", provider: TodoProvider()) { entry in
       VStack(alignment: .leading, spacing: 4) {
-        Label(entry.unavailable ? "앱에서 확인" : "할 일 \(entry.count)개", systemImage: "checklist").font(.headline)
+        Label(entry.unavailable ? "앱에서 확인" : entry.contentHidden ? "내용 숨김" : "할 일 \(entry.count)개", systemImage: "checklist").font(.headline)
         if entry.hidden { Text("TTodo에서 확인하세요").font(.caption) }
         else { ForEach(entry.tasks.prefix(2), id: \.id) { task in Text(task.title).font(.caption).lineLimit(1).privacySensitive() } }
       }.containerBackground(.fill.tertiary, for: .widget).widgetURL(URL(string: "ttodo://today"))
@@ -36,7 +37,7 @@ struct TodoLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: TodoActivityAttributes.self) { context in
       VStack(alignment: .leading, spacing: 8) {
-        Label("남은 할 일 \(context.state.count)개", systemImage: "checklist").font(.headline)
+        Label(context.state.hideContent == true ? "내용 숨김" : "남은 할 일 \(context.state.count)개", systemImage: "checklist").font(.headline)
         if context.state.hideTitles { Text("앱에서 할 일을 확인하세요").font(.subheadline) }
         else { ForEach(context.state.tasks.prefix(5), id: \.id) { task in Text("○  \(task.title)").lineLimit(1).privacySensitive() } }
         if context.isStale { Text("최신 목록은 앱에서 확인하세요").font(.caption) }
@@ -45,10 +46,10 @@ struct TodoLiveActivity: Widget {
     } dynamicIsland: { context in
       DynamicIsland {
         DynamicIslandExpandedRegion(.leading) { Image(systemName: "checklist") }
-        DynamicIslandExpandedRegion(.trailing) { Text("\(context.state.count)개") }
+        DynamicIslandExpandedRegion(.trailing) { Text(context.state.hideContent == true ? "내용 숨김" : "\(context.state.count)개") }
         DynamicIslandExpandedRegion(.bottom) { Text("TTodo · 오늘의 할 일") }
       } compactLeading: { Image(systemName: "checklist") }
-        compactTrailing: { Text("\(context.state.count)") }
+        compactTrailing: { Text(context.state.hideContent == true ? "·" : "\(context.state.count)") }
         minimal: { Image(systemName: "checklist") }
     }
   }

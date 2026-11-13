@@ -5,13 +5,14 @@ struct TodoActivityAttributes: ActivityAttributes {
     var tasks: [LockTask]
     var count: Int
     var hideTitles: Bool
+    var hideContent: Bool? = nil
   }
   let name: String
 }
 enum TodoActivityManager {
   static func state() throws -> TodoActivityAttributes.ContentState {
     let snapshot = try SharedStore().snapshot()
-    return .init(tasks: snapshot.tasks, count: snapshot.count, hideTitles: snapshot.hideTitles)
+    return .init(tasks: snapshot.tasks, count: snapshot.count, hideTitles: snapshot.hideTitles, hideContent: snapshot.hideContent)
   }
   static func refresh() async throws {
     let content = ActivityContent(state: try state(), staleDate: Date().addingTimeInterval(3600))
