@@ -11,6 +11,25 @@ enum CaptureError: LocalizedError {
   }
 }
 struct CaptureRegistration { let id: String; let created: Bool }
+struct CaptureReviewItem: Identifiable {
+  let id: String
+  var title: String
+  var description: String?
+  let dueAt: String?
+  let duePrecision: String
+  let evidence: String
+  let needsConfirmation: Bool
+  var selected = true
+  var dateText: String
+  var dateEdited = false
+}
+struct CaptureTaskEdit {
+  let id: String
+  let title: String
+  let description: String?
+  let dueAt: String?
+  let duePrecision: String
+}
 extension SharedStore {
   func transaction<T>(_ action: () throws -> T) throws -> T {
     try execSQL("BEGIN IMMEDIATE")
@@ -57,6 +76,7 @@ extension SharedStore {
     try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       if analysis["status"] as? String == "saved" { return false }
+      guard try querySQL("SELECT value FROM preferences WHERE key='private_lock'", params: []).first?["value"] as? String == "no" else { throw CaptureError.reviewRequired }
       guard analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
       let tasks = try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=?", params: [id])
@@ -80,6 +100,40 @@ extension SharedStore {
     try transaction {
       try runSQL("UPDATE extracted_tasks SET review_status='ignored',title='무시한 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0 WHERE analysis_id=? AND review_status='pending'", params: [id])
       try runSQL("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=? AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE id=?", params: [id, id])
+    }
+  }
+  func captureReviewItems(id: String) throws -> [CaptureReviewItem] {
+    try querySQL("SELECT * FROM extracted_tasks WHERE analysis_id=? AND review_status='pending' ORDER BY rowid", params: [id]).map { row in
+      guard let taskId = row["id"] as? String, let title = row["title"] as? String,
+        let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
+      return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0, dateText: precision == "date" ? row["due_at"] as? String ?? "" : "")
+    }
+  }
+  func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], now: Date = Date()) throws -> Int {
+    try transaction {
+      guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
+      if analysis["status"] as? String == "saved" { return 0 }
+      guard analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
+        let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
+      let time = ISO8601DateFormatter().string(from: now)
+      var count = 0
+      for edit in edits {
+        let title = edit.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.unicodeScalars.count <= 200,
+          ExtractionValidator.validDue(edit.dueAt, precision: edit.duePrecision),
+          let task = try querySQL("SELECT review_status FROM extracted_tasks WHERE id=? AND analysis_id=?", params: [edit.id, id]).first else { throw CaptureError.reviewRequired }
+        if task["review_status"] as? String != "pending" { continue }
+        let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [edit.id]).first?["id"] as? String
+        let todoId = existing ?? UUID().uuidString.lowercased()
+        if existing == nil {
+          try runSQL("INSERT INTO todos(id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [todoId, title, edit.description, edit.dueAt, edit.duePrecision, time, time, analysis["source_channel"] as? String == "share" ? "share" : "screenshot", edit.id, String(now.timeIntervalSince1970 * 1000)])
+          count += 1
+        }
+        try runSQL("UPDATE extracted_tasks SET review_status='saved',linked_todo_id=?,title=?,description=?,due_at=?,due_precision=? WHERE id=?", params: [todoId, title, edit.description, edit.dueAt, edit.duePrecision, edit.id])
+      }
+      let pending = try querySQL("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).first?["count"] as? Int64 ?? 0
+      try runSQL("UPDATE analyses SET status=? WHERE id=?", params: [pending > 0 ? "review" : "saved", id])
+      return count
     }
   }
 }

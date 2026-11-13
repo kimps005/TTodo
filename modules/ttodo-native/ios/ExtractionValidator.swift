@@ -44,17 +44,18 @@ enum ExtractionValidator {
     return formatter.string(from: date) == value
   }
   static func timestamp(_ value: String) -> Date? {
+    let normalized = value.replacingOccurrences(of: "T([0-2]\\d:[0-5]\\d)(Z|[+-])", with: "T$1:00$2", options: .regularExpression)
     let formatter = ISO8601DateFormatter()
-    if let date = formatter.date(from: value) { return date }
+    if let date = formatter.date(from: normalized) { return date }
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.date(from: value)
+    return formatter.date(from: normalized)
   }
   static func validDue(_ due: String?, precision: String) -> Bool {
     guard let due else { return precision == "unknown" }
     if precision == "date" { return validDate(due) }
     guard precision == "datetime", validDate(String(due.prefix(10))),
       matches(due, "^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d{1,3})?)?(?:Z|[+-](?:0\\d|1[0-4]):[0-5]\\d)$") else { return false }
-    return true
+    return timestamp(due) != nil
   }
   static func validate(_ json: String, sourceText: String, messageDate: String?) throws -> [NativeSuggestion] {
     guard !isSensitive(sourceText) else { throw ExtractionValidationError.sensitive }

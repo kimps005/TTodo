@@ -51,6 +51,7 @@ struct CaptureSmoke {
     do { _ = try store.approveSingleCapture(id: first.id); fatalError("Ambiguous task was approved without review") }
     catch CaptureError.reviewRequired { }
     try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
+    try store.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
     let quick = try store.registerCapture(fingerprint: "quick", channel: "shortcuts")
     let clear = raw.replacingOccurrences(of: #""assignee":null"#, with: #""assignee":"사용자""#).replacingOccurrences(of: #""needs_confirmation":true"#, with: #""needs_confirmation":false"#)
     try store.finishCapture(id: quick.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only")
@@ -64,6 +65,24 @@ struct CaptureSmoke {
     try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
     do { _ = try store.approveSingleCapture(id: expired.id); fatalError("Expired result was approved") }
     catch CaptureError.reviewRequired { }
+    let multi = try store.registerCapture(fingerprint: "share-multiple", channel: "share")
+    var firstTask = try ExtractionValidator.validate(clear, sourceText: text, messageDate: nil)[0]
+    firstTask.title = "첫 번째 제안"
+    var secondTask = firstTask; secondTask.title = "두 번째 제안"
+    try store.finishCapture(id: multi.id, tasks: [firstTask, secondTask], provider: "test-only")
+    let review = try store.captureReviewItems(id: multi.id)
+    let firstEdit = CaptureTaskEdit(id: review[0].id, title: "검토 후 수정", description: nil, dueAt: "2026-12-01", duePrecision: "date")
+    do {
+      _ = try store.approveReviewedCapture(id: multi.id, edits: [firstEdit, CaptureTaskEdit(id: review[1].id, title: " ", description: nil, dueAt: nil, duePrecision: "unknown")])
+      fatalError("Partial review save was committed")
+    } catch CaptureError.reviewRequired { }
+    check((try store.captureReviewItems(id: multi.id)).count == 2)
+    check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 1)
+    check(try store.approveReviewedCapture(id: multi.id, edits: [firstEdit]) == 1)
+    check(try store.approveReviewedCapture(id: multi.id, edits: [firstEdit]) == 0)
+    check((try store.querySQL("SELECT source_type FROM todos WHERE source_id=?", params: [review[0].id]))[0]["source_type"] as? String == "share")
+    try store.ignoreCapture(id: multi.id)
+    check((try store.captureReviewItems(id: multi.id)).isEmpty)
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }

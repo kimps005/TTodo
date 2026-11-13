@@ -1,6 +1,7 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => {
   const bundle = process.env.TTODO_BUNDLE_ID ?? 'com.kimps005.ttodo';
+  if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(bundle)) throw new Error('TTODO_BUNDLE_ID를 올바른 역방향 도메인 형식으로 지정해 주세요.');
   const group = `group.${bundle}`;
   return {
     ...config,
@@ -17,7 +18,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       eas: {
         ...(process.env.EXPO_PROJECT_ID ? { projectId: process.env.EXPO_PROJECT_ID } : {}),
-        build: { experimental: { ios: { appExtensions: [{ targetName: 'TTodoWidgets', bundleIdentifier: `${bundle}.widgets`, entitlements: { 'com.apple.security.application-groups': [group] } }] } } },
+        build: { experimental: { ios: { appExtensions: ['Widgets', 'Share'].map(name => ({ targetName: `TTodo${name}`, bundleIdentifier: `${bundle}.${name === 'Widgets' ? 'widgets' : 'share'}`, entitlements: { 'com.apple.security.application-groups': [group] } })) } } },
       },
     },
   };

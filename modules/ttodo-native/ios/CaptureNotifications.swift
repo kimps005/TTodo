@@ -56,6 +56,6 @@ enum CaptureNotifications {
     content.title = "분석함에서 내용을 확인해 주세요"
     content.body = "알림에서 바로 처리하지 못했어요. 저장 상태를 확인한 뒤 다시 시도해 주세요."
     content.categoryIdentifier = category; content.userInfo = ["analysis_id": id]
-    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "ttodo.capture.\(id)", content: content, trigger: nil))
+    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "ttodo.capture.\(id)", content: content, trigger: nil), withCompletionHandler: nil)
   }
 }

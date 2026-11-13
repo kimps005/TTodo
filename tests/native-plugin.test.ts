@@ -22,6 +22,13 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     const first = project.writeSync(); await apply(); assert.equal(project.writeSync(), first);
     const targets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoWidgets"') as any[];
     assert.equal(targets.length, 1);
+    const shareTargets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoShare"') as any[];
+    assert.equal(shareTargets.length, 1);
+    assert.ok(first.includes('TTodoShare/ShareViewController.swift'));
+    const sharePlist = readFileSync(path.join(ios, 'TTodoShare/TTodoShare-Info.plist'), 'utf8');
+    assert.ok(sharePlist.includes('com.apple.share-services'));
+    assert.ok(sharePlist.includes('NSExtensionActivationSupportsImageWithMaxCount'));
+    assert.ok(sharePlist.includes('$(CURRENT_PROJECT_VERSION)'));
     const phases = targets[0].buildPhases.filter((phase: any) => phase.comment === 'Sources');
     assert.equal(phases.length, 1);
     assert.equal(project.hash.project.objects.PBXSourcesBuildPhase[phases[0].value].files.length, 4);

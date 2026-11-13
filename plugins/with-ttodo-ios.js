@@ -51,7 +51,7 @@ function withTTodo(config) {
     fs.mkdirSync(widgetDir, { recursive: true });
     for (const name of [...common, 'TTodoConfiguration.swift']) copy(name, coreDir, widgetDir);
     copy('TTodoWidgets.swift', path.join(root, 'native/ios'), widgetDir);
-    fs.writeFileSync(path.join(widgetDir, `${targetName}-Info.plist`), plist('<key>CFBundleDisplayName</key><string>TTodo</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>1.0.0</string><key>CFBundleVersion</key><string>1</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>'));
+    fs.writeFileSync(path.join(widgetDir, `${targetName}-Info.plist`), plist('<key>CFBundleDisplayName</key><string>TTodo</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>'));
     fs.writeFileSync(path.join(widgetDir, `${targetName}.entitlements`), plist(`<key>com.apple.security.application-groups</key><array><string>${appGroup}</string></array>`));
     const nativeTargets = project.pbxNativeTargetSection();
     let targetId = Object.keys(nativeTargets).find(key => nativeTargets[key]?.name?.replaceAll('"', '') === targetName);
@@ -73,7 +73,35 @@ function withTTodo(config) {
         IPHONEOS_DEPLOYMENT_TARGET: '18.0', SWIFT_VERSION: '5.9', TARGETED_DEVICE_FAMILY: '1',
         CODE_SIGN_ENTITLEMENTS: `${targetName}/${targetName}.entitlements`, CODE_SIGN_STYLE: 'Automatic',
         APPLICATION_EXTENSION_API_ONLY: 'YES', GENERATE_INFOPLIST_FILE: 'NO',
-        CURRENT_PROJECT_VERSION: '1', MARKETING_VERSION: '1.0.0', OTHER_LDFLAGS: ['"$(inherited)"', '"-lsqlite3"'],
+        CURRENT_PROJECT_VERSION: c.ios.buildNumber ?? '1', MARKETING_VERSION: c.version ?? '1.0.0', OTHER_LDFLAGS: ['"$(inherited)"', '"-lsqlite3"'],
+      });
+    }
+    const shareName = 'TTodoShare';
+    const shareDir = path.join(ios, shareName);
+    const shareSources = [...common, ...captureSources.filter(name => name !== 'CaptureNotifications.swift'), 'TTodoConfiguration.swift'];
+    fs.mkdirSync(shareDir, { recursive: true });
+    for (const name of shareSources) copy(name, coreDir, shareDir);
+    copy('ShareViewController.swift', path.join(root, 'native/ios'), shareDir);
+    fs.writeFileSync(path.join(shareDir, `${shareName}-Info.plist`), plist('<key>CFBundleDisplayName</key><string>TTodo로 할 일 찾기</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.share-services</string><key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).ShareViewController</string><key>NSExtensionAttributes</key><dict><key>NSExtensionActivationRule</key><dict><key>NSExtensionActivationSupportsImageWithMaxCount</key><integer>1</integer></dict></dict></dict>'));
+    fs.writeFileSync(path.join(shareDir, `${shareName}.entitlements`), plist(`<key>com.apple.security.application-groups</key><array><string>${appGroup}</string></array>`));
+    let shareId = Object.keys(nativeTargets).find(key => nativeTargets[key]?.name?.replaceAll('"', '') === shareName);
+    if (!shareId) {
+      shareId = project.addTarget(shareName, 'app_extension', shareName, `${bundle}.share`).uuid;
+      project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', shareId);
+      project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', shareId);
+      project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', shareId);
+      const group = project.addPbxGroup([], shareName, '.');
+      project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
+      for (const name of [...shareSources, 'ShareViewController.swift']) project.addSourceFile(`${shareName}/${name}`, { target: shareId }, group.uuid);
+    }
+    const shareList = project.pbxXCConfigurationList()[nativeTargets[shareId].buildConfigurationList];
+    for (const ref of shareList.buildConfigurations) {
+      Object.assign(project.pbxXCBuildConfigurationSection()[ref.value].buildSettings, {
+        IPHONEOS_DEPLOYMENT_TARGET: '18.0', SWIFT_VERSION: '5.9', TARGETED_DEVICE_FAMILY: '1',
+        CODE_SIGN_ENTITLEMENTS: `${shareName}/${shareName}.entitlements`, CODE_SIGN_STYLE: 'Automatic',
+        APPLICATION_EXTENSION_API_ONLY: 'YES', GENERATE_INFOPLIST_FILE: 'NO',
+        CURRENT_PROJECT_VERSION: c.ios.buildNumber ?? '1', MARKETING_VERSION: c.version ?? '1.0.0',
+        OTHER_LDFLAGS: ['"$(inherited)"', '"-lsqlite3"', '"-weak_framework"', '"FoundationModels"'],
       });
     }
     return c;

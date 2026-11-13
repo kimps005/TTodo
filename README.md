@@ -6,7 +6,7 @@
 ## 현재 상태
 
 수동 할 일 CRUD, 로컬 SQLite, 제안 승인 트랜잭션, 기본 화면과 개인정보 제어를 구현했습니다.
-iOS 공유 저장소, App Intent, Vision OCR, 위젯 및 Live Activity 코드를 추가했습니다.
+iOS 공유 저장소, App Intent, Vision OCR, 위젯, Live Activity와 Share Extension 코드를 추가했습니다.
 **출시 가능한 완성 앱이 아닙니다.** 무료 우선 정책에 따라 Apple 기기 내 AI 후보를 연결했으며 실제 생성·정확도, 공유 입력, 캡처 자동화와 실기기 잠금 테스트가 남아 있습니다. 외부 AI 서버는 사용하지 않습니다.
 기본 이미지 자산은 Expo 템플릿이며 출시 전 교체합니다.
 
@@ -32,7 +32,7 @@ EAS를 이용한 기기 배포 또는 향후 TestFlight/App Store 배포를 준�
 
 1. 해당 배포 경로에 필요한 Apple Developer Program과 Expo 계정을 준비합니다.
 2. `.env.example`을 참고해 사용할 Bundle ID와 EAS 프로젝트 ID를 확정합니다. 기본 `com.kimps005.ttodo`는 개발 식별자 후보입니다.
-3. EAS에 프로젝트를 연결하고 App Group `group.<Bundle ID>`와 위젯 `<Bundle ID>.widgets`를 같은 Apple Team에 등록합니다.
+3. EAS에 프로젝트를 연결하고 App Group `group.<Bundle ID>`, 위젯 `<Bundle ID>.widgets`와 공유 확장 `<Bundle ID>.share`를 같은 Apple Team에 등록합니다.
 4. `npx eas-cli build --platform ios --profile development`로 실제 기기용 서명 빌드를 만듭니다.
 5. 설치 후 [실기기 검증표](docs/DEVICE-QA.md)를 수행합니다.
 
