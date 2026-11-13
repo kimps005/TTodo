@@ -36,8 +36,6 @@ export class Repository {
         await tx.execAsync(schema.migration_from_1_after);
       } else if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
     });
-    // A terminated OCR process cannot resume from an in-memory image. Keep a visible retry path.
-    await this.db.runAsync("UPDATE analyses SET status='failed', error_code='INTERRUPTED' WHERE status IN ('queued','processing')");
     await this.pruneEvidence();
   }
   listTodos() { return this.db.getAllAsync<Todo>('SELECT * FROM todos'); }
@@ -83,7 +81,8 @@ export class Repository {
     return this.db.runAsync("UPDATE analyses SET status='failed',error_code=? WHERE id=? AND status IN ('processing','queued')", code, id);
   }
   retryFailedAnalysis(id: string) {
-    return this.db.runAsync("UPDATE analyses SET status='processing',error_code=NULL,expires_at=? WHERE id=? AND status='failed'", new Date(Date.parse(this.now()) + 7 * 86400000).toISOString(), id);
+    const time = this.now();
+    return this.db.runAsync("UPDATE analyses SET status='processing',error_code=NULL,received_at=?,expires_at=? WHERE id=? AND status='failed'", time, new Date(Date.parse(time) + 7 * 86400000).toISOString(), id);
   }
   async finishAnalysis(id: string, tasks: Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>[], model: string) {
     await this.db.withExclusiveTransactionAsync(async tx => {
@@ -132,6 +131,9 @@ export class Repository {
   async pruneEvidence() {
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
+      // Opening the app must not cancel a live App Intent process using the same DB.
+      // Only recover abandoned work after a grace period; never recreate its image implicitly.
+      await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED' WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());
       await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
       await tx.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
       await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review' AND expires_at<=?", time);

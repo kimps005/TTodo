@@ -1,8 +1,5 @@
 import ExpoModulesCore
 import Foundation
-import Vision
-import ImageIO
-import CryptoKit
 import WidgetKit
 
 public class TTodoNativeModule: Module {
@@ -38,24 +35,7 @@ public class TTodoNativeModule: Module {
       let info = try url.resourceValues(forKeys: [.fileSizeKey])
       guard let bytes = info.fileSize, bytes > 0, bytes <= 20 * 1024 * 1024 else { throw OCRFailure.tooLarge }
       let data = try Data(contentsOf: url, options: .mappedIfSafe)
-      guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-        let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-          kCGImageSourceCreateThumbnailFromImageAlways: true,
-          kCGImageSourceCreateThumbnailWithTransform: true,
-          kCGImageSourceThumbnailMaxPixelSize: 2400
-        ] as CFDictionary) else { throw OCRFailure.invalidImage }
-      let request = VNRecognizeTextRequest()
-      request.recognitionLevel = .accurate
-      request.recognitionLanguages = ["ko-KR", "en-US"]
-      request.usesLanguageCorrection = true
-      try VNImageRequestHandler(cgImage: image).perform([request])
-      let observations = (request.results ?? []).sorted { a, b in
-        let dy = a.boundingBox.midY - b.boundingBox.midY
-        return abs(dy) > 0.015 ? dy > 0 : a.boundingBox.minX < b.boundingBox.minX
-      }
-      let text = observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
-      let fingerprint = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-      return ["text": text, "fingerprint": fingerprint]
+      return ["text": try VisionOCR.recognize(data), "fingerprint": VisionOCR.fingerprint(data)]
     }
     Function("reloadWidgets") {
       WidgetCenter.shared.reloadAllTimelines()
@@ -64,8 +44,4 @@ public class TTodoNativeModule: Module {
     AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.start() }
     AsyncFunction("endActivities") { () async in await TodoActivityManager.end() }
   }
-}
-enum OCRFailure: LocalizedError {
-  case invalidImage, tooLarge
-  var errorDescription: String? { self == .tooLarge ? "20MB 이하 이미지를 선택해 주세요." : "이미지를 읽을 수 없어요. 다른 이미지를 선택해 주세요." }
 }

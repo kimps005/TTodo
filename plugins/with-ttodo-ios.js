@@ -25,6 +25,8 @@ function withTTodo(config) {
     const main = project.getFirstTarget().uuid;
     const generated = 'TTodoGenerated';
     const common = ['SharedStore.swift', 'TodoActivity.swift'];
+    const captureSources = ['VisionOCR.swift', 'ExtractionValidator.swift', 'OnDeviceExtraction.swift', 'CaptureStore.swift', 'CaptureProcessor.swift', 'CaptureNotifications.swift'];
+    const intentSources = ['AddTodoIntent.swift', 'AnalyzeCaptureIntent.swift'];
     const copy = (name, source, targetDir) => {
       fs.mkdirSync(targetDir, { recursive: true });
       fs.copyFileSync(path.join(source, name), path.join(targetDir, name));
@@ -33,16 +35,17 @@ function withTTodo(config) {
     fs.writeFileSync(path.join(coreDir, 'TTodoConfiguration.swift'), swiftConfiguration(appGroup));
     const appDir = path.join(ios, generated);
     fs.mkdirSync(appDir, { recursive: true });
-    for (const name of [...common, 'TTodoConfiguration.swift']) copy(name, coreDir, appDir);
-    copy('AddTodoIntent.swift', path.join(root, 'native/ios'), appDir);
+    for (const name of [...common, ...captureSources, 'TTodoConfiguration.swift']) copy(name, coreDir, appDir);
+    for (const name of intentSources) copy(name, path.join(root, 'native/ios'), appDir);
     let appGroupId = project.findPBXGroupKey({ name: generated });
     if (!appGroupId) {
       appGroupId = project.addPbxGroup([], generated, '.').uuid;
       project.addToPbxGroup(appGroupId, project.getFirstProject().firstProject.mainGroup);
     }
-    for (const name of [...common, 'TTodoConfiguration.swift', 'AddTodoIntent.swift']) {
+    for (const name of [...common, ...captureSources, 'TTodoConfiguration.swift', ...intentSources]) {
       project.addSourceFile(`${generated}/${name}`, { target: main }, appGroupId);
     }
+    project.addFramework('FoundationModels.framework', { target: main, weak: true });
     const targetName = 'TTodoWidgets';
     const widgetDir = path.join(ios, targetName);
     fs.mkdirSync(widgetDir, { recursive: true });

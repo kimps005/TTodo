@@ -111,6 +111,8 @@ test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 �
 test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('interrupted', 'manual', '2026-11-13T02:00:00Z');
+  await repo.initialize(); assert.equal((await repo.listAnalyses())[0].status, 'processing');
+  native.prepare('UPDATE analyses SET received_at=? WHERE id=?').run('2026-11-13T01:49:00.000Z', a.id);
   await repo.initialize(); assert.equal((await repo.listAnalyses())[0].error_code, 'INTERRUPTED');
   await repo.ignoreAnalysis(a.id); await assert.rejects(repo.approve(a.id, [])); native.close();
 });

@@ -68,7 +68,9 @@ enum OnDeviceExtraction {
        "assignee": task.assignee as Any? ?? NSNull(), "confidence": task.confidence,
        "evidence_text": task.evidenceText, "needs_confirmation": task.needsConfirmation]
     }
-    return String(decoding: try JSONSerialization.data(withJSONObject: values), as: UTF8.self)
+    let raw = String(decoding: try JSONSerialization.data(withJSONObject: values), as: UTF8.self)
+    let checked = try ExtractionValidator.validate(raw, sourceText: text, messageDate: messageDate)
+    return String(decoding: try JSONEncoder().encode(checked), as: UTF8.self)
   }
 }
 enum LocalAIError: LocalizedError {

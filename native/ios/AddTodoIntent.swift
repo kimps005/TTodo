@@ -18,5 +18,6 @@ struct AddTodoIntent: AppIntent {
 struct TTodoShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(intent: AddTodoIntent(), phrases: ["\(.applicationName)에 할 일 추가"], shortTitle: "할 일 추가", systemImageName: "plus.circle")
+    AppShortcut(intent: AnalyzeCaptureIntent(), phrases: ["\(.applicationName)로 캡처 분석"], shortTitle: "캡처 분석", systemImageName: "text.viewfinder")
   }
 }
