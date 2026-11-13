@@ -33,6 +33,8 @@ private struct CaptureShareView: View {
   @State private var preview: UIImage?
   @State private var confirmReanalysis = false
   @State private var hasSaved = false
+  @State private var similar: [SimilarCapture] = []
+  @State private var confirmSimilar = false
   private func dueLabel(_ item: CaptureReviewItem) -> String {
     guard let due = item.dueAt else { return "마감 없음" }
     if item.duePrecision == "date" {
@@ -61,7 +63,7 @@ private struct CaptureShareView: View {
   }
   private func analyze(reanalyze: Bool = false) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
-    if reanalyze { items = []; if let analysisId { CaptureNotifications.clearAnalysis(analysisId) } }
+    if reanalyze { items = []; similar = []; if let analysisId { CaptureNotifications.clearAnalysis(analysisId) } }
     operation = Task {
       defer { working = false; operation = nil }
       do {
@@ -72,6 +74,7 @@ private struct CaptureShareView: View {
         let store = try SharedStore()
         let proposals = try store.captureReviewItems(id: result.id)
         analysisId = result.id; items = proposals
+        similar = try store.similarCaptures(id: result.id)
         hasSaved = !(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='saved' LIMIT 1", params: [result.id])).isEmpty
         let status = try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [result.id]).first?["status"] as? String
         if status == "processing" || status == "queued" { message = "이 이미지는 이미 분석 중이에요. 잠시 후 앱 분석함에서 확인해 주세요." }
@@ -82,10 +85,12 @@ private struct CaptureShareView: View {
       }
     }
   }
-  private func save() {
+  private func save(confirmedSimilar: Bool = false) {
     guard !working, let analysisId else { return }
     working = true; failure = nil
     do {
+      similar = try SharedStore().similarCaptures(id: analysisId)
+      if !similar.isEmpty && !confirmedSimilar { working = false; confirmSimilar = true; return }
       let edits = try items.filter(\.selected).map { item in
         let deadline = item.dateEdited ? try ExtractionValidator.localDeadline(day: item.dateText, time: item.timeText) : NativeDeadline(dueAt: item.dueAt, precision: item.duePrecision)
         return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
@@ -109,6 +114,13 @@ private struct CaptureShareView: View {
           Text("무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
           if let failure { Text(failure).foregroundStyle(.red) }
           if working { ProgressView("처리 중") }
+          if !similar.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+              Text("비슷한 분석 기록이 있어요").font(.headline)
+              Text("최근 7일의 원문 근거와 비교한 참고 안내예요. 서로 다른 일일 수 있으니 확인해 주세요. 자동으로 합치지 않아요.").font(.caption)
+              ForEach(similar) { match in Text("\(match.saved ? "저장한 항목" : "검토 대기") · \(match.title)").font(.caption) }
+            }
+          }
           if analysisId == nil {
             Button("기기에서 분석") { analyze() }.buttonStyle(.borderedProminent).disabled(working)
             Text("먼저 TTodo 앱 설정에서 기기 내 AI 분석에 동의해 주세요. 날짜 기준일을 모르는 ‘내일’ 같은 표현은 확정하지 않아요.").font(.caption).foregroundStyle(.secondary)
@@ -131,7 +143,11 @@ private struct CaptureShareView: View {
             }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
           }
           if !items.isEmpty {
-            Button("선택한 \(items.filter(\.selected).count)개 저장", action: save).buttonStyle(.borderedProminent).disabled(working || !items.contains(where: \.selected))
+            Button("선택한 \(items.filter(\.selected).count)개 저장") { save() }.buttonStyle(.borderedProminent).disabled(working || !items.contains(where: \.selected))
+              .alert("이미 있는 할 일인지 확인했나요?", isPresented: $confirmSimilar) {
+                Button("다시 확인", role: .cancel) { }
+                Button("확인하고 저장") { save(confirmedSimilar: true) }
+              } message: { Text("최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.") }
             Button("남은 제안 모두 무시") {
               guard let analysisId else { return }
               do { try SharedStore().ignoreCapture(id: analysisId, expectedTaskIds: items.map(\.id)); items = []; message = "제안을 무시했어요. 원문 근거도 삭제했어요." }

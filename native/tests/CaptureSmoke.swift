@@ -4,6 +4,11 @@ import Foundation
 struct CaptureSmoke {
   static func check(_ condition: Bool) { precondition(condition) }
   static func main() async throws {
+    struct DuplicateCase: Decodable { let source: String; let evidence: String; let expected: Bool }
+    let duplicateData = try Data(contentsOf: URL(fileURLWithPath: "evaluation/duplicate-seed.json"))
+    for item in try JSONDecoder().decode([DuplicateCase].self, from: duplicateData) {
+      check(DuplicateEvidence.resembles(source: item.source, evidence: item.evidence) == item.expected)
+    }
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-capture-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -56,6 +61,7 @@ struct CaptureSmoke {
     }
     do { _ = try store.approveSingleCapture(id: first.id, expectedTaskId: "old-task"); fatalError("Ambiguous task was approved without review") }
     catch CaptureError.reviewRequired { }
+    try store.ignoreCapture(id: first.id)
     try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
     try store.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
     let quick = try store.registerCapture(fingerprint: "quick", channel: "shortcuts")
@@ -64,6 +70,15 @@ struct CaptureSmoke {
     let quickId = (try store.captureReviewItems(id: quick.id))[0].id
     check(try store.approveSingleCapture(id: quick.id, expectedTaskId: quickId))
     check(try !store.approveSingleCapture(id: quick.id, expectedTaskId: quickId))
+    let similar = try store.registerCapture(fingerprint: "reencoded-quick", channel: "share")
+    try store.finishCapture(id: similar.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: similar.token!)
+    check(!(try store.similarCaptures(id: similar.id)).isEmpty)
+    let similarId = (try store.captureReviewItems(id: similar.id))[0].id
+    do { _ = try store.approveSingleCapture(id: similar.id, expectedTaskId: similarId); fatalError("Similar capture bypassed review") }
+    catch CaptureError.reviewRequired { }
+    check(try store.similarCaptures(id: similar.id, now: Date.distantFuture).isEmpty)
+    check(DuplicateEvidence.resembles(source: "２０２６년 １１월 ２０일까지 발표 자료를 보내 주세요!", evidence: "2026년 11월 20일까지 발표자료를 보내주세요."))
+    check(!DuplicateEvidence.resembles(source: "2026년 11월 21일까지 발표자료를 보내주세요.", evidence: "2026년 11월 20일까지 발표자료를 보내주세요."))
     check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 1)
     try store.ignoreCapture(id: first.id)
     check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [first.id]))[0]["evidence_text"] as? String == "")

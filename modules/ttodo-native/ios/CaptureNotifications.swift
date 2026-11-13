@@ -20,7 +20,7 @@ enum CaptureNotifications {
       let snapshot = try? store.snapshot() else { return }
     let pending = tasks.filter { $0["review_status"] as? String == "pending" }
     guard !pending.isEmpty else { return }
-    let quick = !snapshot.hideTitles && tasks.count == 1 && pending[0]["needs_confirmation"] as? Int64 == 0
+    let quick = !snapshot.hideTitles && tasks.count == 1 && pending[0]["needs_confirmation"] as? Int64 == 0 && (try? store.similarCaptures(id: outcome.id))?.isEmpty == true
     let open = UNNotificationAction(identifier: openAction, title: "확인하기", options: [.foreground])
     let add = UNNotificationAction(identifier: addAction, title: "추가", options: [])
     let ignore = UNNotificationAction(identifier: ignoreAction, title: "무시", options: [.destructive])

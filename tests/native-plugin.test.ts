@@ -43,5 +43,10 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     assert.ok(generated.includes('group.com.kimps005.ttodo')); assert.ok(generated.includes('PRAGMA user_version = 3;'));
     const entitlements = await config.mods.ios.entitlements({ ...config, modResults: {}, modRequest: {} });
     assert.deepEqual(entitlements.modResults['com.apple.security.application-groups'], ['group.com.kimps005.ttodo']);
+    const shareId = Object.entries(project.pbxNativeTargetSection()).find(([, value]: any) => value.name === '"TTodoShare"')![0];
+    const shareGroup = project.findPBXGroupKey({ name: 'TTodoShare' });
+    project.removeSourceFile('TTodoShare/CaptureNotifications.swift', { target: shareId }, shareGroup);
+    await apply();
+    assert.ok(project.writeSync().includes('TTodoShare/CaptureNotifications.swift'), '과거 생성 타깃에서도 새로 필요한 소스를 복구해야 한다');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

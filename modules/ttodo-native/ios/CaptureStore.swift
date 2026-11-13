@@ -12,6 +12,35 @@ enum CaptureError: LocalizedError {
   }
 }
 struct CaptureRegistration { let id: String; let created: Bool; let token: String? }
+struct SimilarCapture: Identifiable {
+  let id: String
+  let title: String
+  let saved: Bool
+}
+enum DuplicateEvidence {
+  static func resembles(source: String, evidence: String) -> Bool {
+    func normalized(_ value: String) -> String {
+      value.precomposedStringWithCompatibilityMapping.lowercased().replacingOccurrences(of: "[^\\p{L}\\p{N}]", with: "", options: .regularExpression)
+    }
+    let current = normalized(source), previous = normalized(evidence)
+    guard previous.unicodeScalars.count >= 8, !current.isEmpty else { return false }
+    if current.contains(previous) { return true }
+    guard previous.unicodeScalars.count >= 16 else { return false }
+    func numbers(_ value: String) -> Set<String> {
+      let text = value.precomposedStringWithCompatibilityMapping
+      let regex = try! NSRegularExpression(pattern: "[0-9]+")
+      return Set(regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text).map { String(text[$0]) } })
+    }
+    guard numbers(evidence).isSubset(of: numbers(source)) else { return false }
+    func grams(_ value: String) -> Set<String> {
+      let chars = value.unicodeScalars.map { String($0) }
+      guard chars.count >= 3 else { return [] }
+      return Set((0...(chars.count - 3)).map { chars[$0...($0 + 2)].joined() })
+    }
+    let a = grams(current), b = grams(previous)
+    return b.count >= 10 && Double(a.intersection(b).count) / Double(b.count) >= 0.93
+  }
+}
 struct CaptureReviewItem: Identifiable {
   let id: String
   var title: String
@@ -33,6 +62,21 @@ struct CaptureTaskEdit {
   let duePrecision: String
 }
 extension SharedStore {
+  func similarCaptures(id: String, now: Date = Date()) throws -> [SimilarCapture] {
+    let source = try querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["evidence_text"] as? String }.joined(separator: "\n")
+    let rows = try querySQL("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", params: [id])
+    var matches: [SimilarCapture] = []
+    for row in rows {
+      guard let other = row["analysis_id"] as? String, !matches.contains(where: { $0.id == other }),
+        let title = row["title"] as? String, let evidence = row["evidence_text"] as? String,
+        let raw = row["received_at"] as? String, let received = ExtractionValidator.timestamp(raw),
+        let expiryRaw = row["expires_at"] as? String, let expiry = ExtractionValidator.timestamp(expiryRaw),
+        now.timeIntervalSince(received) >= 0, now.timeIntervalSince(received) <= 7 * 86400, expiry > now else { continue }
+      if DuplicateEvidence.resembles(source: source, evidence: evidence) { matches.append(SimilarCapture(id: other, title: title, saved: row["review_status"] as? String == "saved")) }
+      if matches.count == 3 { break }
+    }
+    return matches
+  }
   func transaction<T>(_ action: () throws -> T) throws -> T {
     try execSQL("BEGIN IMMEDIATE")
     do { let value = try action(); try execSQL("COMMIT"); return value }
@@ -94,6 +138,7 @@ extension SharedStore {
         let title = task["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
         title.unicodeScalars.count <= 200, let precision = task["due_precision"] as? String,
         ExtractionValidator.validDue(task["due_at"] as? String, precision: precision) else { throw CaptureError.reviewRequired }
+      guard try similarCaptures(id: id, now: now).isEmpty else { throw CaptureError.reviewRequired }
       let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [taskId]).first?["id"] as? String
       let todoId = existing ?? UUID().uuidString.lowercased()
       if existing == nil {

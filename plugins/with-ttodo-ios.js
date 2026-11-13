@@ -90,10 +90,14 @@ function withTTodo(config) {
       project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', shareId);
       project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', shareId);
       project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', shareId);
-      const group = project.addPbxGroup([], shareName, '.');
-      project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
-      for (const name of [...shareSources, 'ShareViewController.swift']) project.addSourceFile(`${shareName}/${name}`, { target: shareId }, group.uuid);
     }
+    let shareGroup = project.findPBXGroupKey({ name: shareName });
+    if (!shareGroup) {
+      shareGroup = project.addPbxGroup([], shareName, '.').uuid;
+      project.addToPbxGroup(shareGroup, project.getFirstProject().firstProject.mainGroup);
+    }
+    // Also repair an existing generated target after a plugin source list changes.
+    for (const name of [...shareSources, 'ShareViewController.swift']) project.addSourceFile(`${shareName}/${name}`, { target: shareId }, shareGroup);
     const shareList = project.pbxXCConfigurationList()[nativeTargets[shareId].buildConfigurationList];
     for (const ref of shareList.buildConfigurations) {
       Object.assign(project.pbxXCBuildConfigurationSection()[ref.value].buildSettings, {

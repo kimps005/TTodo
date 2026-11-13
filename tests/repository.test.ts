@@ -278,6 +278,28 @@ test('재분석과 승인이 동시에 와도 한쪽만 실행하고 저장한 �
   }
 });
 
+test('최근 원문이 남은 다른 분석만 비슷한 기록으로 안내하고 삭제·만료 기록은 제외한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const old = await repo.createAnalysis('similar-old', 'manual', null);
+  await repo.finishAnalysis(old.id, [task], 'test', old.token!);
+  const next = await repo.createAnalysis('similar-reencoded', 'share', null);
+  await repo.finishAnalysis(next.id, [task], 'test', next.token!);
+  const matches = await repo.findSimilarAnalyses(next.id, task.evidence_text);
+  assert.equal(matches.length, 1); assert.equal(matches[0].analysis_id, old.id);
+  assert.equal(matches[0].saved, false);
+  const oldTask = (await repo.listExtracted(old.id))[0];
+  await repo.approve(old.id, [{ id: oldTask.id, input: { title: oldTask.title } }]);
+  assert.equal((await repo.findSimilarAnalyses(next.id, task.evidence_text))[0].saved, true);
+  native.prepare("UPDATE analyses SET expires_at='2000-01-01T00:00:00Z' WHERE id=?").run(old.id);
+  assert.deepEqual(await repo.findSimilarAnalyses(next.id, task.evidence_text), []);
+  native.prepare("UPDATE analyses SET expires_at='2026-11-20T00:00:00Z' WHERE id=?").run(old.id);
+  await repo.removeTodo((await repo.listTodos())[0].id);
+  assert.deepEqual(await repo.findSimilarAnalyses(next.id, task.evidence_text), []);
+  assert.equal((await repo.listExtracted(next.id)).length, 1);
+  native.close();
+});
+
 test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 설정까지 제거한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.addTodo({ title: '개인 정보' }); await repo.setPreference('ai_consent', 'yes');

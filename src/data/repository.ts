@@ -1,5 +1,6 @@
 import schema from './schema.json';
 import { normalizeTitle, validateDue, type Todo, type TodoInput, type SourceType } from '../domain/todo';
+import { resemblesEvidence, type SimilarCapture } from '../domain/duplicate';
 
 export type SqlValue = string | number | null;
 export interface SqlConnection {
@@ -76,6 +77,17 @@ export class Repository {
   }
   listAnalyses() { return this.db.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY received_at DESC'); }
   listExtracted(id: string) { return this.db.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id); }
+  async findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
+    const rows = await this.db.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", id);
+    const now = Date.parse(this.now()), matches: SimilarCapture[] = [];
+    for (const row of rows) {
+      const age = now - Date.parse(row.received_at);
+      if (!(age >= 0 && age <= 7 * 86400000 && Date.parse(row.expires_at) > now) || matches.some(m => m.analysis_id === row.analysis_id)) continue;
+      if (resemblesEvidence(source, row.evidence_text)) matches.push({ analysis_id: row.analysis_id, title: row.title, received_at: row.received_at, saved: row.review_status === 'saved' });
+      if (matches.length === 3) break;
+    }
+    return matches;
+  }
   async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean; token: string | null }> {
     const id = this.uuid();
     const token = this.uuid();
