@@ -37,7 +37,7 @@ function withTTodo(config) {
     copy('AddTodoIntent.swift', path.join(root, 'native/ios'), appDir);
     let appGroupId = project.findPBXGroupKey({ name: generated });
     if (!appGroupId) {
-      appGroupId = project.addPbxGroup([], generated).uuid;
+      appGroupId = project.addPbxGroup([], generated, '.').uuid;
       project.addToPbxGroup(appGroupId, project.getFirstProject().firstProject.mainGroup);
     }
     for (const name of [...common, 'TTodoConfiguration.swift', 'AddTodoIntent.swift']) {
@@ -59,7 +59,7 @@ function withTTodo(config) {
       project.addBuildPhase([], 'PBXSourcesBuildPhase', 'Sources', targetId);
       project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', targetId);
       project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', targetId);
-      const group = project.addPbxGroup([], targetName);
+      const group = project.addPbxGroup([], targetName, '.');
       project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
       for (const name of [...common, 'TTodoConfiguration.swift', 'TTodoWidgets.swift']) project.addSourceFile(`${targetName}/${name}`, { target: targetId }, group.uuid);
     }

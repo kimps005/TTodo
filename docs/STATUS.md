@@ -6,7 +6,7 @@
 - Apple Developer Team, 최종 Bundle ID / App Group, EAS 프로젝트 연결과 서명 필요.
 - Windows에 Xcode/Swift가 없어 iOS 네이티브 빌드와 실기기 검증은 별도 macOS 빌드 및 iPhone이 필요.
 - 인증 없는 잠금화면 텍스트 입력·저장과 앱 강제 종료 조건은 실제 iPhone 검증 전까지 미완료.
-- PRD의 iOS 27 스크린샷 자동화 근거 URL은 확인 시 HTTP 429. 지원 버전·입력 이미지 전달은 미확정이며 자동 지원으로 홍보하지 않음.
+- Apple 공식 검색 결과에서 iOS 27 스크린샷 저장 자동화 트리거 존재 확인. 실제 이미지 전달과 잠금 실행은 미검증이며 자동 지원으로 홍보하지 않음.
 - AI 제공자·서버·개인정보 처리방침·지원 이메일·앱 아이콘·스토어 자료 확정 필요.
 
 ## 원칙
@@ -24,3 +24,5 @@
 - Expo autolinking에서 `TTodoNativeModule` 인식 확인. Xcode 프로젝트 타깃·소스 연결과 재적용 중복 방지 테스트 추가: 전체 10개 테스트 통과.
 - Windows에서는 Expo iOS prebuild가 지원되지 않음. GitHub macOS CI에서 iOS 생성·Pods·앱과 확장 컴파일을 검증하도록 구성. 아직 결과 확인 전.
 - Windows Hermes 실행 오류의 원인: 운영체제 애플리케이션 제어 정책이 `hermesc.exe`를 차단. 보안 정책을 변경하지 않고, 로컬 JS 번들 검사와 CI의 실제 Hermes 빌드를 구분한다.
+- 로컬 iOS JavaScript 번들 검사 통과. 첫 GitHub CI core 작업에서 타입·테스트·보안·실제 Hermes 바이트코드 모두 통과.
+- 첫 macOS CI에서 iOS 생성과 Pods 성공 후 위젯 소스 경로 오류 발견: Xcode 라이브러리가 생략된 그룹 경로를 `undefined`로 직렬화. 경로를 명시하고 회귀 검사 추가, 재빌드 예정.
