@@ -156,3 +156,8 @@
 ## Dynamic Island 목록 연결
 - 잠금화면 Live Activity와 별도로 Dynamic Island 구성에도 ttodo://today 기본 링크를 연결했다. [Apple 공식 DynamicIsland.widgetURL 문서](https://developer.apple.com/documentation/widgetkit/dynamicisland/widgeturl(_:))에서 각 표시 상태의 기본 앱 연결 API를 확인했다.
 - 기존 앱의 링크 경로 제한·작성/검토 중 이동 지연 정책을 그대로 사용한다. Swift API/위젯 컴파일은 새 macOS CI, compact/minimal/expanded 탭 이동은 iPhone QA 전이다.
+
+## 알림 생성 직전 제안 집합 검증
+- 알림 카테고리를 비동기로 읽는 동안 재분석/승인/무시가 끝나 같은 분석 ID가 다시 review 상태가 되어도, 예전 제목·제안 ID로 알림을 보내지 않도록 현재 대기 제안 ID 집합과 당시 집합을 비교한다. 동의·상태·만료·제안 집합을 한 DB 읽기 트랜잭션에서 확인한다.
+- 동일 상태 허용·빈 집합/만료/동의 철회 차단·재분석 진행/완료 후 예전 ID 차단·무시 후 차단 Swift 회귀 검사 추가. 로컬 타입·diff 검사 통과, Swift 실행/컴파일은 새 CI 확인 전이다.
+- OS 알림 등록과 DB 변경은 하나의 원자적 트랜잭션으로 묶을 수 없으므로 최종 확인 후 실제 전달/제거 타이밍은 실기기 QA 대상이다. 알림 액션의 기존 제안 ID 검증도 유지한다.

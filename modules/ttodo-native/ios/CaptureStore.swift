@@ -66,6 +66,16 @@ struct CaptureTaskEdit {
   let duePrecision: String
 }
 extension SharedStore {
+  func captureNotificationIsCurrent(id: String, expectedTaskIds: [String], now: Date = Date()) throws -> Bool {
+    try transaction {
+      guard !expectedTaskIds.isEmpty, try hasLocalAIConsent(),
+        let analysis = try querySQL("SELECT status,expires_at FROM analyses WHERE id=?", params: [id]).first,
+        analysis["status"] as? String == "review", let raw = analysis["expires_at"] as? String,
+        let expiry = ExtractionValidator.timestamp(raw), expiry > now else { return false }
+      let current = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["id"] as? String }
+      return current.sorted() == expectedTaskIds.sorted()
+    }
+  }
   func similarCaptures(id: String, now: Date = Date()) throws -> [SimilarCapture] {
     let source = try querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["evidence_text"] as? String }.joined(separator: "\n")
     let rows = try querySQL("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", params: [id])

@@ -175,6 +175,23 @@ struct CaptureSmoke {
       check(row["status"] as? String == "failed" && row["error_code"] as? String == "CANCELLED")
       check(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [row["id"] as? String]).isEmpty)
     }
+    let notification = try store.registerCapture(fingerprint: "notification-current", channel: "shortcuts")
+    try store.finishCapture(id: notification.id, tasks: [firstTask], provider: "test-only", token: notification.token!)
+    let notificationIds = try store.captureReviewItems(id: notification.id).map(\.id)
+    check(try store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: notificationIds))
+    check(try !store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: []))
+    check(try !store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: notificationIds, now: Date.distantFuture))
+    try store.runSQL("UPDATE preferences SET value='no' WHERE key='ai_local_consent'", params: [])
+    check(try !store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: notificationIds))
+    try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
+    let replacement = try store.registerCapture(fingerprint: "notification-current", channel: "shortcuts", reanalyzeUnstored: true)
+    check(try !store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: notificationIds))
+    try store.finishCapture(id: replacement.id, tasks: [secondTask], provider: "test-only", token: replacement.token!)
+    check(try !store.captureNotificationIsCurrent(id: notification.id, expectedTaskIds: notificationIds))
+    let currentIds = try store.captureReviewItems(id: replacement.id).map(\.id)
+    check(try store.captureNotificationIsCurrent(id: replacement.id, expectedTaskIds: currentIds))
+    try store.ignoreCapture(id: replacement.id, expectedTaskIds: currentIds)
+    check(try !store.captureNotificationIsCurrent(id: replacement.id, expectedTaskIds: currentIds))
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }

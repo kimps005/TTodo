@@ -36,8 +36,7 @@ enum CaptureNotifications {
     content.userInfo = ["analysis_id": outcome.id, "proposal_ids": pending.compactMap { $0["id"] as? String }]
     if quick { content.userInfo["proposal_id"] = pending[0]["id"] as? String }
     // Original conversation and images never appear. Task titles require explicit title visibility.
-    guard (try? store.hasLocalAIConsent()) == true,
-      (try? store.querySQL("SELECT status FROM analyses WHERE id=?", params: [outcome.id]).first?["status"] as? String) == "review" else { return }
+    guard (try? store.captureNotificationIsCurrent(id: outcome.id, expectedTaskIds: pending.compactMap { $0["id"] as? String })) == true else { return }
     // Settings may change while notification categories are being loaded.
     let latestPrivacy = try? store.snapshot()
     if latestPrivacy?.hideTitles != false {
