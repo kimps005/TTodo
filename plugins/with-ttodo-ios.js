@@ -78,7 +78,7 @@ function withTTodo(config) {
     }
     const shareName = 'TTodoShare';
     const shareDir = path.join(ios, shareName);
-    const shareSources = [...common, ...captureSources.filter(name => name !== 'CaptureNotifications.swift'), 'TTodoConfiguration.swift'];
+    const shareSources = [...common, ...captureSources, 'TTodoConfiguration.swift'];
     fs.mkdirSync(shareDir, { recursive: true });
     for (const name of shareSources) copy(name, coreDir, shareDir);
     copy('ShareViewController.swift', path.join(root, 'native/ios'), shareDir);

@@ -25,6 +25,7 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     const shareTargets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoShare"') as any[];
     assert.equal(shareTargets.length, 1);
     assert.ok(first.includes('TTodoShare/ShareViewController.swift'));
+    assert.ok(first.includes('TTodoShare/CaptureNotifications.swift'), '공유창의 재분석 알림 정리에 필요한 Swift 소스를 포함해야 한다');
     const sharePlist = readFileSync(path.join(ios, 'TTodoShare/TTodoShare-Info.plist'), 'utf8');
     assert.ok(sharePlist.includes('com.apple.share-services'));
     assert.ok(sharePlist.includes('NSExtensionActivationSupportsImageWithMaxCount'));
