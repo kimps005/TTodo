@@ -142,6 +142,34 @@ struct CaptureSmoke {
     catch DeadlineInputError.invalid { }
     do { _ = try ExtractionValidator.localDeadline(day: "2026-03-08", time: "02:30", timezone: TimeZone(identifier: "America/New_York")!); fatalError("Nonexistent local time accepted") }
     catch DeadlineInputError.invalid { }
+    let alreadyCancelledData = Data("cancel-before-registration".utf8)
+    let alreadyCancelled = Task {
+      withUnsafeCurrentTask { $0?.cancel() }
+      return try await CaptureProcessor.analyze(data: alreadyCancelledData, messageDate: nil, storeFactory: factory,
+        recognize: { _ in fatalError("Cancelled task started OCR") },
+        extract: { _, _, _, _ in fatalError("Cancelled task started the model") })
+    }
+    do { _ = try await alreadyCancelled.value; fatalError("Pre-cancelled task succeeded") }
+    catch is CancellationError { }
+    check(try store.querySQL("SELECT id FROM analyses WHERE image_fingerprint=?", params: [VisionOCR.fingerprint(alreadyCancelledData)]).isEmpty)
+    for cancelDuringOCR in [true, false] {
+      let data = Data("cancel-boundary-\(cancelDuringOCR)".utf8)
+      let cancelled = Task {
+        try await CaptureProcessor.analyze(data: data, messageDate: nil, storeFactory: factory, recognize: { _ in
+          if cancelDuringOCR { withUnsafeCurrentTask { $0?.cancel() } }
+          return text
+        }, extract: { _, _, _, _ in
+          if cancelDuringOCR { fatalError("Cancellation after OCR still started the model") }
+          withUnsafeCurrentTask { $0?.cancel() }
+          return raw
+        })
+      }
+      do { _ = try await cancelled.value; fatalError("Cancelled result succeeded") }
+      catch is CancellationError { }
+      let row = try store.querySQL("SELECT id,status,error_code FROM analyses WHERE image_fingerprint=?", params: [VisionOCR.fingerprint(data)])[0]
+      check(row["status"] as? String == "failed" && row["error_code"] as? String == "CANCELLED")
+      check(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [row["id"] as? String]).isEmpty)
+    }
     print("네이티브 캡처 동의·근거·중복·저장 전 확인·민감정보 검사 통과 (OCR/모델은 테스트 주입)")
   }
 }

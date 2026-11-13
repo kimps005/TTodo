@@ -7,6 +7,7 @@ enum CaptureProcessor {
     storeFactory: () throws -> SharedStore = { try SharedStore() },
     recognize: (Data) throws -> String = VisionOCR.recognize,
     extract: Extract) async throws -> CaptureOutcome {
+    try Task.checkCancellation()
     guard !data.isEmpty, data.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
     if let messageDate, !ExtractionValidator.validDate(messageDate) { throw ExtractionValidationError.invalid }
     let store = try storeFactory()
@@ -14,12 +15,15 @@ enum CaptureProcessor {
     if !registration.created { return CaptureOutcome(id: registration.id, count: 0, duplicate: true) }
     guard let token = registration.token else { throw CaptureError.stateChanged }
     do {
+      try Task.checkCancellation()
       let text = try recognize(data)
+      try Task.checkCancellation()
       guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
       let tasks: [NativeSuggestion]
       if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { tasks = [] }
       else {
         let json = try await extract(text, nil, TimeZone.current.identifier, messageDate)
+        try Task.checkCancellation()
         tasks = try ExtractionValidator.validate(json, sourceText: text, messageDate: messageDate)
       }
       try Task.checkCancellation()
