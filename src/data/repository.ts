@@ -86,6 +86,8 @@ export class Repository {
   }
   async finishAnalysis(id: string, tasks: Omit<ExtractedTask, 'id' | 'analysis_id' | 'review_status' | 'linked_todo_id'>[], model: string) {
     await this.db.withExclusiveTransactionAsync(async tx => {
+      const consent = await tx.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key='ai_local_consent'");
+      if (consent?.value !== 'yes') throw new Error('기기 내 AI 분석 동의가 변경되었어요. 설정을 확인해 주세요.');
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       if (!analysis || analysis.status !== 'processing') throw new Error('분석 상태가 변경되었어요. 다시 확인해 주세요.');
       for (const task of tasks) {
@@ -100,6 +102,7 @@ export class Repository {
     await this.db.withExclusiveTransactionAsync(async tx => {
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       if (!analysis || !['review', 'saved'].includes(analysis.status)) throw new Error('저장할 수 없는 분석 결과예요.');
+      if (!(Date.parse(analysis.expires_at) > Date.parse(this.now()))) throw new Error('보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요.');
       for (const edit of edits) {
         const task = await tx.getFirstAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE id=? AND analysis_id=?', edit.id, id);
         if (!task) throw new Error('분석 항목을 찾을 수 없어요.');

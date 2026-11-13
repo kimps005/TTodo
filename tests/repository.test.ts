@@ -43,6 +43,7 @@ test('수동 중복 입력은 허용하고 완료·수정·삭제를 보존한�
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:00Z');
+  await repo.setPreference('ai_local_consent', 'yes');
   const b = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:01Z');
   assert.equal(a.id, b.id); assert.equal(b.created, false);
   await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation');
@@ -58,6 +59,7 @@ test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 �
 test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안은 저장할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('private', 'manual', null);
+  await repo.setPreference('ai_local_consent', 'yes');
   await repo.finishAnalysis(a.id, [task], 'evaluation');
   await repo.ignoreAnalysis(a.id);
   assert.equal((await repo.listExtracted(a.id))[0].evidence_text, '');
@@ -71,9 +73,36 @@ test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안
   await assert.rejects(repo.approve(b.id, [{ id: (await repo.listExtracted(b.id))[0].id, input: { title: '만료됨' } }]));
   native.close();
 });
+test('분석 중 동의를 철회하면 늦게 도착한 결과와 원문을 저장하지 않는다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const analysis = await repo.createAnalysis('revoked-during-extraction', 'manual', null);
+  await repo.revokeLocalAIConsent();
+  await assert.rejects(repo.finishAnalysis(analysis.id, [task], 'late-model'), /동의/);
+  assert.deepEqual(await repo.listExtracted(analysis.id), []);
+  assert.deepEqual(await repo.listTodos(), []);
+  native.close();
+});
+
+test('검토 화면을 연 채 만료되면 정리 실행 전에도 승인을 차단한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const analysis = await repo.createAnalysis('expired-open-review', 'manual', null);
+  await repo.finishAnalysis(analysis.id, [task], 'evaluation');
+  const proposal = (await repo.listExtracted(analysis.id))[0];
+  native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('2026-11-13T01:59:59Z', analysis.id);
+  await assert.rejects(repo.approve(analysis.id, [{ id: proposal.id, input: { title: '뒤늦은 승인' } }]), /보존 기간/);
+  assert.deepEqual(await repo.listTodos(), []);
+  assert.equal((await repo.listExtracted(analysis.id))[0].review_status, 'pending');
+  await repo.pruneEvidence();
+  assert.equal((await repo.listExtracted(analysis.id))[0].evidence_text, '');
+  native.close();
+});
+
 test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되돌린다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
+  await repo.setPreference('ai_local_consent', 'yes');
   await repo.finishAnalysis(a.id, [task, task], 'evaluation');
   const tasks = await repo.listExtracted(a.id);
   await assert.rejects(repo.approve(a.id, [{ id: tasks[0].id, input: { title: '정상' } }, { id: tasks[1].id, input: { title: ' ' } }]));
@@ -83,6 +112,7 @@ test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되
 test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대기 작업은 계속 진행한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   const a = await repo.createAnalysis('concurrent', 'manual', '2026-11-13T02:00:00Z');
+  await repo.setPreference('ai_local_consent', 'yes');
   await repo.finishAnalysis(a.id, [task], 'evaluation');
   const selected = [{ id: (await repo.listExtracted(a.id))[0].id, input: { title: '동시 승인' } }];
   await Promise.all([repo.approve(a.id, selected), repo.approve(a.id, selected)]);
@@ -96,6 +126,7 @@ test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 �
   native.exec(schema.sql.replace('captured_at TEXT,', 'captured_at TEXT NOT NULL,').replace('PRAGMA user_version = 2', 'PRAGMA user_version = 1'));
   const todoId = await repo.addTodo({ title: '이전 버전 할 일' });
   const old = await repo.createAnalysis('old-image', 'manual', '2026-11-12T02:00:00Z');
+  await repo.setPreference('ai_local_consent', 'yes');
   await repo.finishAnalysis(old.id, [task], 'old-model');
   const oldTask = (await repo.listExtracted(old.id))[0];
   await repo.approve(old.id, [{ id: oldTask.id, input: { title: task.title } }]);
