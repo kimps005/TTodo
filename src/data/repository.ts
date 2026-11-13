@@ -227,6 +227,9 @@ export class Repository {
   }
   async deleteAll() {
     await this.db.withExclusiveTransactionAsync(async tx => { await tx.execAsync('DELETE FROM extracted_tasks; DELETE FROM analyses; DELETE FROM todos; DELETE FROM preferences;'); });
-    await this.db.execAsync('VACUUM;');
+    // Rows are already committed with secure_delete enabled. Space reclamation
+    // can be blocked by another process; it must not prevent OS/cache cleanup.
+    try { await this.db.execAsync('VACUUM;'); return { compacted: true }; }
+    catch { return { compacted: false }; }
   }
 }

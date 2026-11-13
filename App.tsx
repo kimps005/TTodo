@@ -113,6 +113,15 @@ function Application() {
     try { file.create({ overwrite: true }); file.write(await repo.exportData()); await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }); }
     finally { if (file.exists) file.delete(); }
   });
+  const deleteData = () => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => {
+    const deletion = await repo.deleteAll();
+    const cleanup = await Promise.allSettled([
+      Promise.resolve().then(() => nativeBridge?.endActivities()),
+      Promise.resolve().then(() => nativeBridge?.clearCaptureNotifications()),
+      Promise.resolve().then(clearTemporaryFiles),
+    ]);
+    if (!deletion.compacted || cleanup.some(result => result.status === 'rejected')) Alert.alert('데이터는 삭제됐어요', '일부 정리를 마치지 못했어요. 남은 알림·잠금화면을 확인하고 ‘모든 데이터 삭제’를 다시 눌러 정리를 재시도해 주세요.');
+  }) }]);
   return <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}><StatusBar style="dark" />
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
@@ -137,7 +146,7 @@ function Application() {
           <View style={ui.card}><Text style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>단축어의 ‘TTodo에서 캡처 분석’에 이미지를 직접 전달하세요. 스크린샷 자동화가 없는 환경에서는 사진 선택 단축어로 시험할 수 있어요.</Text><Text style={ui.small}>실제 스크린샷 전달·잠금 실행·AI 정확도는 미검증이에요. 최신 사진을 임의로 가져오지 않으며, 설정 화면 방문만으로 연결 완료로 처리하지 않아요.</Text></View>
           <View style={ui.card}><Text style={ui.section}>분석 결과 알림</Text><Text style={ui.subtitle}>권한: {permissionLabel}</Text><Text style={ui.small}>알림을 허용하지 않아도 분석 결과는 분석함에서 확인할 수 있어요. 알림 표시 방식은 기기 설정에서 바꿀 수 있어요.</Text>{permission && !permission.granted && permission.canAskAgain && <Button secondary title="알림 권한 요청" onPress={() => void run(async () => { await Notifications.requestPermissionsAsync(); })} disabled={busy} />}<Button secondary title="기기 설정 열기" onPress={() => void run(async () => { await Linking.openSettings(); })} disabled={busy} /></View>
           <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI</Text><Text style={ui.subtitle}>{availabilityLabels[nativeBridge?.localAIAvailability() ?? 'missing_native'] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>분석 동의: {localAIConsent ? '켜짐' : '꺼짐'}{'\n'}외부 유료 API를 사용하지 않아요. 원문 근거는 동의한 경우에만 저장하며, 7일 지난 내용은 다음 앱 실행·확인 때 삭제해요. 현재 한국어 정확도 검증 전이에요.</Text>{!localAIConsent && <Button title="기기 내 AI 분석 켜기" disabled={busy} onPress={() => Alert.alert('기기 내 AI 분석을 켤까요?', '직접 선택하거나 단축어로 전달한 이미지에서만 글자를 분석해요. 외부 AI 서버로 보내지 않아요. 제안 검토를 위한 원문 근거를 저장하며, 7일이 지나면 다음 앱 실행·확인 때 정리해요. 저장 전 내용을 직접 확인해 주세요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 켜기', onPress: () => void run(() => repo.setPreference('ai_local_consent', 'yes')) }])} />}<Button title="AI 중지 및 원문 근거 삭제" secondary disabled={busy || !localAIConsent} onPress={() => void run(async () => { await repo.revokeLocalAIConsent(); await nativeBridge?.clearCaptureNotifications(); })} /></View>
-          <View style={ui.card}><Text style={ui.section}>개인정보와 데이터</Text><Text style={ui.subtitle}>이미지나 글자를 외부 AI 서버에 보내지 않아요. 할 일과 분석 제안은 기기에 저장돼요. 원본 이미지는 보관하지 않고 임시 파일은 화면 종료 또는 다음 앱 실행 때 정리해요.</Text><Button title="내 데이터 내보내기" secondary onPress={exportData} disabled={busy} /><Button title="모든 데이터 삭제" secondary disabled={busy} onPress={() => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => { await nativeBridge?.endActivities(); await repo.deleteAll(); await nativeBridge?.clearCaptureNotifications(); clearTemporaryFiles(); }) }])} /></View>
+          <View style={ui.card}><Text style={ui.section}>개인정보와 데이터</Text><Text style={ui.subtitle}>이미지나 글자를 외부 AI 서버에 보내지 않아요. 할 일과 분석 제안은 기기에 저장돼요. 원본 이미지는 보관하지 않고 임시 파일은 화면 종료 또는 다음 앱 실행 때 정리해요.</Text><Button title="내 데이터 내보내기" secondary onPress={exportData} disabled={busy} /><Button title="모든 데이터 삭제" secondary disabled={busy} onPress={deleteData} /></View>
           <Text style={ui.small}>TTodo 1.0.0 · 개발 중{'\n'}실기기 검증 및 App Store 출시 준비 전 버전이에요.</Text>
           {__DEV__ && <Button secondary title="개발용 한국어 AI 평가" disabled={busy} onPress={() => setEvaluation(true)} />}
         </>}

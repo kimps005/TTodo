@@ -37,3 +37,37 @@ test('새 트랜잭션 연결마다 외래키를 활성화하고 디스크 데�
     await assert.rejects(reopened.initialize(), /업데이트/);
   } finally { await base.closeAsync(); rmSync(root, { recursive: true, force: true }); }
 });
+
+test('삭제 커밋 뒤 다른 연결이 공간 정리를 막아도 삭제 성공을 후속 정리에 전달한다', async () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'ttodo-delete-cleanup-'));
+  const filename = path.join(root, 'test.sqlite');
+  const base = connect(filename);
+  const execute = base.execAsync;
+  let reader: DatabaseSync | null = null, reading = false, busyObserved = false;
+  base.execAsync = async sql => {
+    if (sql === 'VACUUM;' && reader) { reader.exec('BEGIN; SELECT COUNT(*) FROM todos;'); reading = true; }
+    try { await execute(sql); }
+    catch (error) { if (sql === 'VACUUM;' && (error as { errcode?: number }).errcode === 5) busyObserved = true; throw error; }
+  };
+  try {
+    const db = createDatabase(base, async () => connect(filename));
+    const repo = new Repository(db, randomUUID); await repo.initialize();
+    await repo.addTodo({ title: '삭제 경합 합성 항목' });
+    await repo.createAnalysis('synthetic-cleanup', 'manual', null);
+    await repo.setPreference('ai_local_consent', 'yes');
+    reader = new DatabaseSync(filename);
+    await db.execAsync('PRAGMA busy_timeout=0;');
+    let rejected = false, result: unknown;
+    try { result = await repo.deleteAll(); } catch { rejected = true; }
+    assert.equal(busyObserved, true, '실제 외부 읽기 잠금으로 VACUUM이 실패해야 한다');
+    for (const table of ['todos', 'analyses', 'extracted_tasks', 'preferences']) assert.equal(reader.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get()!.count, 0);
+    assert.equal(rejected, false, '이미 커밋된 삭제를 실패로 반환하면 알림/임시 파일 정리가 실행되지 않는다');
+    assert.deepEqual(result, { compacted: false });
+  } finally {
+    if (reading) reader?.exec('ROLLBACK');
+    reader?.close(); await base.closeAsync();
+    const target = path.resolve(root);
+    assert.ok(target.startsWith(path.resolve(tmpdir()) + path.sep) && path.basename(target).startsWith('ttodo-delete-cleanup-'));
+    rmSync(target, { recursive: true, force: true });
+  }
+});

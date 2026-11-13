@@ -321,6 +321,22 @@ test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 �
   assert.equal(await repo.getPreference('ai_consent'), null); native.close();
 });
 
+test('전체 삭제 트랜잭션이 실패하면 본문·할 일·설정을 모두 보존하고 실패를 전달한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  await repo.addTodo({ title: '롤백할 합성 할 일' });
+  const a = await repo.createAnalysis('delete-rollback', 'manual', null);
+  await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+  native.exec("CREATE TRIGGER stop_delete BEFORE DELETE ON todos BEGIN SELECT RAISE(ABORT, 'delete failed'); END;");
+  await assert.rejects(repo.deleteAll(), /delete failed/);
+  assert.equal((await repo.listTodos()).length, 1); assert.equal((await repo.listAnalyses()).length, 1);
+  assert.equal((await repo.listExtracted(a.id))[0].evidence_text, task.evidence_text);
+  assert.equal(await repo.getPreference('ai_local_consent'), 'yes');
+  native.exec('DROP TRIGGER stop_delete');
+  assert.deepEqual(await repo.deleteAll(), { compacted: true });
+  assert.deepEqual(await repo.listTodos(), []); native.close();
+});
+
 test('앱 재실행 없이 만료 시점에 조회·내보내기해도 원문과 미저장 본문을 정리한다', async () => {
   for (const read of ['analyses', 'extracted', 'export'] as const) {
     let now = '2026-11-13T02:00:00.000Z';
