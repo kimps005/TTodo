@@ -5,7 +5,8 @@
 ## 최근 검증 요약
 - 제품 코드 `9cf8c9a`: [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43487965191) 전체 성공. 42개 테스트·타입·보안·Hermes, Swift 회귀/JSON 계약과 앱·위젯·공유 확장 컴파일 통과.
 - 검사 스크립트/문서 `9253c29`: [Release 실행](https://github.com/kimps005/TTodo/actions/runs/43490839958) 성공. iOS 26.5 시뮬레이터의 실제 기동·SQLite v3·무결성 ok·합성 3개 보존과 온보딩/목록 화면을 확인했다. 목록용 온보딩 완료는 합성 DB 설정이며 실제 버튼 시험이 아니다.
-- CI UI 검사 도구 `e7cb2d2`: 로컬 43개 테스트·타입·타깃 생성 검증 통과. [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43492444538)의 core는 성공, 네이티브 작업은 진행 중이다. [실제 UI 검사](https://github.com/kimps005/TTodo/actions/runs/43492453647)는 실행 중이며 아직 통과로 표시하지 않는다.
+- CI UI 검사 도구 `e7cb2d2`: [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43492444538) 전체 성공. [실제 UI 검사](https://github.com/kimps005/TTodo/actions/runs/43492453647)는 1개 실행·1개 실패. 온보딩·입력·재실행 단계를 지나 편집 후 기대 행을 찾지 못했다. 원인 진단 중이며 UI 검사 통과로 표시하지 않는다.
+- 빈 담당자 보완 `845c00d`: [품질 CI](https://github.com/kimps005/TTodo/actions/runs/43494998544) 전체 성공. 45개 테스트·타입·보안·Hermes, 새 Swift 회귀와 앱·두 확장 컴파일 통과. 이후 CI 전용 결과 집계 도구는 로컬 46개 테스트·타입 통과, 실제 SDK 출력 확인 전이다.
 - 실제 iPhone 서명·설치·잠금 입력·확장 수명·AI 생성/정확도는 미검증이다. 사용자 선택에 따라 설치 경로 변경이나 유료 서비스 연결은 진행하지 않는다.
 
 ## 출시 차단 항목

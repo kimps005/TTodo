@@ -1,0 +1,38 @@
+name: UI 검사 결과 번들 진단
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: UI 검사 workflow 실행 ID
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-tests
+          path: artifacts/source
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.run_id }}
+      - name: Extract existing XCTest results without launching the app
+        run: |
+          set -euo pipefail
+          result='artifacts/source/artifacts/ui-tests/results.xcresult'
+          test -d "$result"
+          mkdir -p artifacts/ui-test-inspection
+          xcrun xcresulttool get test-results summary --path "$result" > artifacts/ui-test-inspection/summary.json
+          xcrun xcresulttool get test-results tests --path "$result" > artifacts/ui-test-inspection/tests.json
+          xcrun xcresulttool export attachments --path "$result" --output-path artifacts/ui-test-inspection/attachments
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-inspection
+          path: artifacts/ui-test-inspection/**
+          retention-days: 7
