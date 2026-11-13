@@ -64,3 +64,5 @@
 - [9a42cdc CI](https://github.com/kimps005/TTodo/actions/runs/43435297439): 네이티브 알림 delegate/승인·무시 처리 컴파일과 Swift 실행 검사 통과.
 - [04b6a6a CI](https://github.com/kimps005/TTodo/actions/runs/43436954740): Share Extension 포함 앱·위젯 컴파일, 공유 승인 트랜잭션의 Swift 실행 검사 통과. 실제 확장 메모리/수명·이미지 입력·모델 실행은 미검증.
 - 후속 변경: 앱 상세/AI 검토/공유창에서 날짜와 시각을 각각 수정 가능. 날짜만 있는 마감에 시각을 임의로 추가하지 않고, 사용자 수정 시 기기 시간대로 변환·유효성 확인. TypeScript 테스트 22개 통과, Swift 날짜/시각 회귀 검사는 다음 CI 확인 필요.
+- [e27297d CI](https://github.com/kimps005/TTodo/actions/runs/43438669249): 날짜/시각 수정과 잘못된 현지 시각의 Swift 검사, 타입/테스트 22개/보안/Hermes 및 앱·두 확장 컴파일 통과.
+- 수동 시뮬레이터 실행 workflow 추가. Release 앱 실제 기동, 공유 DB 초기화/무결성, 합성 데이터 재실행 화면과 보존 확인을 계획. 아직 실행 결과/시각 검토 전이며 실제 기기·모델·잠금 검증과 구분.

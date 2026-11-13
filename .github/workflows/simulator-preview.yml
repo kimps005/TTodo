@@ -1,0 +1,38 @@
+name: 시뮬레이터 실행 검사
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: simulator-preview-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - run: pod install
+        working-directory: ios
+      - name: Build release app with embedded JavaScript
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build 2>&1 | tee simulator-build.log
+      - name: Launch simulator and inspect shared database
+        run: node scripts/simulator-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulator-preview
+          path: |
+            simulator-build.log
+            artifacts/simulator/**
+          retention-days: 7
