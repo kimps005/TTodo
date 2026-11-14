@@ -218,3 +218,9 @@
 - 승인 커밋 이후 조회 실패는 저장 실패로 표시하지 않고 저장 완료와 후속 확인 안내를 구분한다.
 - Apple 공식 NSExtensionHostDidBecomeActive 알림을 사용한다. 로컬 49개 테스트·타입·diff 검사 통과. 새 Swift 편집 보존/원문 삭제/교체 선택 회귀 검사와 앱·확장 컴파일은 macOS CI 확인 전이며 실제 공유창 수명은 iPhone 미검증이다.
 - 기존 품질 실행 43503689019는 core 성공/ios 배정 전 취소, 확장 UI 실행 43503692908도 배정 전 취소였다. 네이티브 통과로 기록하지 않는다.
+
+## 키보드 완료 입력의 마지막 글자 보존
+- [확장 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43504705317)은 1개 실행/1개 실패다. 완료·미완료 재실행, 날짜만 있는 마감, 삭제 취소·삭제 보존을 지난 뒤 키보드 제출 검사에서 실패했다. 전체 삭제 검증에는 도달하지 않았다.
+- 실패 시점 실제 접근성 트리는 CI reset task 대신 CI reset tas가 저장되었음을 보여준다. onSubmitEditing이 마지막 onChangeText의 React 상태 반영 전에 기존 draft를 읽는 경로를 제거하고, 제출 이벤트의 nativeEvent.text를 저장한다. 버튼 입력은 현재 draft를 사용한다.
+- 동일한 연속 입력+완료 키 재현은 유지하고 직후 스크린샷을 추가했다. 로컬 타입·diff 검사 통과. 수정 후 실제 UI 실행이 통과하기 전에는 해결 완료로 표시하지 않는다.
+- [Intel 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43504230297)는 core/ios 성공. 실제 합성 한국어 Vision OCR·Swift 저장소/캡처 실행과 앱·두 확장 arm64 교차 컴파일 통과. 이 실행에는 이후 공유창 갱신 변경과 키보드 수정은 포함하지 않는다. 실제 iPhone OCR·AI 정확도 검증은 아니다.

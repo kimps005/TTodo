@@ -92,6 +92,7 @@ final class TTodoUITests: XCTestCase {
     // reset path. Everything belongs to this fresh, synthetic-only simulator.
     let resetTitle = "CI reset task"
     input.tap(); input.typeText(resetTitle + "\n")
+    screenshot(app, name: "05-keyboard-submit")
     let resetRow = row(app, title: resetTitle)
     XCTAssertTrue(resetRow.waitForExistence(timeout: 15))
     XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", resetTitle + ", ")).count, 1)
