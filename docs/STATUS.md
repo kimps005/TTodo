@@ -3,16 +3,11 @@
 기준일: 2026-11-14 (한국 시간)
 
 ## 최근 검증 요약
-- 최신 제품 커밋 59a364b의 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43548256339): core/ios 성공. 55개 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처/JSON 계약과 합성 한국어 Vision OCR, 앱·위젯·공유 확장 arm64 빌드 통과. 실제 iPhone·AI 생성/정확도·잠금 동작의 완료를 뜻하지 않는다.
-- [59a364b 최대 글자 재검증](https://github.com/kimps005/TTodo/actions/runs/43548286612)은 실제 최대 접근성 크기에서 지정 UI 1개 통과·실패/건너뜀 0이다. 편집 화면을 직접 확인해 보조 표제 잘림이 사라진 것을 확인했다. 실제 iPhone·VoiceOver 검증은 별도다.
-- [첫 공유 UI](https://github.com/kimps005/TTodo/actions/runs/43545100252)는 CI 호스트의 빈 모달에서 실패해 제품 확장에 도달하지 않았다. 호스트 상태 수정의 [실제 SDK 컴파일](https://github.com/kimps005/TTodo/actions/runs/43547970713)은 성공. [공유 UI 재실행](https://github.com/kimps005/TTodo/actions/runs/43547968174)과 [사진 선택·OCR UI](https://github.com/kimps005/TTodo/actions/runs/43548157251)는 시스템 화면의 접근성 요소 조회 단계에서 각각 실패했다. 조회를 수정한 재검사는 진행 중이다.
-- [64e0e7b 전체 UI 검사](https://github.com/kimps005/TTodo/actions/runs/43538482846): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정 XCTest 1개 실행·1개 통과·실패/건너뜀 0. Release 앱·두 확장 컴파일과 실제 온보딩·수동 입력·편집·완료/미완료·날짜만 있는 마감·삭제 취소/삭제·키보드 전체 문자열 1개 저장·미저장 입력 중 설정 진입·전체 삭제·재실행 후 온보딩과 빈 목록을 확인했다. 결과 JSON을 최신 집계 도구로 다시 대조하고 설정/초기화 화면도 직접 시각 확인했다.
-- cfa9383 임시 정리 실패 격리: 수동 할 일 시작을 막지 않고 다른 임시 파일도 끝까지 정리한다. 당시 [JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43540173499)는 51개 테스트·타입·보안·Hermes 성공/ios skipped였다. 최신 59a364b 전체 품질 빌드에는 이 변경도 포함되며 실제 iOS 파일 접근 실패 경고는 기기 QA 전이다.
-- 최신 공유 변경 d72e350: 재분석 이미지 읽기 실패 시 유효한 편집을 유지한다. [확장 전용 SDK 검사](https://github.com/kimps005/TTodo/actions/runs/43536680852)는 b0eba70 기준 공유·위젯 두 타깃 arm64 컴파일 성공. 위 64e0e7b Release UI 빌드에도 포함된다. 실제 공유 호스트 수명/재분석은 iPhone 미검증이다.
-- 공유창 안정화 b0aa4a2의 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43534413868)는 core/ios 성공. Swift 저장소/캡처/JSON 계약·실제 합성 한국어 Vision OCR·앱·두 확장 컴파일 통과. OCR/모델 주입 회귀와 실제 Vision 실행은 구분하며 AI 생성·정확도 통과가 아니다.
-- 키보드 제출은 nativeEvent.text로 마지막 글자를 보존하고, 하단 탭도 키보드 회피 영역 안에 배치했다. 이전 실패 43504705317/43534761791은 최신 전체 UI 통과로 해결을 확인했으며 기존 실패 기록은 아래에 보존한다.
-- 사진 삭제는 앱 캐시 하위 경로로 제한한다. 실제 사진 권한·OS 캐시 수명·백그라운드 알림·위젯 갱신·접근성은 iPhone QA 전이다.
-- 실제 iPhone 서명·설치·인증 없는 잠금 입력·캡처 자동화·AI 생성/한국어 정확도는 미검증이다. 사용자가 선택한 설치 보류를 유지하며 서명 경로 변경이나 유료 서비스 연결을 진행하지 않는다.
+- [09e70b1 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43566980110): core/ios 성공. 58개 테스트·타입·보안·Hermes, Swift 저장소/캡처/합성 Vision OCR 검사와 앱·위젯·공유 확장 arm64 시뮬레이터 빌드 통과.
+- [사진 선택·한국어 OCR UI 검사](https://github.com/kimps005/TTodo/actions/runs/43566983385): iOS 26.5 / iPhone 16 Pro 시뮬레이터의 지정 UI 검사 1개 통과. 사진 선택, 합성 이미지의 Vision OCR, 인식문·날짜 편집, 취소 후 재선택 시 입력 보존, 재실행 후 미승인 할 일/분석 없음 확인. 실제 사용자 사진의 정확도 검증은 아니다.
+- [fc2aca6 core 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43567643960): 내보내기 파일 쓰기 완료를 기다리도록 수정한 뒤 58개 테스트·타입·보안·Hermes 통과. 이 실행은 iOS 작업을 생략했으며 실제 공유 파일 내용 확인은 남아 있다.
+- 공유 동의 UI([검사](https://github.com/kimps005/TTodo/actions/runs/43562339509))와 최대 Dynamic Type UI([검사](https://github.com/kimps005/TTodo/actions/runs/43562355136))도 시뮬레이터에서 지정 검사 각 1개 통과. VoiceOver 및 실기기 접근성 검증은 미완료다.
+- 실제 iPhone 설치·서명·잠금 입력/자동화, Foundation Models의 실제 생성과 한국어 정확도, 운영 개인정보·스토어 준비는 아직 검증되지 않았다. 자세한 잔여 조건은 아래 출시 차단 항목과 P0 목록을 따른다.
 
 ## 출시 차단 항목
 - 최종 Bundle ID / App Group 및 실제 기기 서명 경로 필요. EAS는 선택한 배포 방식에서 연결하며, 현재 결제나 유료 배포를 진행하지 않음.
