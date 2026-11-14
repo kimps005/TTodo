@@ -28,9 +28,9 @@
 - 홈, 할 일 편집, 분석함, 제안 검토, 설정 및 데이터 내보내기/삭제 UI 구현.
 - AI 제공자 인터페이스, 원문 근거·날짜·신뢰도·실제 할 일 여부 응답 검증, 민감 텍스트 제한 구현.
 - Apple Foundation Models 기기 내 추출 후보와 사진 선택→OCR→동의→추출→검토→승인 경로 연결. OS/기기/모델/한국어 준비 상태 확인. 외부 전송 없음. 실제 생성과 정확도는 미검증.
-- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋/실행기, 날짜 문맥 검사 등 19개 통과. `npm run typecheck`: 통과.
+- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋/실행기, 날짜 문맥 검사 등 58개 통과(최신 core CI). `npm run typecheck`: 통과.
 - Expo 전이 의존성 minimatch 취약점을 해당 의존성 범위의 override로 수정. 설치 시 보안 경고 0개.
-- UI는 아직 iPhone에서 실행·시각 검증하지 않음. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
+- 사진 선택/OCR과 앱 주요 흐름은 iPhone 16 Pro 시뮬레이터에서 일부 UI 검증 통과. 실제 iPhone 실행·시각 검증은 미완료. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
 - App Group SQLite, 잠금 이후 접근 정책(재부팅 후 최초 인증 필요), AddTodo App Intent, Vision 한국어/영어 OCR, WidgetKit 및 Live Activity 코드 구현.
 - Expo autolinking에서 `TTodoNativeModule` 인식 확인. Xcode 프로젝트 타깃·소스 연결과 재적용 중복 방지 테스트 통과.
 - Windows에서는 Expo iOS prebuild가 지원되지 않음. GitHub macOS CI에서 iOS 생성·Pods·앱과 확장 컴파일 검증.
