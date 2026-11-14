@@ -4,6 +4,21 @@ import Foundation
 struct CaptureSmoke {
   static func check(_ condition: Bool) { precondition(condition) }
   static func main() async throws {
+    func reviewItem(_ id: String, evidence: String = "합성 원문", confirmation: Bool = false) -> CaptureReviewItem {
+      CaptureReviewItem(id: id, title: "새 제안", description: nil, dueAt: nil, duePrecision: "unknown", evidence: evidence, needsConfirmation: confirmation, dateText: "", timeText: "")
+    }
+    var draft = reviewItem("same")
+    draft.title = "편집한 제목"; draft.description = "편집한 설명"; draft.selected = false
+    draft.dateText = "2026-12-01"; draft.timeText = "09:30"; draft.dateEdited = true
+    let reconciled = CaptureReviewItem.reconciled(current: [draft, reviewItem("removed")], stored: [reviewItem("same", evidence: "", confirmation: true), reviewItem("new")])
+    check(reconciled.count == 2 && reconciled[0].id == "same" && reconciled[1].id == "new")
+    check(reconciled[0].title == draft.title && reconciled[0].description == draft.description && !reconciled[0].selected)
+    check(reconciled[0].dateText == draft.dateText && reconciled[0].timeText == draft.timeText && reconciled[0].dateEdited)
+    check(reconciled[0].evidence.isEmpty && reconciled[0].needsConfirmation)
+    check(reconciled[1].title == "새 제안" && !reconciled[1].selected)
+    check(CaptureReviewItem.reconciled(current: [draft], stored: []).isEmpty)
+    var unchanged = reviewItem("same"); unchanged.dateText = "2026-11-20"
+    check(CaptureReviewItem.reconciled(current: [unchanged], stored: [reviewItem("same")])[0].dateText.isEmpty)
     struct SensitiveCase: Decodable { let text: String; let expected: Bool }
     let sensitiveData = try Data(contentsOf: URL(fileURLWithPath: "evaluation/sensitive-seed.json"))
     for item in try JSONDecoder().decode([SensitiveCase].self, from: sensitiveData) {

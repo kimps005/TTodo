@@ -35,6 +35,24 @@ private struct CaptureShareView: View {
   @State private var hasSaved = false
   @State private var similar: [SimilarCapture] = []
   @State private var confirmSimilar = false
+  @State private var reviewUnavailable = false
+  @discardableResult private func refreshReview() -> Bool {
+    guard let analysisId else { return true }
+    do {
+      let store = try SharedStore()
+      let stored = try store.captureReviewItems(id: analysisId)
+      items = CaptureReviewItem.reconciled(current: items, stored: stored)
+      similar = try store.similarCaptures(id: analysisId)
+      hasSaved = !(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='saved' LIMIT 1", params: [analysisId])).isEmpty
+      reviewUnavailable = false
+      if items.isEmpty { message = "검토할 대기 제안이 없어요. 처리되었거나 보존 기간이 지난 항목은 앱 분석함에서 확인해 주세요." }
+      return true
+    } catch {
+      reviewUnavailable = true
+      failure = "최신 제안 상태를 확인하지 못했어요. 다시 확인한 뒤 저장해 주세요."
+      return false
+    }
+  }
   private func dueLabel(_ item: CaptureReviewItem) -> String {
     guard let due = item.dueAt else { return "마감 없음" }
     if item.duePrecision == "date" {
@@ -73,7 +91,7 @@ private struct CaptureShareView: View {
         try Task.checkCancellation()
         let store = try SharedStore()
         let proposals = try store.captureReviewItems(id: result.id)
-        analysisId = result.id; items = proposals
+        analysisId = result.id; items = proposals; reviewUnavailable = false
         similar = try store.similarCaptures(id: result.id)
         hasSaved = !(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='saved' LIMIT 1", params: [result.id])).isEmpty
         let status = try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [result.id]).first?["status"] as? String
@@ -87,21 +105,27 @@ private struct CaptureShareView: View {
   }
   private func save(confirmedSimilar: Bool = false) {
     guard !working, let analysisId else { return }
+    guard refreshReview() else { return }
     working = true; failure = nil
+    let count: Int
     do {
-      similar = try SharedStore().similarCaptures(id: analysisId)
       if !similar.isEmpty && !confirmedSimilar { working = false; confirmSimilar = true; return }
+      guard items.contains(where: \.selected) else { throw CaptureError.reviewRequired }
       let edits = try items.filter(\.selected).map { item in
         let deadline = item.dateEdited ? try ExtractionValidator.localDeadline(day: item.dateText, time: item.timeText) : NativeDeadline(dueAt: item.dueAt, precision: item.duePrecision)
         return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
       }
-      let count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits)
-      hasSaved = true
-      items = try SharedStore().captureReviewItems(id: analysisId)
-      message = "\(count)개를 저장했어요. 앱과 잠금화면 목록에 갱신을 요청해요."
-      WidgetCenter.shared.reloadAllTimelines()
-      Task { try? await TodoActivityManager.refresh() }
-    } catch { failure = (error as? LocalizedError)?.errorDescription ?? "저장하지 못했어요. 다시 시도해 주세요." }
+      count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits)
+    } catch {
+      let detail = (error as? LocalizedError)?.errorDescription ?? "저장하지 못했어요. 다시 시도해 주세요."
+      _ = refreshReview(); failure = detail; working = false; return
+    }
+    // Approval has committed. A later read must not turn it into a save failure.
+    hasSaved = true; similar = []
+    if !refreshReview() { items = []; failure = "저장은 완료됐어요. 최신 제안은 앱 분석함에서 확인해 주세요." }
+    message = "\(count)개를 저장했어요. 앱과 잠금화면 목록에 갱신을 요청해요."
+    WidgetCenter.shared.reloadAllTimelines()
+    Task { try? await TodoActivityManager.refresh() }
     working = false
   }
   var body: some View {
@@ -113,6 +137,7 @@ private struct CaptureShareView: View {
           if let preview { Image(uiImage: preview).resizable().scaledToFit().frame(maxHeight: 220).accessibilityLabel("이번 분석 이미지 미리보기") }
           Text("무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
           if let failure { Text(failure).foregroundStyle(.red) }
+          if reviewUnavailable { Button("최신 상태 다시 확인") { failure = nil; _ = refreshReview() }.disabled(working) }
           if working { ProgressView("처리 중") }
           if !similar.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
@@ -127,7 +152,7 @@ private struct CaptureShareView: View {
           }
           if analysisId != nil {
             Text(hasSaved ? "저장한 기록이 있는 캡처는 재분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요." : "저장 전에는 같은 캡처를 다시 분석할 수 있어요. 기존 미저장 제안과 수정 내용은 교체돼요.").font(.caption).foregroundStyle(.secondary)
-            Button("이 사진 다시 분석") { confirmReanalysis = true }.disabled(working || hasSaved)
+            Button("이 사진 다시 분석") { confirmReanalysis = true }.disabled(working || hasSaved || reviewUnavailable)
           }
           ForEach($items) { $item in
             VStack(alignment: .leading, spacing: 12) {
@@ -140,24 +165,30 @@ private struct CaptureShareView: View {
               Text("시각을 비우면 날짜만 저장해요. 둘 다 비우면 마감을 해제해요. 시각은 현재 기기 시간대를 사용해요.").font(.caption).foregroundStyle(.secondary)
               Text("원문 근거").font(.caption.bold())
               Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled)
-            }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).disabled(working)
+            }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).disabled(working || reviewUnavailable)
           }
           if !items.isEmpty {
-            Button("선택한 \(items.filter(\.selected).count)개 저장") { save() }.buttonStyle(.borderedProminent).disabled(working || !items.contains(where: \.selected))
+            Button("선택한 \(items.filter(\.selected).count)개 저장") { save() }.buttonStyle(.borderedProminent).disabled(working || reviewUnavailable || !items.contains(where: \.selected))
               .alert("이미 있는 할 일인지 확인했나요?", isPresented: $confirmSimilar) {
                 Button("다시 확인", role: .cancel) { }
                 Button("확인하고 저장") { save(confirmedSimilar: true) }
               } message: { Text("최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.") }
             Button("남은 제안 모두 무시") {
               guard let analysisId else { return }
-              do { try SharedStore().ignoreCapture(id: analysisId, expectedTaskIds: items.map(\.id)); items = []; message = "제안을 무시했어요. 원문 근거도 삭제했어요." }
-              catch { failure = "처리하지 못했어요. 앱 분석함에서 다시 확인해 주세요." }
-            }.disabled(working)
+              let shownIds = items.map(\.id).sorted()
+              guard refreshReview() else { return }
+              guard shownIds == items.map(\.id).sorted() else { failure = "제안이 변경되었어요. 최신 항목을 확인한 뒤 다시 선택해 주세요."; return }
+              do { try SharedStore().ignoreCapture(id: analysisId, expectedTaskIds: shownIds); items = []; message = "제안을 무시했어요. 원문 근거도 삭제했어요." }
+              catch { _ = refreshReview(); failure = "처리하지 못했어요. 앱 분석함에서 다시 확인해 주세요." }
+            }.disabled(working || reviewUnavailable)
           }
         }.padding(24)
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기") { operation?.cancel(); close() } } }
         .onDisappear { operation?.cancel() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSExtensionHostDidBecomeActive)) { _ in
+          if !working && analysisId != nil { failure = nil; _ = refreshReview() }
+        }
         .alert("다시 분석할까요?", isPresented: $confirmReanalysis) {
           Button("취소", role: .cancel) { }
           Button("다시 분석", role: .destructive) { analyze(reanalyze: true) }

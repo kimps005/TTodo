@@ -57,6 +57,20 @@ struct CaptureReviewItem: Identifiable {
   var dateText: String
   var timeText: String
   var dateEdited = false
+  static func reconciled(current: [CaptureReviewItem], stored: [CaptureReviewItem]) -> [CaptureReviewItem] {
+    let drafts = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
+    return stored.map { fresh in
+      var item = fresh
+      guard let draft = drafts[item.id] else { item.selected = false; return item }
+      item.title = draft.title; item.description = draft.description; item.selected = draft.selected
+      if draft.dateEdited {
+        item.dateText = draft.dateText; item.timeText = draft.timeText; item.dateEdited = true
+      }
+      // Evidence and confirmation always come from storage. Removed/saved/expired
+      // IDs disappear; replaced proposals never inherit old edits or selection.
+      return item
+    }
+  }
 }
 struct CaptureTaskEdit {
   let id: String
