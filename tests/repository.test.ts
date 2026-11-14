@@ -131,6 +131,51 @@ test('분석 중 동의를 철회하면 늦게 도착한 결과와 원문을 저
   native.close();
 });
 
+test('동의 철회 후 다시 켜도 이전 분석 결과는 복원되지 않고 새 재시도만 저장한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const analysis = await repo.createAnalysis('consent-reenabled', 'shortcuts', null);
+  const queued = await repo.createAnalysis('consent-queued', 'share', null);
+  native.prepare("UPDATE analyses SET status='queued' WHERE id=?").run(queued.id);
+  await repo.revokeLocalAIConsent();
+  for (const id of [analysis.id, queued.id]) {
+    const row = (await repo.listAnalyses()).find(item => item.id === id)!;
+    assert.equal(row.status, 'failed'); assert.equal(row.error_code, 'CONSENT_REVOKED');
+    assert.equal(row.processing_token, null);
+  }
+  await repo.setPreference('ai_local_consent', 'yes');
+  await assert.rejects(repo.finishAnalysis(analysis.id, [task], 'late-model', analysis.token!), /상태/);
+  await assert.rejects(repo.finishAnalysis(queued.id, [task], 'late-model', queued.token!), /상태/);
+  assert.deepEqual(await repo.listExtracted(analysis.id), []);
+  assert.deepEqual(await repo.listTodos(), []);
+  const freshToken = await repo.retryFailedAnalysis(analysis.id);
+  await repo.failAnalysis(analysis.id, 'LATE_ERROR', analysis.token!);
+  await assert.rejects(repo.finishAnalysis(analysis.id, [task], 'late-model', analysis.token!), /상태/);
+  await repo.finishAnalysis(analysis.id, [task], 'fresh-model', freshToken);
+  assert.equal((await repo.listExtracted(analysis.id)).length, 1);
+  assert.deepEqual(await repo.listTodos(), []);
+  native.close();
+});
+
+test('동의 철회 정리가 실패하면 동의·분석 토큰·기존 원문을 함께 롤백한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
+  const finished = await repo.createAnalysis('consent-rollback-finished', 'manual', null);
+  await repo.finishAnalysis(finished.id, [task], 'test', finished.token!);
+  const processing = await repo.createAnalysis('consent-rollback-processing', 'manual', null);
+  native.exec("CREATE TRIGGER fail_revoke BEFORE UPDATE OF evidence_text ON extracted_tasks BEGIN SELECT RAISE(ABORT,'test-only-revoke-failure'); END;");
+  await assert.rejects(repo.revokeLocalAIConsent(), /test-only-revoke-failure/);
+  assert.equal(await repo.getPreference('ai_local_consent'), 'yes');
+  const row = (await repo.listAnalyses()).find(item => item.id === processing.id)!;
+  assert.equal(row.status, 'processing'); assert.equal(row.processing_token, processing.token);
+  assert.equal((await repo.listExtracted(finished.id))[0].evidence_text, task.evidence_text);
+  native.exec('DROP TRIGGER fail_revoke');
+  await repo.revokeLocalAIConsent();
+  assert.equal(await repo.getPreference('ai_local_consent'), 'no');
+  assert.equal((await repo.listExtracted(finished.id))[0].evidence_text, '');
+  native.close();
+});
+
 test('검토 화면을 연 채 만료되면 정리 실행 전에도 승인을 차단한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');

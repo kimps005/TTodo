@@ -212,6 +212,9 @@ export class Repository {
   async revokeLocalAIConsent() {
     await this.db.withExclusiveTransactionAsync(async tx => {
       await tx.runAsync("INSERT INTO preferences(key,value) VALUES('ai_local_consent','no') ON CONFLICT(key) DO UPDATE SET value='no'");
+      // Re-enabling consent must not authorize workers started before withdrawal.
+      // The same tokens gate native App Intent / Share Extension completions.
+      await tx.runAsync("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE status IN ('queued','processing')", 'CONSENT_REVOKED');
       await tx.runAsync("UPDATE extracted_tasks SET evidence_text=''");
     });
   }
