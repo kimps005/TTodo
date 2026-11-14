@@ -5,9 +5,11 @@
 ## OCR 입력 전체 삭제 후 재입력 보완
 - PRD의 오류 수동 수정 원칙에 맞춰 기존 OCR 편집 경로를 보완했다. 인식문을 모두 지우면 입력칸도 사라지는 조건부 렌더링 오류를 수정하고, 글자 유무 대신 OCR 완료 지문을 기준으로 표시해 빈 인식 결과와 사용자 전체 삭제 뒤에도 입력을 계속할 수 있다. 빈 내용의 AI 분석은 기존대로 차단한다.
 - 실제 사진 선택·Vision OCR UI 검사에 키보드로 전체 삭제→빈 편집칸 유지→재입력→재선택 취소 후 수정 보존 검사를 추가했다. 합성 이미지의 실제 OCR을 먼저 대조하며 응답·DB 주입은 없다.
-- 로컬 63개 테스트·타입·diff와 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43582823839) 통과. 수정한 사진 UI 검사는 별도 실행에서 확인하며 실제 iPhone·AI 정확도는 미검증이다.
+- 로컬 63개 테스트·타입·diff와 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43584368392), [사진 UI 재검증](https://github.com/kimps005/TTodo/actions/runs/43584375416) 통과. 실제 iPhone·AI 정확도는 미검증이다.
 
 ## 최근 검증 요약
+- [4302f90 사진 UI 재검증](https://github.com/kimps005/TTodo/actions/runs/43584375416): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정한 `testPhotoOCRAndCancelPreservesDraft` 1개 실행·1개 통과, 실패/건너뜀 0. 실제 사진 선택·합성 한국어 Vision OCR 뒤 글자 전체 삭제·빈 편집칸 존재·재입력과 재선택 취소 후 글자/날짜 보존, 재실행 후 미승인 데이터 부재를 확인했다. SDK summary/tests JSON을 로컬에서 다시 대조했고 재입력·날짜 보존 화면도 시각 확인했다. 전체 삭제 직후 첨부 화면에서는 편집칸이 화면 밖에 있어 빈 편집칸 자체의 확인은 XCTest 단언에 근거한다. 이전 사진 가져오기 시간 초과는 같은 제한·통과 기준의 새 실행에서 재현되지 않았으며 최초 지연의 근본 원인은 미확정이다. 실제 사용자 사진·AI 생성/정확도·실제 iPhone 검증으로 대체하지 않는다.
+- [4302f90 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43584368392): core/ios 모두 성공. 63개 테스트·타입·보안·Hermes, Swift 저장소/캡처/합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드 통과. 사진 준비 단계의 진단 보강을 포함한 소스이며 실제 편집 UI 검사는 별도 결과를 따른다.
 - [d864a4e 사진 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43582860291)은 합성 PNG를 시뮬레이터로 가져오는 `simctl addmedia`의 240초 시간 초과로 실패했다. 부팅 마이그레이션 약 4분과 macOS OCR 사전 검사 통과를 진단 파일에서 확인했으며 앱 빌드·XCTest에는 도달하지 않았다. 기기 사진 서비스 지연의 근본 원인은 아직 미확정이다. 후속 검사 스크립트는 OCR 컴파일/실행/사진 가져오기 단계를 구분하고 실패 명령·종료 상태·표준 출력/오류를 보존한다. 성공 조건이나 제한 시간은 완화하지 않는다.
 - [d864a4e 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43582823839): core/ios 성공. OCR 입력 전체 삭제 후 편집칸 유지 변경을 포함해 63개 테스트·타입·보안·Hermes, Swift 저장소/캡처/합성 Vision OCR 검사와 앱·위젯·공유 확장 시뮬레이터 빌드 통과. 전체 삭제 후 재입력의 실제 사진 UI 검사는 별도 실행에서 확인하며 실제 iPhone·AI 정확도는 미검증이다.
 - [e76e723 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43581881280): core/ios 모두 성공. 내보내기 오류 보존·중복 공유 차단과 부분 사진 복사본 정리 변경을 포함해 63개 테스트·타입·보안·Hermes, Swift 저장소/캡처/합성 Vision OCR 및 앱·위젯·공유 확장 시뮬레이터 빌드를 통과했다. 실제 공유 파일 내용·오류 경로·실제 iPhone은 미검증이며 DEVICE-QA에 확인 절차를 추가했다.
