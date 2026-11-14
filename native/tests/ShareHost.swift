@@ -7,9 +7,13 @@ struct TTodoCIShareHost: App {
   var body: some Scene { WindowGroup { ShareHostView() } }
 }
 
+private struct SharePayload: Identifiable {
+  let id = UUID()
+  let url: URL
+}
+
 private struct ShareHostView: View {
-  @State private var imageURL: URL?
-  @State private var sharing = false
+  @State private var payload: SharePayload?
   @State private var failure: String?
   var body: some View {
     VStack(spacing: 24) {
@@ -24,12 +28,12 @@ private struct ShareHostView: View {
           guard let data = image.pngData() else { throw CocoaError(.fileWriteUnknown) }
           let url = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-ci-synthetic.png")
           try data.write(to: url, options: .atomic)
-          imageURL = url; sharing = true
+          payload = SharePayload(url: url)
         } catch { failure = "합성 이미지를 만들지 못했어요." }
       }.accessibilityIdentifier("ci-share-image")
       if let failure { Text(failure) }
-    }.padding().sheet(isPresented: $sharing) {
-      if let imageURL { ShareController(url: imageURL) }
+    }.padding().sheet(item: $payload) { item in
+      ShareController(url: item.url)
     }
   }
 }

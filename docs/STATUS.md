@@ -314,3 +314,9 @@
 ## CI 공유 호스트 SDK 컴파일 통과
 - [30c5788 호스트 단독 검사](https://github.com/kimps005/TTodo/actions/runs/43545807488) 성공. 생성된 TTodoCIShareHost 타깃의 SwiftUI/UIKit 코드와 앱 제품을 실제 iOS Simulator SDK/arm64로 컴파일했다.
 - 서명/설치/실제 공유창과 확장 실행의 성공은 별도 UI 실행에서 확인한다. 이번 SDK 성공을 AI 실행·확장 전체 기능·실기기 검증으로 대체하지 않는다.
+
+## 최대 글자 재검증 통과와 공유 호스트 표시 수정
+- [3f8e2f3 최대 글자 실행](https://github.com/kimps005/TTodo/actions/runs/43545098254) 성공. 실제 최대 접근성 크기 조회가 일치하고 지정한 testLargeTextInputEditingAndNavigation 1개 통과, 실패/건너뜀 0이다. 온보딩·저장·편집·키보드 중 탭 이동·미저장 입력 보존을 확인했다. 첨부 화면의 상단 브랜드와 소개 문구는 세로로 표시되어 오른쪽 잘림이 사라졌다. 실제 iPhone/VoiceOver 검증은 미완료다.
+- [첫 공유 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43545100252)은 실패했다. CI 호스트 설치/실행은 통과했지만 첨부 화면과 접근성 트리에는 빈 모달만 표시되어 제품 확장에 도달하지 못했다.
+- CI 호스트의 URL/표시 여부 두 상태와 조건부 빈 내용을 없애고 Apple sheet(item:onDismiss:content:) 방식으로 이미지 URL이 있는 단일 항목을 창 내용에 전달한다. 공유 후 검사는 앱을 재실행해 실제 저장소에서도 분석이 생성되지 않았는지 확인하도록 보강했다.
+- 로컬 54개 테스트·타입·diff 통과. 수정 호스트의 실제 SDK/공유 UI는 재검증 전이다. 빈 창의 원인 해소는 재실행 결과로 판단한다.
