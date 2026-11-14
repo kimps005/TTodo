@@ -268,3 +268,7 @@
 - [64e0e7b UI 실행](https://github.com/kimps005/TTodo/actions/runs/43538482846): 지정한 testManualTaskLifecycleAndDataReset 1개 실행/1개 통과, 실패/건너뜀/예상 실패 0. 실제 xcresulttool JSON을 정확한 Test Case ID/개별 Passed/집계 대조 도구로 검증했고 completed=true를 확인했다.
 - 마지막 글자 전체·단일 저장, 키보드가 열린 미저장 입력에서 설정으로 이동, 설정의 전체 삭제, 비어 있는 입력칸, 재실행 후 온보딩 초기화, 온보딩 완료 후 실제 빈 목록까지 통과. 설정 진입/온보딩 초기화/0개 빈 목록의 첨부 화면도 직접 시각 검토했다.
 - Release 앱/위젯/공유 확장 빌드 포함. 이후 cfa9383 임시 정리 실패 격리는 이 UI 실행에 포함되지 않으며 별도 51개 테스트·Hermes core CI로 검증했다. 실제 iPhone·한글 조합 키보드·잠금 입력·AI 정확도 완료로 표시하지 않는다.
+
+## Dynamic Type 시뮬레이터 검사 착수
+- PRD 13.2/13.4의 Dynamic Type·다양한 설정 검증을 이어간다. Apple 공식 UIContentSizeCategory 문서에서 접근성 최대 글자 크기 범주를 확인했다. 시뮬레이터 명령의 구체적인 값과 조회 방식은 실제 SDK 도움말로 먼저 확인한다.
+- 사용자 노트북 UI를 조작하지 않고 무료 macOS 실행기에서 설치 SDK·simctl ui 도움말·런타임 목록만 수집하는 수동 workflow를 추가했다. 명령 지원 확인과 실제 큰 글자 화면 검증은 별도이며 아직 통과로 기록하지 않는다.

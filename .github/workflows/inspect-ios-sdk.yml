@@ -1,0 +1,24 @@
+name: iOS SDK 검사 명령 확인
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sdk:
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    steps:
+      - name: Inspect installed simulator controls and runtimes
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/sdk-inspection
+          xcodebuild -version | tee artifacts/sdk-inspection/xcode.txt
+          xcrun --sdk iphonesimulator --show-sdk-version | tee artifacts/sdk-inspection/sdk.txt
+          xcrun simctl help ui 2>&1 | tee artifacts/sdk-inspection/ui-help.txt
+          xcrun simctl list runtimes --json | tee artifacts/sdk-inspection/runtimes.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdk-inspection
+          path: artifacts/sdk-inspection/**
+          retention-days: 7
