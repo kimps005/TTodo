@@ -178,7 +178,9 @@ final class TTodoUITests: XCTestCase {
     let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
     XCTAssertTrue(photo.waitForExistence(timeout: 30), "The real system picker must expose a photo thumbnail.")
     screenshot(app, name: "photo-01-system-picker")
-    photo.tap()
+    // Photos exposes this visible thumbnail as a non-hittable Image on iOS 26.
+    // Tap its own center; subsequent real OCR verifies the selected fixture.
+    photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     let text = app.textViews["인식된 글자"]
     XCTAssertTrue(text.waitForExistence(timeout: 30))
     let recognized = try XCTUnwrap(text.value as? String)
