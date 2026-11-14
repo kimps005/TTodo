@@ -32,7 +32,7 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     const file = new File(Paths.cache, 'TTodo-model-evaluation.json');
     try {
       if (!await Sharing.isAvailableAsync()) throw new Error();
-      file.create({ overwrite: true }); file.write(report);
+      file.create({ overwrite: true }); await file.write(report);
       await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
     } catch { Alert.alert('평가 파일을 내보내지 못했어요', '다시 시도해 주세요.'); }
     finally { if (file.exists) file.delete(); }

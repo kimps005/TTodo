@@ -121,7 +121,7 @@ function Application() {
   const exportData = () => void run(async () => {
     if (!(await Sharing.isAvailableAsync())) throw new Error('이 기기에서는 파일 공유를 사용할 수 없어요.');
     const file = new File(Paths.cache, 'TTodo-export.json');
-    try { file.create({ overwrite: true }); file.write(await repo.exportData()); await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }); }
+    try { file.create({ overwrite: true }); await file.write(await repo.exportData()); await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }); }
     finally { if (file.exists) file.delete(); }
   });
   const deleteData = () => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => {
