@@ -46,7 +46,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     else approve();
   };
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-    <Text style={ui.eyebrow}>CAPTURE REVIEW</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 할 일이 맞나요?</Text><Text style={ui.subtitle}>제목과 날짜, 원문 근거를 확인한 뒤 필요한 항목만 저장하세요.</Text>
+    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE REVIEW</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 할 일이 맞나요?</Text><Text style={ui.subtitle}>제목과 날짜, 원문 근거를 확인한 뒤 필요한 항목만 저장하세요.</Text>
     {imageUri && <Image source={{ uri: imageUri }} style={{ height: 220, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="이번 분석에 사용한 이미지 미리보기" />}
     {!!similar.length && <View style={ui.card}><Text style={ui.section}>비슷한 분석 기록이 있어요</Text><Text style={ui.small}>최근 7일의 원문 근거와 비교한 참고 안내예요. 서로 다른 일일 수 있으니 기존 항목과 비교해 주세요. 자동으로 합치거나 삭제하지 않아요.</Text>{similar.map(match => <Text key={match.analysis_id} style={ui.subtitle}>{match.saved ? '저장한 항목' : '검토 대기'} · {match.title}</Text>)}</View>}
     {checking && <Text style={ui.small}>최근 분석과 비교하고 있어요…</Text>}

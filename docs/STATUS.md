@@ -3,7 +3,8 @@
 기준일: 2026-11-14 (한국 시간)
 
 ## 최근 검증 요약
-- 최대 글자 첫 실행 43542167662는 중복 제목 조회에서 실패했고 화면에서 상단 잘림도 확인해 보완했다. [3f8e2f3 최대 글자 재검증](https://github.com/kimps005/TTodo/actions/runs/43545098254)과 [실제 공유 확장 동의 차단 검사](https://github.com/kimps005/TTodo/actions/runs/43545100252)를 각각 진행 중이다. 로컬 54개 테스트·타입 통과, 새 실제 결과는 확인 전이다.
+- [3f8e2f3 최대 글자 재검증](https://github.com/kimps005/TTodo/actions/runs/43545098254)은 지정 UI 1개 통과로 상단 소개 문구 잘림과 조작 흐름을 확인했다. 첨부 편집 화면의 영문 보조 표제에는 추가 잘림이 보여 caption2 확대 규칙을 적용하며 이 후속 변경은 재검증 전이다. 로컬 55개 테스트·타입 통과.
+- [첫 공유 UI](https://github.com/kimps005/TTodo/actions/runs/43545100252)는 CI 호스트의 빈 모달에서 실패해 제품 확장에 도달하지 않았다. 호스트 상태 수정의 [실제 SDK 컴파일](https://github.com/kimps005/TTodo/actions/runs/43547970713)은 성공. [공유 UI 재실행](https://github.com/kimps005/TTodo/actions/runs/43547968174)과 [사진 선택·OCR UI](https://github.com/kimps005/TTodo/actions/runs/43548157251)는 결과 확인 중이다.
 - [64e0e7b 전체 UI 검사](https://github.com/kimps005/TTodo/actions/runs/43538482846): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정 XCTest 1개 실행·1개 통과·실패/건너뜀 0. Release 앱·두 확장 컴파일과 실제 온보딩·수동 입력·편집·완료/미완료·날짜만 있는 마감·삭제 취소/삭제·키보드 전체 문자열 1개 저장·미저장 입력 중 설정 진입·전체 삭제·재실행 후 온보딩과 빈 목록을 확인했다. 결과 JSON을 최신 집계 도구로 다시 대조하고 설정/초기화 화면도 직접 시각 확인했다.
 - 최신 제품 수정 cfa9383: 임시 캐시 정리 실패가 수동 할 일 시작을 막지 않도록 분리하고 다른 임시 파일도 끝까지 정리한다. [JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43540173499)는 51개 테스트·타입·보안·실제 Hermes 성공. ios는 의도적으로 skipped이며 위 UI 실행에는 이 후속 정리 변경이 포함되지 않는다. 실제 iOS 파일 접근 실패 경고는 기기 QA 전이다.
 - 최신 공유 변경 d72e350: 재분석 이미지 읽기 실패 시 유효한 편집을 유지한다. [확장 전용 SDK 검사](https://github.com/kimps005/TTodo/actions/runs/43536680852)는 b0eba70 기준 공유·위젯 두 타깃 arm64 컴파일 성공. 위 64e0e7b Release UI 빌드에도 포함된다. 실제 공유 호스트 수명/재분석은 iPhone 미검증이다.
@@ -325,3 +326,7 @@
 - PRD P0-10 수동 사진 선택 경로를 별도 photo-ocr 시나리오로 연결했다. 일회성 CI 시뮬레이터의 사진 보관함에 기존 OCRSmoke가 생성한 합성 PNG만 가져온다. 실제 SDK의 addmedia 도움말을 저장·확인하고 macOS Vision 사전 검사 후 진행한다.
 - 설치된 Expo ImagePicker의 PHPicker 단일 선택 경로와 Apple 공식 PHPickerViewController 문서를 확인했다. 앱의 실제 사진 선택→iOS Vision→편집 가능한 인식 글자에 합성 한글 문장이 있는지 검사한다. 다시 선택 후 취소하면 원문/기준 날짜가 보존되는지, 닫고 재실행하면 승인하지 않은 할 일·분석이 없는지도 확인한다.
 - OCR 결과·AI 응답·DB 데이터를 주입하지 않는다. macOS 합성 OCR 사전 통과와 iOS UI 통과는 보고서에서 분리하고 지정 테스트 1개 통과만 인정한다. 실제 사진 선택기·iOS OCR 실행 결과는 CI 확인 전이며 합성 이미지 검사를 실제 사용자 이미지의 정확도 평가로 간주하지 않는다.
+
+## 최대 글자 보조 표제의 의미별 확대 규칙
+- 최대 글자 통과 실행의 편집 화면을 추가 시각 검토해 TASK DETAILS 보조 표제의 왼쪽 글자 잘림을 발견했다. 보조 표제에 기본 body 대신 caption2 Dynamic Type 규칙을 지정했다. 모든 화면의 같은 보조 표제에 일관되게 적용하며 사용자 글자 확대는 유지한다.
+- 타입·workflow YAML·diff 통과. 제품 로직 변경이 없어 같은 구현을 비교하는 테스트는 추가하지 않는다. 수정 후 최대 글자 실제 화면은 별도 UI 재검증에서 확인한다.
