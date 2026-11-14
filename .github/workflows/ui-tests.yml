@@ -2,6 +2,11 @@ name: 시뮬레이터 수동 입력 UI 검사
 on:
   workflow_dispatch:
     inputs:
+      scenario:
+        description: '앱 조작 또는 실제 공유 확장의 동의 전 차단'
+        type: choice
+        default: app
+        options: [app, share-extension]
       text_size:
         description: '기본 전체 흐름 또는 최대 접근성 글자 흐름'
         type: choice
@@ -19,6 +24,7 @@ jobs:
     env:
       CI: '1'
       TTODO_UI_TEXT_SIZE: ${{ inputs.text_size || 'large' }}
+      TTODO_UI_SCENARIO: ${{ inputs.scenario || 'app' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -10,8 +10,10 @@ const run = (command, args, options = {}) => execFileSync(command, args, { encod
 const sim = (...args) => run('xcrun', ['simctl', ...args]);
 const textSize = process.env.TTODO_UI_TEXT_SIZE ?? 'large';
 if (!['large', 'accessibility-extra-extra-extra-large'].includes(textSize)) throw new Error('Unsupported UI text size.');
-const flow = textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
-const report = { commit: process.env.GITHUB_SHA ?? null, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
+const scenario = process.env.TTODO_UI_SCENARIO ?? 'app';
+if (!['app', 'share-extension'].includes(scenario)) throw new Error('Unsupported UI scenario.');
+const flow = scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
+const report = { commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
 let device;
 try {
   const runtimes = JSON.parse(sim('list', 'runtimes', '--json')).runtimes.filter(item => item.isAvailable && item.identifier.includes('.iOS-'));

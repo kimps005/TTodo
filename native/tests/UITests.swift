@@ -161,4 +161,44 @@ final class TTodoUITests: XCTestCase {
     XCTAssertEqual(input.value as? String, "CI large unsaved draft")
     screenshot(app, name: "large-06-preserved-draft")
   }
+
+  @MainActor func testShareExtensionRequiresConsent() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launch()
+    XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
+    tap(app.buttons["이 설정으로 시작하기"], in: app)
+    let input = app.textFields["새 할 일"]
+    tap(input, in: app); input.typeText("CI task before sharing\n")
+    XCTAssertTrue(row(app, title: "CI task before sharing").waitForExistence(timeout: 15))
+    // XCTest installs the dependency app by its bundle ID. The production app
+    // never embeds this host or a synthetic model/OCR response.
+    let host = XCUIApplication(bundleIdentifier: "com.kimps005.ttodo.cisharehost")
+    host.launchArguments = app.launchArguments
+    host.launch()
+    XCTAssertTrue(host.buttons["ci-share-image"].waitForExistence(timeout: 30))
+    host.buttons["ci-share-image"].tap()
+    screenshot(host, name: "share-01-system-sheet")
+    let activity = control(host, label: "TTodo로 할 일 찾기")
+    if !activity.waitForExistence(timeout: 5) {
+      let more = host.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR label == %@", "더 보기", "More")).firstMatch
+      XCTAssertTrue(more.waitForExistence(timeout: 15))
+      more.tap()
+    }
+    XCTAssertTrue(activity.waitForExistence(timeout: 15))
+    activity.tap()
+    XCTAssertTrue(host.staticTexts["캡처 속 할 일"].waitForExistence(timeout: 30))
+    screenshot(host, name: "share-02-extension-open")
+    host.buttons["기기에서 분석"].tap()
+    XCTAssertTrue(host.staticTexts["먼저 TTodo 앱에서 기기 내 AI 분석에 동의해 주세요."].waitForExistence(timeout: 20))
+    screenshot(host, name: "share-03-consent-required")
+    host.buttons["닫기"].tap()
+    app.activate()
+    XCTAssertTrue(row(app, title: "CI task before sharing").waitForExistence(timeout: 20))
+    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CI task before sharing, ")).count, 1)
+    tap(control(app, label: "분석함"), in: app)
+    XCTAssertTrue(app.staticTexts["아직 분석 내역이 없어요"].waitForExistence(timeout: 15), "Consent denial must not create a pending analysis or task.")
+    screenshot(app, name: "share-04-no-analysis-created")
+  }
 }

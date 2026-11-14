@@ -40,3 +40,11 @@ test('최대 글자 흐름과 기본 전체 흐름의 실행 결과를 서로 �
   assert.throws(() => validateManualUITestResult(summary, tests, flow));
   assert.throws(() => validateManualUITestResult(summary, large, 'arbitraryTest'));
 });
+
+test('공유 확장 흐름은 앱 조작 결과로 대체하지 않고 정확한 공유 테스트만 인정한다', () => {
+  const flow = 'testShareExtensionRequiresConsent';
+  const share = { testNodes: [{ ...passedCase, nodeIdentifier: `TTodoUITests/${flow}()`, name: `${flow}()` }] };
+  assert.equal(validateManualUITestResult(summary, share, flow).flow, flow);
+  assert.throws(() => validateManualUITestResult(summary, share));
+  assert.throws(() => validateManualUITestResult(summary, tests, flow));
+});

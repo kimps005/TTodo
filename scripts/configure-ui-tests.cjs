@@ -81,7 +81,8 @@ function configureUITests(project, ios, root) {
 if (require.main === module) {
   const projectPath = path.resolve('ios/TTodo.xcodeproj/project.pbxproj');
   const project = xcode.project(projectPath); project.parseSync();
-  configureUITests(project, path.resolve('ios'), process.cwd());
+  const id = configureUITests(project, path.resolve('ios'), process.cwd());
+  if (process.env.TTODO_UI_SCENARIO === 'share-extension') require('./configure-share-host.cjs').configureShareHost(project, path.resolve('ios'), process.cwd(), id);
   fs.writeFileSync(projectPath, project.writeSync());
 }
 module.exports = { configureUITests };

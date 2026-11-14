@@ -1,8 +1,9 @@
 const manualFlow = 'testManualTaskLifecycleAndDataReset';
 const largeTextFlow = 'testLargeTextInputEditingAndNavigation';
+const shareFlow = 'testShareExtensionRequiresConsent';
 
 function validateManualUITestResult(summary, tests, flow = manualFlow) {
-  if (![manualFlow, largeTextFlow].includes(flow)) throw new Error('Unknown UI flow.');
+  if (![manualFlow, largeTextFlow, shareFlow].includes(flow)) throw new Error('Unknown UI flow.');
   const cases = [];
   function visit(nodes) {
     if (!Array.isArray(nodes)) return;
