@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Image, Modal, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { nativeBridge } from '../native/bridge';
@@ -80,7 +80,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 분석', onPress: () => { void repository.setPreference('ai_local_consent', 'yes').then(() => analyze(reanalyze)).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
   };
   const aiStatus = nativeBridge?.localAIAvailability() ?? 'missing_native';
-  return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
+  return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
     <Button title={busy ? '글자를 읽는 중…' : '사진에서 선택'} onPress={() => void select()} disabled={busy} />
     {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}
@@ -88,5 +88,5 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI · 실험 중</Text><Text style={ui.subtitle}>{availabilityLabels[aiStatus] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>인터넷 API 없이 Apple의 기기 내 모델을 사용해요. 한국어 정확도는 실제 기기에서 검증해야 해요.</Text><TextInput accessibilityLabel="원문 메시지 기준 날짜 YYYY-MM-DD" style={ui.input} placeholder="대화 기준 날짜 YYYY-MM-DD (선택)" editable={!busy} value={messageDate} onChangeText={setMessageDate} maxLength={10} keyboardType="numbers-and-punctuation" /><Text style={ui.small}>캡처 날짜와 대화 날짜는 다를 수 있어요. 기준 날짜가 없으면 ‘내일’ 같은 날짜를 확정하지 않아요.</Text><Button title={busy ? '처리 중…' : '기기 내 AI로 할 일 찾기'} disabled={busy || !text.trim() || !fingerprint || aiStatus !== 'available'} onPress={() => void requestAnalysis().catch(() => Alert.alert('설정을 확인하지 못했어요', '다시 시도해 주세요.'))} /></View>
     {hasPrevious && <View style={ui.card}><Text style={ui.small}>이 사진은 이전 분석 기록이 있어요. 한 번도 저장하지 않은 캡처만 다시 분석할 수 있어요. 저장한 할 일은 목록에서 직접 수정해 주세요.</Text><Button secondary title="이 사진 다시 분석" disabled={busy || !text.trim() || aiStatus !== 'available'} onPress={() => Alert.alert('다시 분석할까요?', '이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.', [{ text: '취소', style: 'cancel' }, { text: '다시 분석', style: 'destructive', onPress: () => { void requestAnalysis(true).catch(() => Alert.alert('분석을 시작하지 못했어요', '잠시 후 다시 시도해 주세요.')); } }])} /></View>}
     <Button secondary title="닫기" disabled={busy} onPress={close} />
-  </ScrollView></SafeAreaView></Modal>;
+  </ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
 }

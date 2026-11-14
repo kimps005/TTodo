@@ -185,13 +185,16 @@ final class TTodoUITests: XCTestCase {
     let normalized = String(recognized.precomposedStringWithCompatibilityMapping.filter { $0.isLetter || $0.isNumber })
     XCTAssertTrue(normalized.contains("2026년11월20일까지보고서제출"), "Real iOS Vision OCR must recognize the generated Korean image.")
     screenshot(app, name: "photo-02-real-ocr")
+    tap(text, in: app); text.typeText(" CI edited OCR")
+    let editedText = try XCTUnwrap(text.value as? String)
+    XCTAssertTrue(editedText.contains("CI edited OCR"))
     let date = app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"]
     tap(date, in: app); date.typeText("2026-11-14")
     tap(app.buttons["사진에서 선택"], in: app)
     let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "취소", "Cancel")).firstMatch
     XCTAssertTrue(cancel.waitForExistence(timeout: 20)); cancel.tap()
     reveal(text, in: app)
-    XCTAssertEqual(text.value as? String, recognized)
+    XCTAssertEqual(text.value as? String, editedText, "Cancelling selection must preserve the user's OCR edits.")
     reveal(date, in: app)
     XCTAssertEqual(date.value as? String, "2026-11-14")
     screenshot(app, name: "photo-03-cancel-preserves-draft")
