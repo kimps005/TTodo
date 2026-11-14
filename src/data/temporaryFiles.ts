@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { randomUUID } from 'expo-crypto';
 import { isCacheFileUri } from './temporaryPath';
 import { cleanupTemporaryEntries } from './temporaryCleanup';
+import { copyTemporaryImage } from './copyTemporaryImage';
 const captureDirectory = () => new Directory(Paths.cache, 'ttodo-captures');
 export function clearTemporaryFiles() {
   cleanupTemporaryEntries([
@@ -12,13 +13,13 @@ export function clearTemporaryFiles() {
     }),
   ]);
 }
-export function ownTemporaryImage(uri: string): string {
+export async function ownTemporaryImage(uri: string): Promise<string> {
   const original = new File(uri);
   if (!isCacheFileUri(original.uri, Paths.cache.uri)) throw new Error('안전한 임시 이미지 경로가 아니에요.');
   const directory = captureDirectory(); directory.create({ idempotent: true, intermediates: true });
   const target = new File(directory, `${randomUUID()}.image`);
-  try { original.copy(target); return target.uri; }
-  finally { if (original.exists) original.delete(); }
+  await copyTemporaryImage(() => original.copy(target), () => { if (original.exists) original.delete(); });
+  return target.uri;
 }
 export function discardTemporaryImage(uri: string) {
   if (!isCacheFileUri(uri, Paths.cache.uri)) return;

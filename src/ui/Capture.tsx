@@ -34,7 +34,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
       if (picked.canceled) return;
       const asset = picked.assets[0];
       if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { discardTemporaryImage(asset.uri); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
-      const uri = ownTemporaryImage(asset.uri);
+      const uri = await ownTemporaryImage(asset.uri);
       // Commit a new draft only after a real selection. Cancelling preserves edits;
       // a different image must never inherit the previous conversation's date.
       setText(''); setFingerprint(null); setHasPrevious(false); setMessageDate('');
