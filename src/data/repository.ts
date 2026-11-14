@@ -111,6 +111,10 @@ export class Repository {
     let result: { id: string; created: boolean; token: string | null } = { id, created: false, token: null };
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
+      // The UI's earlier check can become stale while another action revokes consent.
+      // Check under the same lock as registration, including duplicate lookups.
+      const consent = await tx.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key='ai_local_consent'");
+      if (consent?.value !== 'yes') throw new Error('먼저 기기 내 AI 분석에 동의해 주세요.');
       const existing = await tx.getFirstAsync<{ id: string }>('SELECT id FROM analyses WHERE image_fingerprint=?', fingerprint);
       if (existing) { result = { id: existing.id, created: false, token: null }; return; }
       await tx.runAsync('INSERT INTO analyses (id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at,processing_token) VALUES (?,?,?,?,?,?,?,?)',

@@ -20,6 +20,32 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z') {
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+test('동의 확인 뒤 철회가 먼저 처리되면 새 분석 등록과 기존 지문 재사용을 거부한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await assert.rejects(repo.createAnalysis('without-consent', 'manual', null), /동의/);
+    await repo.setPreference('ai_local_consent', 'yes');
+    const existing = await repo.createAnalysis('existing-consent', 'manual', null);
+    assert.equal(await repo.getPreference('ai_local_consent'), 'yes'); // UI's earlier check.
+    const revoke = repo.revokeLocalAIConsent();
+    const fresh = repo.createAnalysis('after-withdrawal', 'manual', null);
+    const duplicate = repo.createAnalysis('existing-consent', 'manual', null);
+    await revoke;
+    await assert.rejects(fresh, /동의/);
+    await assert.rejects(duplicate, /동의/);
+    await repo.setPreference('ai_local_consent', 'yes');
+    const rows = await repo.listAnalyses();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, existing.id);
+    assert.equal(rows[0].processing_token, null);
+    assert.equal(rows[0].error_code, 'CONSENT_REVOKED');
+    const authorized = await repo.createAnalysis('after-withdrawal', 'manual', null);
+    assert.equal(authorized.created, true);
+    await repo.finishAnalysis(authorized.id, [task], 'new-request', authorized.token!);
+    assert.equal((await repo.listExtracted(authorized.id)).length, 1);
+    assert.deepEqual(await repo.listTodos(), []);
+  } finally { native.close(); }
+});
 test('빈 입력·200자 초과·유효하지 않은 날짜를 거부한다', () => {
   assert.throws(() => normalizeTitle(' \n '));
   assert.throws(() => normalizeTitle('가'.repeat(201)));
@@ -42,8 +68,8 @@ test('수동 중복 입력은 허용하고 완료·수정·삭제를 보존한�
 });
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
-  const a = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:00Z');
   const b = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:01Z');
   assert.equal(a.id, b.id); assert.equal(b.created, false);
   await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation', a.token!);
@@ -105,8 +131,8 @@ test('삭제가 실패하면 연결된 분석 본문 정리도 롤백하며 과�
 
 test('무시한 원문은 즉시 지우고 보존 기간이 지난 대기 제안은 저장할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
-  const a = await repo.createAnalysis('private', 'manual', null);
   await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('private', 'manual', null);
   await repo.finishAnalysis(a.id, [task], 'evaluation', a.token!);
   await repo.ignoreAnalysis(a.id);
   assert.equal((await repo.listExtracted(a.id))[0].evidence_text, '');
@@ -193,8 +219,8 @@ test('검토 화면을 연 채 만료되면 정리 실행 전에도 승인을 �
 
 test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되돌린다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
-  const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('rollback', 'share', '2026-11-13T02:00:00Z');
   await repo.finishAnalysis(a.id, [task, task], 'evaluation', a.token!);
   const tasks = await repo.listExtracted(a.id);
   await assert.rejects(repo.approve(a.id, [{ id: tasks[0].id, input: { title: '정상' } }, { id: tasks[1].id, input: { title: ' ' } }]));
@@ -203,8 +229,8 @@ test('여러 항목 승인 중 하나가 실패하면 전체 트랜잭션을 되
 });
 test('동시에 들어온 승인도 하나만 생성하고 오류 다음의 대기 작업은 계속 진행한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
-  const a = await repo.createAnalysis('concurrent', 'manual', '2026-11-13T02:00:00Z');
   await repo.setPreference('ai_local_consent', 'yes');
+  const a = await repo.createAnalysis('concurrent', 'manual', '2026-11-13T02:00:00Z');
   await repo.finishAnalysis(a.id, [task], 'evaluation', a.token!);
   const selected = [{ id: (await repo.listExtracted(a.id))[0].id, input: { title: '동시 승인' } }];
   await Promise.all([repo.approve(a.id, selected), repo.approve(a.id, selected)]);
@@ -228,12 +254,14 @@ test('v1 데이터와 승인 연결을 보존하며 촬영 시각을 모르는 �
   assert.equal((await repo.listTodos()).length, 2);
   assert.ok((await repo.listTodos()).some(t => t.id === todoId));
   assert.equal((await repo.listExtracted(old.id))[0].linked_todo_id, (await repo.listTodos()).find(t => t.source_id === oldTask.id)!.id);
+  await repo.setPreference('ai_local_consent', 'yes');
   await repo.createAnalysis('unknown-time', 'manual', null);
   assert.equal((await repo.listAnalyses()).find(a => a.image_fingerprint === 'unknown-time')!.captured_at, null);
   native.close();
 });
 test('중단된 분석은 실패로 복구하며 무시한 항목은 승인할 수 없다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
+  await repo.setPreference('ai_local_consent', 'yes');
   const a = await repo.createAnalysis('interrupted', 'manual', '2026-11-13T02:00:00Z');
   await repo.initialize(); assert.equal((await repo.listAnalyses())[0].status, 'processing');
   native.prepare('UPDATE analyses SET received_at=? WHERE id=?').run('2026-11-13T01:49:00.000Z', a.id);

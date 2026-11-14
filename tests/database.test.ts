@@ -53,8 +53,8 @@ test('삭제 커밋 뒤 다른 연결이 공간 정리를 막아도 삭제 성�
     const db = createDatabase(base, async () => connect(filename));
     const repo = new Repository(db, randomUUID); await repo.initialize();
     await repo.addTodo({ title: '삭제 경합 합성 항목' });
-    await repo.createAnalysis('synthetic-cleanup', 'manual', null);
     await repo.setPreference('ai_local_consent', 'yes');
+    await repo.createAnalysis('synthetic-cleanup', 'manual', null);
     reader = new DatabaseSync(filename);
     await db.execAsync('PRAGMA busy_timeout=0;');
     let rejected = false, result: unknown;
