@@ -172,8 +172,11 @@ final class TTodoUITests: XCTestCase {
     tap(control(app, label: "분석함"), in: app)
     tap(app.buttons["캡처에서 할 일 찾기"], in: app)
     tap(app.buttons["사진에서 선택"], in: app)
-    let photo = app.collectionViews.cells.firstMatch
-    XCTAssertTrue(photo.waitForExistence(timeout: 30), "Only the generated PNG is imported into this isolated photo library.")
+    // iOS 26 Photos exposes thumbnails as Images, not collection-view Cells.
+    // The imported PNG is newest; the simulator also includes Apple sample photos.
+    // Verify its actual OCR below rather than assuming the library has one item.
+    let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+    XCTAssertTrue(photo.waitForExistence(timeout: 30), "The real system picker must expose a photo thumbnail.")
     screenshot(app, name: "photo-01-system-picker")
     photo.tap()
     let text = app.textViews["인식된 글자"]
@@ -220,13 +223,15 @@ final class TTodoUITests: XCTestCase {
     XCTAssertTrue(host.buttons["ci-share-image"].waitForExistence(timeout: 30))
     host.buttons["ci-share-image"].tap()
     screenshot(host, name: "share-01-system-sheet")
-    let activity = control(host, label: "TTodo로 할 일 찾기")
+    // The installed system share sheet uses the containing app's display name.
+    let activity = host.cells.matching(NSPredicate(format: "label == %@ OR label == %@", "TTodo", "TTodo로 할 일 찾기")).firstMatch
     if !activity.waitForExistence(timeout: 5) {
       let more = host.descendants(matching: .any).matching(NSPredicate(format: "label == %@ OR label == %@", "더 보기", "More")).firstMatch
       XCTAssertTrue(more.waitForExistence(timeout: 15))
       more.tap()
     }
     XCTAssertTrue(activity.waitForExistence(timeout: 15))
+    screenshot(host, name: "share-01-ready-system-sheet")
     activity.tap()
     XCTAssertTrue(host.staticTexts["캡처 속 할 일"].waitForExistence(timeout: 30))
     screenshot(host, name: "share-02-extension-open")
