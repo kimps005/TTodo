@@ -11,8 +11,8 @@ const sim = (...args) => run('xcrun', ['simctl', ...args]);
 const textSize = process.env.TTODO_UI_TEXT_SIZE ?? 'large';
 if (!['large', 'accessibility-extra-extra-extra-large'].includes(textSize)) throw new Error('Unsupported UI text size.');
 const scenario = process.env.TTODO_UI_SCENARIO ?? 'app';
-if (!['app', 'share-extension'].includes(scenario)) throw new Error('Unsupported UI scenario.');
-const flow = scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
+if (!['app', 'share-extension', 'photo-ocr'].includes(scenario)) throw new Error('Unsupported UI scenario.');
+const flow = scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
 let device;
 try {
@@ -33,6 +33,19 @@ try {
   sim('ui', device, 'content_size', textSize);
   report.text_size = sim('ui', device, 'content_size');
   if (report.text_size !== textSize) throw new Error('The simulator did not confirm the requested text size.');
+  if (scenario === 'photo-ocr') {
+    report.phase = 'synthetic-photo';
+    const mediaHelp = spawnSync('xcrun', ['simctl', 'help', 'addmedia'], { encoding: 'utf8', timeout: 60000 });
+    const mediaHelpText = (mediaHelp.stdout ?? '') + (mediaHelp.stderr ?? '');
+    writeFileSync(path.join(output, 'simctl-addmedia-help.txt'), mediaHelpText);
+    if (mediaHelp.status !== 0 || !mediaHelpText.includes('addmedia')) throw new Error('The installed SDK does not document media import.');
+    const generator = path.join(output, 'ocr-fixture-generator');
+    run('swiftc', ['modules/ttodo-native/ios/VisionOCR.swift', 'native/tests/OCRSmoke.swift', '-framework', 'AppKit', '-o', generator]);
+    writeFileSync(path.join(output, 'ocr-fixture-preflight.log'), run(generator, [], { env: { ...process.env, TTODO_OCR_FIXTURE_OUTPUT: output } }));
+    sim('addmedia', device, path.join(output, 'synthetic-korean.png'));
+    report.photo_fixture = 'generated-korean-png-only';
+    report.macos_ocr_fixture_preflight = true;
+  }
   report.phase = 'test'; console.log('UI tests: building and running the synthetic manual task flow');
   execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-only-testing:TTodoUITests/TTodoUITests/' + flow, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
   const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', resultPath]));
@@ -40,6 +53,7 @@ try {
   writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));
   writeFileSync(path.join(output, 'tests.json'), JSON.stringify(tests, null, 2));
   report.tests = resultValidation.validateManualUITestResult(summary, tests, flow);
+  report.ios_ocr_tested = scenario === 'photo-ocr';
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);

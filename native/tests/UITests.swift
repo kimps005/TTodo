@@ -162,6 +162,46 @@ final class TTodoUITests: XCTestCase {
     screenshot(app, name: "large-06-preserved-draft")
   }
 
+  @MainActor func testPhotoOCRAndCancelPreservesDraft() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launch()
+    XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
+    tap(app.buttons["이 설정으로 시작하기"], in: app)
+    tap(control(app, label: "분석함"), in: app)
+    tap(app.buttons["캡처에서 할 일 찾기"], in: app)
+    tap(app.buttons["사진에서 선택"], in: app)
+    let photo = app.collectionViews.cells.firstMatch
+    XCTAssertTrue(photo.waitForExistence(timeout: 30), "Only the generated PNG is imported into this isolated photo library.")
+    screenshot(app, name: "photo-01-system-picker")
+    photo.tap()
+    let text = app.textViews["인식된 글자"]
+    XCTAssertTrue(text.waitForExistence(timeout: 30))
+    let recognized = try XCTUnwrap(text.value as? String)
+    let normalized = String(recognized.precomposedStringWithCompatibilityMapping.filter { $0.isLetter || $0.isNumber })
+    XCTAssertTrue(normalized.contains("2026년11월20일까지보고서제출"), "Real iOS Vision OCR must recognize the generated Korean image.")
+    screenshot(app, name: "photo-02-real-ocr")
+    let date = app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"]
+    tap(date, in: app); date.typeText("2026-11-14")
+    tap(app.buttons["사진에서 선택"], in: app)
+    let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "취소", "Cancel")).firstMatch
+    XCTAssertTrue(cancel.waitForExistence(timeout: 20)); cancel.tap()
+    reveal(text, in: app)
+    XCTAssertEqual(text.value as? String, recognized)
+    reveal(date, in: app)
+    XCTAssertEqual(date.value as? String, "2026-11-14")
+    screenshot(app, name: "photo-03-cancel-preserves-draft")
+    tap(app.buttons["닫기"], in: app)
+    app.terminate(); app.launch()
+    XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
+    tap(control(app, label: "분석함"), in: app)
+    XCTAssertTrue(app.staticTexts["아직 분석 내역이 없어요"].waitForExistence(timeout: 15))
+    tap(control(app, label: "할 일"), in: app)
+    XCTAssertTrue(app.staticTexts["머릿속을 조금 비워 보세요"].waitForExistence(timeout: 15))
+    screenshot(app, name: "photo-04-no-unapproved-data")
+  }
+
   @MainActor func testShareExtensionRequiresConsent() throws {
     continueAfterFailure = false
     let app = XCUIApplication()

@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: '앱 조작 또는 실제 공유 확장의 동의 전 차단'
+        description: '앱 조작, 공유 확장 동의 차단 또는 사진 선택·실제 OCR'
         type: choice
         default: app
-        options: [app, share-extension]
+        options: [app, share-extension, photo-ocr]
       text_size:
         description: '기본 전체 흐름 또는 최대 접근성 글자 흐름'
         type: choice
