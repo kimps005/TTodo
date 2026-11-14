@@ -109,6 +109,7 @@ final class TTodoUITests: XCTestCase {
     tap(app.alerts.buttons["모두 삭제"], in: app)
     tap(control(app, label: "할 일"), in: app)
     XCTAssertTrue(start.waitForExistence(timeout: 20), "Reset must also clear onboarding preferences.")
+    reveal(input, in: app)
     let resetInputValue = input.value as? String ?? ""
     XCTAssertTrue(resetInputValue.isEmpty || resetInputValue == input.placeholderValue, "Reset must clear unsaved manual input as well as stored tasks.")
     assertTaskMissing(app, title: resetTitle)
@@ -116,5 +117,11 @@ final class TTodoUITests: XCTestCase {
     XCTAssertTrue(start.waitForExistence(timeout: 30))
     assertTaskMissing(app, title: resetTitle)
     screenshot(app, name: "06-reset-onboarding")
+    tap(start, in: app)
+    XCTAssertTrue(app.staticTexts["머릿속을 조금 비워 보세요"].waitForExistence(timeout: 15), "The empty list must be visible after reset, not just hidden behind onboarding.")
+    XCTAssertFalse(row(app, title: resetTitle).exists)
+    assertTaskMissing(app, title: resetTitle)
+    assertTaskMissing(app, title: "CI unsaved private draft")
+    screenshot(app, name: "07-reset-empty-list")
   }
 }
