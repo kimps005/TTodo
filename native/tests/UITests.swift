@@ -187,7 +187,15 @@ final class TTodoUITests: XCTestCase {
     let normalized = String(recognized.precomposedStringWithCompatibilityMapping.filter { $0.isLetter || $0.isNumber })
     XCTAssertTrue(normalized.contains("2026년11월20일까지보고서제출"), "Real iOS Vision OCR must recognize the generated Korean image.")
     screenshot(app, name: "photo-02-real-ocr")
-    tap(text, in: app); text.typeText(" CI edited OCR")
+    // Place the caret after the last line and delete through the real keyboard.
+    // An empty user edit must not unmount the field or prevent typing again.
+    reveal(text, in: app)
+    text.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
+    text.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: recognized.utf16.count))
+    XCTAssertTrue(text.waitForExistence(timeout: 5), "Clearing OCR must keep the editor available.")
+    XCTAssertEqual(text.value as? String ?? "", "")
+    screenshot(app, name: "photo-02-empty-ocr-editor")
+    text.typeText("CI edited OCR")
     let editedText = try XCTUnwrap(text.value as? String)
     XCTAssertTrue(editedText.contains("CI edited OCR"))
     let date = app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"]
