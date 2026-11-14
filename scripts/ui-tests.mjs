@@ -29,7 +29,8 @@ try {
   const uiHelp = spawnSync('xcrun', ['simctl', 'help', 'ui'], { encoding: 'utf8', timeout: 60000 });
   const helpText = (uiHelp.stdout ?? '') + (uiHelp.stderr ?? '');
   writeFileSync(path.join(output, 'simctl-ui-help.txt'), helpText);
-  if (uiHelp.status !== 0 || !helpText.includes(textSize)) throw new Error('The installed SDK does not document the requested text size.');
+  if (uiHelp.error || uiHelp.status !== 0) throw new Error(`simctl ui help failed (status=${uiHelp.status}, signal=${uiHelp.signal}, error=${uiHelp.error?.message ?? 'none'}).`);
+  if (!helpText.includes(textSize)) throw new Error('The installed SDK does not document the requested text size.');
   sim('ui', device, 'content_size', textSize);
   report.text_size = sim('ui', device, 'content_size');
   if (report.text_size !== textSize) throw new Error('The simulator did not confirm the requested text size.');
