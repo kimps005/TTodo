@@ -2,8 +2,13 @@ import XCTest
 
 final class TTodoUITests: XCTestCase {
   @MainActor private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-    XCTAssertTrue(element.waitForExistence(timeout: 20))
-    for _ in 0..<5 where !element.isHittable { app.scrollViews.firstMatch.swipeUp() }
+    // Offscreen React Native children may be absent from the accessibility tree.
+    // Search by scrolling before requiring existence, with a bounded attempt count.
+    for _ in 0..<8 {
+      if element.waitForExistence(timeout: 1) && element.isHittable { return }
+      app.scrollViews.firstMatch.swipeUp()
+    }
+    XCTAssertTrue(element.exists)
     XCTAssertTrue(element.isHittable)
   }
   @MainActor private func tap(_ element: XCUIElement, in app: XCUIApplication) { reveal(element, in: app); element.tap() }
@@ -98,6 +103,8 @@ final class TTodoUITests: XCTestCase {
     XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", resetTitle + ", ")).count, 1)
     input.tap(); input.typeText("CI unsaved private draft")
     tap(control(app, label: "설정"), in: app)
+    XCTAssertTrue(app.staticTexts["내 방식으로"].waitForExistence(timeout: 15), "The Settings tab must remain reachable with unsaved keyboard input.")
+    screenshot(app, name: "06-settings-before-reset")
     tap(app.buttons["모든 데이터 삭제"], in: app)
     tap(app.alerts.buttons["모두 삭제"], in: app)
     tap(control(app, label: "할 일"), in: app)
