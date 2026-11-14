@@ -3,10 +3,11 @@
 기준일: 2026-11-14 (한국 시간)
 
 ## 최근 검증 요약
+- 최신 제품 커밋 59a364b의 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43548256339): core/ios 성공. 55개 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처/JSON 계약과 합성 한국어 Vision OCR, 앱·위젯·공유 확장 arm64 빌드 통과. 실제 iPhone·AI 생성/정확도·잠금 동작의 완료를 뜻하지 않는다.
 - [3f8e2f3 최대 글자 재검증](https://github.com/kimps005/TTodo/actions/runs/43545098254)은 지정 UI 1개 통과로 상단 소개 문구 잘림과 조작 흐름을 확인했다. 첨부 편집 화면의 영문 보조 표제에는 추가 잘림이 보여 caption2 확대 규칙을 적용하며 이 후속 변경은 재검증 전이다. 로컬 55개 테스트·타입 통과.
 - [첫 공유 UI](https://github.com/kimps005/TTodo/actions/runs/43545100252)는 CI 호스트의 빈 모달에서 실패해 제품 확장에 도달하지 않았다. 호스트 상태 수정의 [실제 SDK 컴파일](https://github.com/kimps005/TTodo/actions/runs/43547970713)은 성공. [공유 UI 재실행](https://github.com/kimps005/TTodo/actions/runs/43547968174)과 [사진 선택·OCR UI](https://github.com/kimps005/TTodo/actions/runs/43548157251)는 결과 확인 중이다.
 - [64e0e7b 전체 UI 검사](https://github.com/kimps005/TTodo/actions/runs/43538482846): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정 XCTest 1개 실행·1개 통과·실패/건너뜀 0. Release 앱·두 확장 컴파일과 실제 온보딩·수동 입력·편집·완료/미완료·날짜만 있는 마감·삭제 취소/삭제·키보드 전체 문자열 1개 저장·미저장 입력 중 설정 진입·전체 삭제·재실행 후 온보딩과 빈 목록을 확인했다. 결과 JSON을 최신 집계 도구로 다시 대조하고 설정/초기화 화면도 직접 시각 확인했다.
-- 최신 제품 수정 cfa9383: 임시 캐시 정리 실패가 수동 할 일 시작을 막지 않도록 분리하고 다른 임시 파일도 끝까지 정리한다. [JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43540173499)는 51개 테스트·타입·보안·실제 Hermes 성공. ios는 의도적으로 skipped이며 위 UI 실행에는 이 후속 정리 변경이 포함되지 않는다. 실제 iOS 파일 접근 실패 경고는 기기 QA 전이다.
+- cfa9383 임시 정리 실패 격리: 수동 할 일 시작을 막지 않고 다른 임시 파일도 끝까지 정리한다. 당시 [JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43540173499)는 51개 테스트·타입·보안·Hermes 성공/ios skipped였다. 최신 59a364b 전체 품질 빌드에는 이 변경도 포함되며 실제 iOS 파일 접근 실패 경고는 기기 QA 전이다.
 - 최신 공유 변경 d72e350: 재분석 이미지 읽기 실패 시 유효한 편집을 유지한다. [확장 전용 SDK 검사](https://github.com/kimps005/TTodo/actions/runs/43536680852)는 b0eba70 기준 공유·위젯 두 타깃 arm64 컴파일 성공. 위 64e0e7b Release UI 빌드에도 포함된다. 실제 공유 호스트 수명/재분석은 iPhone 미검증이다.
 - 공유창 안정화 b0aa4a2의 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43534413868)는 core/ios 성공. Swift 저장소/캡처/JSON 계약·실제 합성 한국어 Vision OCR·앱·두 확장 컴파일 통과. OCR/모델 주입 회귀와 실제 Vision 실행은 구분하며 AI 생성·정확도 통과가 아니다.
 - 키보드 제출은 nativeEvent.text로 마지막 글자를 보존하고, 하단 탭도 키보드 회피 영역 안에 배치했다. 이전 실패 43504705317/43534761791은 최신 전체 UI 통과로 해결을 확인했으며 기존 실패 기록은 아래에 보존한다.
@@ -330,3 +331,7 @@
 ## 최대 글자 보조 표제의 의미별 확대 규칙
 - 최대 글자 통과 실행의 편집 화면을 추가 시각 검토해 TASK DETAILS 보조 표제의 왼쪽 글자 잘림을 발견했다. 보조 표제에 기본 body 대신 caption2 Dynamic Type 규칙을 지정했다. 모든 화면의 같은 보조 표제에 일관되게 적용하며 사용자 글자 확대는 유지한다.
 - 타입·workflow YAML·diff 통과. 제품 로직 변경이 없어 같은 구현을 비교하는 테스트는 추가하지 않는다. 수정 후 최대 글자 실제 화면은 별도 UI 재검증에서 확인한다.
+
+## 최신 전체 품질 CI 재검증 통과
+- [59a364b 전체 품질 실행](https://github.com/kimps005/TTodo/actions/runs/43548256339)의 core/ios 모두 성공했다. 로그에서 55개 테스트·타입·보안 경고 0·실제 Hermes 번들, Swift 저장소/캡처·Swift JSON→TypeScript 계약·macOS Vision 합성 한국어/빈 이미지/잘못된 이미지, 앱·위젯·공유 확장 arm64 컴파일을 확인했다.
+- 임시 정리 실패 격리, 입력 경계와 Dynamic Type 보완을 포함한 최신 소스다. 실제 사진 선택·공유 UI·최대 글자 보조 표제 화면은 각 UI 실행에서 별도로 판단한다. 실제 iPhone 서명/설치·잠금 입력·AI 생성/정확도는 미검증을 유지한다.
