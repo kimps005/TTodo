@@ -359,3 +359,6 @@
 ## 캡처 키보드 개선 전체 품질 CI 통과
 - [03c0961 전체 품질 검사](https://github.com/kimps005/TTodo/actions/runs/43562478979)는 core/ios 모두 성공했다. 타입·55개 테스트·보안·Hermes와 Swift 저장소/캡처, 합성 한국어 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드를 통과했다.
 - 후속 57개 테스트와 SDK 오류 진단 변경은 이 실행 이후다. 캡처 화면의 키보드 조작 및 사진 선택·OCR UI 성공이나 실제 iPhone·AI 정확도 검증을 뜻하지 않는다.
+
+## 후속 DB 경합 검사의 CI 통과
+- [0298a11 core 전용 검사](https://github.com/kimps005/TTodo/actions/runs/43563050892)는 새 SQLite 경합 검사 2개를 포함한 57개 테스트·타입·보안·Hermes를 통과했다. ios 작업은 선택적으로 생략했으며 네이티브 빌드는 앞의 03c0961 전체 품질 검사로 구분한다.
