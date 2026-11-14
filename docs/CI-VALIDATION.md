@@ -45,6 +45,8 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 산출물은 `ui-tests` artifact의 `report.json`, 로그와 `results.xcresult`입니다. 새 일회성 시뮬레이터를 사용하며 종료 후 해당 기기만 삭제합니다. 사용자 노트북의 UI는 조작하지 않습니다. [Apple XCUIApplication API](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication)를 사용한 코드 검사입니다.
 
+수동 `text_size`의 기본 `large`는 기존 전체 초기화 흐름을 실행한다. `accessibility-extra-extra-extra-large`는 온보딩·키보드 저장·목록/편집·탭 이동·미저장 입력 보존의 별도 흐름을 실행한다. [Apple의 최대 접근성 범주](https://developer.apple.com/documentation/uikit/uicontentsizecategory/accessibilityextraextraextralarge)에 해당하는 simctl 값을 실제 SDK 도움말에서 확인했다. 설정 후 조회 값이 같아야 하며 보고서의 `text_size`에 기록한다. 테스트 선택과 개별 SDK 결과의 정확한 ID도 대조하므로 두 흐름의 성공을 서로 대신 인정하지 않는다. 실제 화면의 가독성은 첨부 이미지에서 별도 검토하고 VoiceOver·실제 iPhone 검증과 구분한다.
+
 ## 확인된 실행 결과
 
 [64e0e7b 확장 UI 전체 실행](https://github.com/kimps005/TTodo/actions/runs/43538482846): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정한 XCTest 1개 실행·1개 통과, 실패/건너뜀/예상 실패 0. Release 앱·두 확장 빌드와 온보딩·입력·재실행 보존·편집·완료/미완료·날짜만 있는 마감·삭제 취소/삭제·키보드 전체 문자열 단일 저장·미저장 입력 중 설정 진입·전체 데이터 삭제·입력 초기화·재실행 후 온보딩 초기화와 실제 빈 목록까지 통과했다. 최신 결과 집계 도구로 SDK JSON을 다시 대조했고 설정/초기화/0개 목록 화면도 직접 확인했다. 이후 cfa9383 임시 정리 실패 격리 변경은 포함하지 않는다.
