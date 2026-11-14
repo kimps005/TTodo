@@ -154,7 +154,7 @@ final class TTodoUITests: XCTestCase {
     tap(input, in: app); input.typeText("CI large unsaved draft")
     screenshot(app, name: "large-04-keyboard-tabs")
     tap(control(app, label: "설정"), in: app)
-    reveal(app.staticTexts["내 방식으로"], in: app)
+    reveal(control(app, label: "내 방식으로"), in: app)
     screenshot(app, name: "large-05-settings")
     tap(control(app, label: "할 일"), in: app)
     reveal(input, in: app)

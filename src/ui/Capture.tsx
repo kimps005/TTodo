@@ -81,7 +81,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   };
   const aiStatus = nativeBridge?.localAIAvailability() ?? 'missing_native';
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-    <Text style={ui.eyebrow}>CAPTURE TO TASK</Text><Text style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
+    <Text style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
     <Button title={busy ? '글자를 읽는 중…' : '사진에서 선택'} onPress={() => void select()} disabled={busy} />
     {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}
     {!!text && <View style={ui.card}><Text style={ui.label}>기기에서 인식한 글자</Text><TextInput accessibilityLabel="인식된 글자" style={[ui.input, { minHeight: 150 }]} multiline editable={!busy} value={text} onChangeText={setText} />{containsSensitiveText(text) && <Text style={[ui.subtitle, ui.danger]}>민감한 정보가 감지되었어요. 이 내용은 기기 내 AI로도 분석하지 않아요. 필요한 할 일은 직접 입력해 주세요.</Text>}</View>}

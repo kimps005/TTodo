@@ -1,4 +1,5 @@
 name: 시뮬레이터 수동 입력 UI 검사
+run-name: 'UI 검사 · ${{ inputs.scenario || ''app'' }} · ${{ inputs.text_size || ''large'' }}'
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +16,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ui-tests-${{ github.ref }}
+  group: ui-tests-${{ github.ref }}-${{ inputs.scenario || 'app' }}
   cancel-in-progress: true
 jobs:
   ui:

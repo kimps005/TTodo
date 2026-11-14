@@ -38,7 +38,7 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     finally { if (file.exists) file.delete(); }
   };
   return <Modal animationType="slide" onRequestClose={() => { if (!busy) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body}>
-    <Text style={ui.eyebrow}>DEVELOPMENT ONLY</Text><Text style={ui.title}>한국어 AI 평가</Text><Text style={ui.subtitle}>합성 문장 24개만 사용해요. 개인 캡처와 할 일은 읽거나 저장하지 않고, 외부 API도 호출하지 않아요.</Text>
+    <Text style={ui.eyebrow}>DEVELOPMENT ONLY</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>한국어 AI 평가</Text><Text style={ui.subtitle}>합성 문장 24개만 사용해요. 개인 캡처와 할 일은 읽거나 저장하지 않고, 외부 API도 호출하지 않아요.</Text>
     <Text style={ui.small}>이 결과는 제목·날짜·담당을 사람이 대조하기 위한 자료예요. 실행 성공을 정확도 달성으로 판단하지 않아요. 글자가 없는 사례는 AI 호출 없이 빈 결과로 처리해요.</Text>
     <Text style={ui.section}>{progress}</Text><Button title="합성 데이터로 기기 내 AI 평가" disabled={busy} onPress={() => void run()} />
     <Button secondary title="현재 분석 종료 후 중단" disabled={!busy} onPress={() => controller.current?.abort()} />

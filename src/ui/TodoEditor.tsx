@@ -19,7 +19,7 @@ export function TodoEditor({ todo, save, remove, close }: { todo: Todo; save: (i
   const act = async (fn: () => Promise<void>) => { if (working.current) return; working.current = true; setBusy(true); try { await fn(); close(); } catch (e) { Alert.alert('변경하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-      <Text style={ui.eyebrow}>TASK DETAILS</Text><Text style={ui.title}>할 일 다듬기</Text>
+      <Text style={ui.eyebrow}>TASK DETAILS</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>할 일 다듬기</Text>
       <Text style={ui.label}>할 일</Text><TextInput accessibilityLabel="할 일 제목" editable={!busy} style={ui.input} value={title} onChangeText={setTitle} multiline maxLength={400} />
       <Text style={ui.label}>메모</Text><TextInput accessibilityLabel="할 일 메모" editable={!busy} style={[ui.input, { minHeight: 110 }]} value={description} onChangeText={setDescription} multiline maxLength={4000} />
       <Text style={ui.label}>마감 날짜</Text>
