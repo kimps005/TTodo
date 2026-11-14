@@ -34,13 +34,17 @@
 
 ## 별도 수동 입력 UI 검사
 
-`ui-tests.yml`은 수동 실행용이며, GitHub macOS 시뮬레이터에서 XCTest로 실제 화면의 온보딩 완료·수동 입력·프로세스 재실행 후 보존·제목 편집·삭제 취소·삭제 후 재실행을 확인합니다. 합성 제목만 사용하고 AI/OCR/알림/잠금 입력은 시험하지 않습니다.
+`ui-tests.yml`은 수동 실행용이며, GitHub macOS 시뮬레이터에서 XCTest로 실제 화면의 온보딩 완료·수동 입력·프로세스 재실행 후 보존·제목 편집·완료/미완료 전환·날짜만 있는 마감 보존·삭제 취소·삭제 후 재실행·키보드 완료 입력·설정의 전체 데이터 삭제와 온보딩/미저장 입력 초기화를 검사합니다. 합성 제목만 사용하고 AI/OCR/알림/잠금 입력은 시험하지 않습니다. 확장한 흐름은 해당 커밋의 전체 실행이 통과해야 검증 완료로 인정합니다.
 
 `configure-ui-tests.cjs`가 생성된 프로젝트에 테스트 타깃과 스킴을 추가합니다. 일반 prebuild/plugin은 이 스크립트를 호출하지 않으며 테스트 타깃은 앱의 의존성이나 배포 제품에 포함하지 않습니다. `SKIP_INSTALL=YES`이고 스킴의 archive 참여도 꺼 둡니다. 실제 실행 전에는 준비 상태로만 표시하며, 성공 후에도 실기기·오프라인 네트워크 차단·VoiceOver 완료로 해석하지 않습니다.
 
 산출물은 `ui-tests` artifact의 `report.json`, 로그와 `results.xcresult`입니다. 새 일회성 시뮬레이터를 사용하며 종료 후 해당 기기만 삭제합니다. 사용자 노트북의 UI는 조작하지 않습니다. [Apple XCUIApplication API](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication)를 사용한 코드 검사입니다.
 
 ## 확인된 실행 결과
+
+[b475ba3 Intel 품질 실행](https://github.com/kimps005/TTodo/actions/runs/43504230297): core/ios 성공. 실제 Swift 저장소·캡처·JSON 계약·합성 한국어 Vision OCR 실행과 앱·위젯·공유 확장 arm64 교차 컴파일을 통과했다. Intel에서 macOS OCR을 실행한 결과이며 실제 iPhone OCR이나 기기 내 AI 생성/정확도는 미검증이다.
+
+[1fd8b6d 확장 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43504705317): 1개 실행/1개 실패. 완료/미완료 재실행·날짜만 있는 마감 보존·삭제 취소/삭제 후 재실행을 지난 뒤 키보드 완료 입력에서 실패했다. 실패 시점 접근성 트리에 입력한 `CI reset task`의 마지막 글자가 빠진 `CI reset tas`가 저장됐다. 제출 이벤트가 React 상태보다 먼저 도착할 수 있는 경로를 수정해 `nativeEvent.text`를 저장하도록 했으며 수정 후 재실행 결과는 별도로 확인한다. 전체 데이터 삭제 검증에는 도달하지 않았으므로 이전 UI 성공으로 대체하지 않는다.
 
 [f04990a 실제 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43497127233): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정한 XCTest 1개 실행·1개 통과, 실패/건너뜀 0. 합성 제목을 실제 화면으로 입력하고 프로세스 재실행 보존·제목 편집과 저장 일치·삭제 취소 후 편집 화면 유지·개별 삭제 후 재실행을 확인했다. 입력 중 화면·편집 목록·삭제 후 빈 목록을 직접 시각 확인했다. 당시 완료 상태 변경·마감 편집·전체 데이터 삭제는 이 테스트에 포함하지 않았다.
 
