@@ -1,6 +1,8 @@
 const manualFlow = 'testManualTaskLifecycleAndDataReset';
+const largeTextFlow = 'testLargeTextInputEditingAndNavigation';
 
-function validateManualUITestResult(summary, tests) {
+function validateManualUITestResult(summary, tests, flow = manualFlow) {
+  if (![manualFlow, largeTextFlow].includes(flow)) throw new Error('Unknown UI flow.');
   const cases = [];
   function visit(nodes) {
     if (!Array.isArray(nodes)) return;
@@ -13,9 +15,9 @@ function validateManualUITestResult(summary, tests) {
   visit(tests?.testNodes);
   const test = cases[0];
   if (summary?.result !== 'Passed' || summary.totalTestCount !== 1 || summary.passedTests !== 1 || summary.failedTests !== 0 || summary.skippedTests !== 0 || summary.expectedFailures !== 0 ||
-    cases.length !== 1 || test.nodeIdentifier !== `TTodoUITests/${manualFlow}()` || test.result !== 'Passed') {
-    throw new Error('The specified manual UI flow must run once and pass without skipped or failed tests.');
+    cases.length !== 1 || test.nodeIdentifier !== `TTodoUITests/${flow}()` || test.result !== 'Passed') {
+    throw new Error('The specified UI flow must run once and pass without skipped or failed tests.');
   }
-  return { flow: manualFlow, total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests };
+  return { flow, total: summary.totalTestCount, passed: summary.passedTests, failed: summary.failedTests, skipped: summary.skippedTests };
 }
 module.exports = { validateManualUITestResult };

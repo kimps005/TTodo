@@ -272,3 +272,10 @@
 ## Dynamic Type 시뮬레이터 검사 착수
 - PRD 13.2/13.4의 Dynamic Type·다양한 설정 검증을 이어간다. Apple 공식 UIContentSizeCategory 문서에서 접근성 최대 글자 크기 범주를 확인했다. 시뮬레이터 명령의 구체적인 값과 조회 방식은 실제 SDK 도움말로 먼저 확인한다.
 - 사용자 노트북 UI를 조작하지 않고 무료 macOS 실행기에서 설치 SDK·simctl ui 도움말·런타임 목록만 수집하는 수동 workflow를 추가했다. 명령 지원 확인과 실제 큰 글자 화면 검증은 별도이며 아직 통과로 기록하지 않는다.
+
+## 최대 접근성 글자 검사 준비
+- [실제 SDK 도움말 확인](https://github.com/kimps005/TTodo/actions/runs/43541690522) 성공. simctl ui의 content_size 설정/조회와 accessibility-extra-extra-extra-large 값을 설치 SDK에서 확인했다. Apple 공식 UIContentSizeCategory 문서도 최대 접근성 범주를 명시한다.
+- 수동 UI 실행에 기본 large와 최대 접근성 크기 선택을 추가했다. 새 일회성 CI 시뮬레이터에 설정 후 조회 값이 정확히 같아야 검사하며 보고서에 실제 값을 남긴다. SDK 도움말은 stdout/stderr 모두 보존한다.
+- 최대 크기에서는 온보딩 스크롤·키보드 저장·목록/편집·키보드 중 탭 이동·미저장 입력 보존의 별도 XCTest를 정확히 1개 선택해 실행한다. 기본 전체 삭제 흐름은 별도 선택으로 유지하고 서로의 통과 결과를 대신 인정하지 않는다.
+- 큰 화면 높이와 화면 위의 편집칸을 찾기 위해 제한된 양방향 스크롤 탐색을 지원한다. 앱에 강제 폰트 설정이나 데이터 주입을 넣지 않는다.
+- 로컬 52개 테스트·타입·스크립트 구문·workflow YAML·diff 통과. 최대 글자 실제 화면/조작과 새 SDK 설정 조회는 macOS CI 실행 전이다. VoiceOver·실제 iPhone 접근성 완료로 표시하지 않는다.

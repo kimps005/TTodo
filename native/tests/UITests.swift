@@ -4,9 +4,16 @@ final class TTodoUITests: XCTestCase {
   @MainActor private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
     // Offscreen React Native children may be absent from the accessibility tree.
     // Search by scrolling before requiring existence, with a bounded attempt count.
-    for _ in 0..<8 {
-      if element.waitForExistence(timeout: 1) && element.isHittable { return }
-      app.scrollViews.firstMatch.swipeUp()
+    let scroll = app.scrollViews.firstMatch
+    for searchDown in [false, true] {
+      for _ in 0..<16 {
+        if element.waitForExistence(timeout: 1) {
+          if element.isHittable { return }
+          if element.frame.midY < scroll.frame.minY { scroll.swipeDown() }
+          else { scroll.swipeUp() }
+        } else if searchDown { scroll.swipeDown() }
+        else { scroll.swipeUp() }
+      }
     }
     XCTAssertTrue(element.exists)
     XCTAssertTrue(element.isHittable)
@@ -123,5 +130,35 @@ final class TTodoUITests: XCTestCase {
     assertTaskMissing(app, title: resetTitle)
     assertTaskMissing(app, title: "CI unsaved private draft")
     screenshot(app, name: "07-reset-empty-list")
+  }
+
+  @MainActor func testLargeTextInputEditingAndNavigation() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launch()
+    XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
+    screenshot(app, name: "large-01-onboarding-top")
+    tap(app.buttons["이 설정으로 시작하기"], in: app)
+    let input = app.textFields["새 할 일"]
+    tap(input, in: app); input.typeText("CI large text task\n")
+    let stored = row(app, title: "CI large text task")
+    reveal(stored, in: app)
+    screenshot(app, name: "large-02-saved-task")
+    tap(stored, in: app)
+    let title = app.textViews["할 일 제목"]
+    reveal(title, in: app)
+    XCTAssertEqual((title.value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), "CI large text task")
+    screenshot(app, name: "large-03-editor")
+    tap(app.buttons["닫기"], in: app)
+    tap(input, in: app); input.typeText("CI large unsaved draft")
+    screenshot(app, name: "large-04-keyboard-tabs")
+    tap(control(app, label: "설정"), in: app)
+    reveal(app.staticTexts["내 방식으로"], in: app)
+    screenshot(app, name: "large-05-settings")
+    tap(control(app, label: "할 일"), in: app)
+    reveal(input, in: app)
+    XCTAssertEqual(input.value as? String, "CI large unsaved draft")
+    screenshot(app, name: "large-06-preserved-draft")
   }
 }

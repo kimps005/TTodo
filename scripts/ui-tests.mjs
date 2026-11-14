@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import resultValidation from './ui-test-result.cjs';
@@ -8,6 +8,9 @@ const output = path.resolve('artifacts/ui-tests'); mkdirSync(output, { recursive
 const resultPath = path.join(output, 'results.xcresult');
 const run = (command, args, options = {}) => execFileSync(command, args, { encoding: 'utf8', timeout: 240000, maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 const sim = (...args) => run('xcrun', ['simctl', ...args]);
+const textSize = process.env.TTODO_UI_TEXT_SIZE ?? 'large';
+if (!['large', 'accessibility-extra-extra-extra-large'].includes(textSize)) throw new Error('Unsupported UI text size.');
+const flow = textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { commit: process.env.GITHUB_SHA ?? null, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
 let device;
 try {
@@ -20,13 +23,21 @@ try {
   report.phase = 'boot'; console.log('UI tests: booting the isolated CI simulator');
   sim('boot', device);
   writeFileSync(path.join(output, 'boot.log'), run('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 600000 }));
+  report.phase = 'text-size';
+  const uiHelp = spawnSync('xcrun', ['simctl', 'help', 'ui'], { encoding: 'utf8', timeout: 60000 });
+  const helpText = (uiHelp.stdout ?? '') + (uiHelp.stderr ?? '');
+  writeFileSync(path.join(output, 'simctl-ui-help.txt'), helpText);
+  if (uiHelp.status !== 0 || !helpText.includes(textSize)) throw new Error('The installed SDK does not document the requested text size.');
+  sim('ui', device, 'content_size', textSize);
+  report.text_size = sim('ui', device, 'content_size');
+  if (report.text_size !== textSize) throw new Error('The simulator did not confirm the requested text size.');
   report.phase = 'test'; console.log('UI tests: building and running the synthetic manual task flow');
-  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
+  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-only-testing:TTodoUITests/TTodoUITests/' + flow, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
   const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', resultPath]));
   const tests = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', resultPath]));
   writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));
   writeFileSync(path.join(output, 'tests.json'), JSON.stringify(tests, null, 2));
-  report.tests = resultValidation.validateManualUITestResult(summary, tests);
+  report.tests = resultValidation.validateManualUITestResult(summary, tests, flow);
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);

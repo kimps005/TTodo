@@ -31,3 +31,12 @@ test('집계와 개별 테스트 ID·통과 상태가 일치해야 하며 이름
   assert.throws(() => validateManualUITestResult(summary, { note: passedCase.name }));
   assert.equal(validateManualUITestResult(summary, tests).total, 1);
 });
+
+test('최대 글자 흐름과 기본 전체 흐름의 실행 결과를 서로 대신 인정하지 않는다', () => {
+  const flow = 'testLargeTextInputEditingAndNavigation';
+  const large = { testNodes: [{ ...passedCase, nodeIdentifier: `TTodoUITests/${flow}()`, name: `${flow}()` }] };
+  assert.equal(validateManualUITestResult(summary, large, flow).flow, flow);
+  assert.throws(() => validateManualUITestResult(summary, large));
+  assert.throws(() => validateManualUITestResult(summary, tests, flow));
+  assert.throws(() => validateManualUITestResult(summary, large, 'arbitraryTest'));
+});
