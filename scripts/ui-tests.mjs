@@ -35,14 +35,17 @@ try {
   report.text_size = sim('ui', device, 'content_size');
   if (report.text_size !== textSize) throw new Error('The simulator did not confirm the requested text size.');
   if (scenario === 'photo-ocr') {
-    report.phase = 'synthetic-photo';
+    report.phase = 'photo-import-help';
     const mediaHelp = spawnSync('xcrun', ['simctl', 'help', 'addmedia'], { encoding: 'utf8', timeout: 60000 });
     const mediaHelpText = (mediaHelp.stdout ?? '') + (mediaHelp.stderr ?? '');
     writeFileSync(path.join(output, 'simctl-addmedia-help.txt'), mediaHelpText);
     if (mediaHelp.status !== 0 || !mediaHelpText.includes('addmedia')) throw new Error('The installed SDK does not document media import.');
+    report.phase = 'ocr-fixture-compile';
     const generator = path.join(output, 'ocr-fixture-generator');
     run('swiftc', ['modules/ttodo-native/ios/VisionOCR.swift', 'native/tests/OCRSmoke.swift', '-framework', 'AppKit', '-o', generator]);
+    report.phase = 'ocr-fixture-preflight';
     writeFileSync(path.join(output, 'ocr-fixture-preflight.log'), run(generator, [], { env: { ...process.env, TTODO_OCR_FIXTURE_OUTPUT: output } }));
+    report.phase = 'photo-import';
     sim('addmedia', device, path.join(output, 'synthetic-korean.png'));
     report.photo_fixture = 'generated-korean-png-only';
     report.macos_ocr_fixture_preflight = true;
@@ -58,6 +61,14 @@ try {
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);
+  // Preserve process diagnostics for SDK/runner failures without assuming the
+  // app or XCTest ran. Commands here only process the CI synthetic fixture.
+  if (error && typeof error === 'object' && 'path' in error) {
+    report.command_failure = { command: error.path, args: error.spawnargs, code: error.code, status: error.status, signal: error.signal };
+    for (const stream of ['stdout', 'stderr']) if (error[stream] != null) {
+      writeFileSync(path.join(output, `command-failure-${stream}.log`), String(error[stream]));
+    }
+  }
   if (device && /^[0-9a-f-]{36}$/i.test(device)) {
     try { sim('io', device, 'screenshot', path.join(output, 'failure.png')); } catch {}
   }
