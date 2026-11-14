@@ -10,6 +10,10 @@
 
 별도의 `OCRSmoke.swift`는 macOS에서 합성 한국어 PNG를 직접 그려 실제 프로덕션 Vision OCR 함수로 읽고, 빈 이미지와 잘못된 이미지도 확인합니다. 실제 OCR API 실행 검사이지만 명확한 글꼴의 합성 이미지 몇 가지에 한정되며 iPhone·실제 대화 캡처의 OCR 품질·Foundation Models 추출 정확도와 구분합니다. 원문 OCR 결과는 로그에 출력하지 않고 합성 입력 fixture만 진단 artifact에 남깁니다.
 
+## 네이티브 확장 단독 컴파일
+
+`native-extensions.yml`은 무료 Intel 실행기에서 생성된 `TTodoShare`·`TTodoWidgets` 타깃을 실제 iOS Simulator SDK/arm64로 각각 빌드하는 수동 검사다. 두 타깃은 React Native나 CocoaPods 라이브러리를 사용하지 않으므로 Pods 설치와 앱 전체 빌드 전에 확장 Swift 오류를 분리해 확인할 수 있다. 서명·설치·앱/Expo 브리지 링크·실제 확장 실행은 검사하지 않는다. 전체 `quality.yml`과 실기기 검증은 계속 별도로 필요하다.
+
 ## 시뮬레이터 실행 검사
 
 `simulator-preview.yml`은 수동 실행용입니다.

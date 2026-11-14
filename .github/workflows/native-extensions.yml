@@ -1,0 +1,34 @@
+name: 네이티브 확장 단독 컴파일
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-extensions-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  extensions:
+    runs-on: macos-26-intel
+    timeout-minutes: 20
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - name: Compile native extension targets with the actual simulator SDK
+        run: |
+          set -o pipefail
+          for target in TTodoShare TTodoWidgets; do
+            xcodebuild -project ios/TTodo.xcodeproj -target "$target" -configuration Debug -sdk iphonesimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO SYMROOT="$RUNNER_TEMP/ttodo-extensions" OBJROOT="$RUNNER_TEMP/ttodo-extension-objects" build 2>&1 | tee "$target-build.log"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-extension-build-logs
+          path: '*-build.log'
+          retention-days: 7
