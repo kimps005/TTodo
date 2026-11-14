@@ -20,6 +20,7 @@ import { ModelEvaluation } from './src/dev/ModelEvaluation';
 import { analysisReviewRoute } from './src/notifications/route';
 import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibilityChoices';
 import { isHomeLink } from './src/navigation/route';
+import { shareTemporaryExport } from './src/data/shareTemporaryExport';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function requestLockRefresh() {
@@ -121,8 +122,12 @@ function Application() {
   const exportData = () => void run(async () => {
     if (!(await Sharing.isAvailableAsync())) throw new Error('이 기기에서는 파일 공유를 사용할 수 없어요.');
     const file = new File(Paths.cache, 'TTodo-export.json');
-    try { file.create({ overwrite: true }); await file.write(await repo.exportData()); await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }); }
-    finally { if (file.exists) file.delete(); }
+    const result = await shareTemporaryExport({
+      write: async () => { const data = await repo.exportData(); file.create({ overwrite: true }); await file.write(data); },
+      share: () => Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }),
+      remove: () => { if (file.exists) file.delete(); },
+    });
+    if (!result.cleaned) Alert.alert('임시 파일을 정리하지 못했어요', '남은 내보내기 파일은 다음 앱 실행 때 다시 정리해요.');
   });
   const deleteData = () => Alert.alert('모든 데이터를 삭제할까요?', '할 일, 분석 내역과 설정이 삭제돼요. 복구할 수 없어요.', [{ text: '취소', style: 'cancel' }, { text: '모두 삭제', style: 'destructive', onPress: () => void run(async () => {
     const deletion = await repo.deleteAll();

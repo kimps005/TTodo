@@ -8,15 +8,18 @@ import { evaluateProvider } from '../ai/evaluate';
 import { onDeviceProvider, availabilityLabels } from '../ai/onDeviceProvider';
 import { Button } from '../ui/components';
 import { ui } from '../ui/theme';
+import { shareTemporaryExport } from '../data/shareTemporaryExport';
 
 export function ModelEvaluation({ close }: { close: () => void }) {
   const [progress, setProgress] = useState('아직 평가하지 않았어요.');
   const [report, setReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const exporting = useRef(false);
+  const [sharing, setSharing] = useState(false);
   useEffect(() => () => controller.current?.abort(), []);
   const run = async () => {
-    if (controller.current) return;
+    if (controller.current || exporting.current) return;
     const status = nativeBridge?.localAIAvailability() ?? 'missing_native';
     if (status !== 'available') { Alert.alert('평가를 시작할 수 없어요', availabilityLabels[status] ?? availabilityLabels.unavailable); return; }
     const abort = new AbortController(); controller.current = abort; setBusy(true); setReport(null);
@@ -28,21 +31,26 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     finally { controller.current = null; setBusy(false); }
   };
   const exportReport = async () => {
-    if (!report) return;
+    if (!report || exporting.current || controller.current) return;
+    exporting.current = true; setSharing(true);
     const file = new File(Paths.cache, 'TTodo-model-evaluation.json');
     try {
       if (!await Sharing.isAvailableAsync()) throw new Error();
-      file.create({ overwrite: true }); await file.write(report);
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
+      const result = await shareTemporaryExport({
+        write: async () => { file.create({ overwrite: true }); await file.write(report); },
+        share: () => Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }),
+        remove: () => { if (file.exists) file.delete(); },
+      });
+      if (!result.cleaned) Alert.alert('임시 파일을 정리하지 못했어요', '남은 평가 파일은 다음 앱 실행 때 다시 정리해요.');
     } catch { Alert.alert('평가 파일을 내보내지 못했어요', '다시 시도해 주세요.'); }
-    finally { if (file.exists) file.delete(); }
+    finally { exporting.current = false; setSharing(false); }
   };
-  return <Modal animationType="slide" onRequestClose={() => { if (!busy) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body}>
+  return <Modal animationType="slide" onRequestClose={() => { if (!busy && !exporting.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body}>
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>DEVELOPMENT ONLY</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>한국어 AI 평가</Text><Text style={ui.subtitle}>합성 문장 24개만 사용해요. 개인 캡처와 할 일은 읽거나 저장하지 않고, 외부 API도 호출하지 않아요.</Text>
     <Text style={ui.small}>이 결과는 제목·날짜·담당을 사람이 대조하기 위한 자료예요. 실행 성공을 정확도 달성으로 판단하지 않아요. 글자가 없는 사례는 AI 호출 없이 빈 결과로 처리해요.</Text>
-    <Text style={ui.section}>{progress}</Text><Button title="합성 데이터로 기기 내 AI 평가" disabled={busy} onPress={() => void run()} />
+    <Text style={ui.section}>{progress}</Text><Button title="합성 데이터로 기기 내 AI 평가" disabled={busy || sharing} onPress={() => void run()} />
     <Button secondary title="현재 분석 종료 후 중단" disabled={!busy} onPress={() => controller.current?.abort()} />
-    <Button secondary title="평가 결과 내보내기" disabled={busy || !report} onPress={() => void exportReport()} />
-    <Button secondary title="닫기" disabled={busy} onPress={close} />
+    <Button secondary title="평가 결과 내보내기" disabled={busy || sharing || !report} onPress={() => void exportReport()} />
+    <Button secondary title="닫기" disabled={busy || sharing} onPress={close} />
   </ScrollView></SafeAreaView></Modal>;
 }
