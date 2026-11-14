@@ -81,7 +81,9 @@ private struct CaptureShareView: View {
   }
   private func analyze(reanalyze: Bool = false) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
-    if reanalyze { items = []; similar = []; if let analysisId { CaptureNotifications.clearAnalysis(analysisId) } }
+    // Keep the draft disabled while reading the image. If registration never
+    // starts, a read failure must not discard edits to still-pending proposals.
+    if reanalyze, let analysisId { CaptureNotifications.clearAnalysis(analysisId) }
     operation = Task {
       defer { working = false; operation = nil }
       do {
@@ -99,7 +101,11 @@ private struct CaptureShareView: View {
         else { message = proposals.isEmpty ? (result.duplicate ? "검토할 제안이 없어요. 이미 처리되었거나 보존 기간이 지난 결과는 앱 분석함에서 확인할 수 있어요." : "이 이미지에서 할 일을 찾지 못했어요.") : "제목·날짜·원문 근거를 확인하고 필요한 항목만 저장하세요." }
       } catch {
         guard !Task.isCancelled else { return }
-        failure = (error as? LocalizedError)?.errorDescription ?? "기기 내 분석을 마치지 못했어요. 앱에서 AI 준비 상태를 확인하고 다시 시도해 주세요."
+        let detail = (error as? LocalizedError)?.errorDescription ?? "기기 내 분석을 마치지 못했어요. 앱에서 AI 준비 상태를 확인하고 다시 시도해 주세요."
+        // A failed replacement may already have removed old IDs. Reconcile
+        // against storage rather than restoring a stale proposal snapshot.
+        if analysisId != nil { _ = refreshReview() }
+        failure = detail
       }
     }
   }
