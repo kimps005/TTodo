@@ -6,6 +6,7 @@
 ## 품질 검사
 
 `quality.yml`은 TypeScript 타입/도메인/SQLite 테스트, 의존성 보안 검사, iOS Hermes 번들, 실제 Swift 저장소와 캡처 처리 로직 실행, iOS 앱·Widget·Share Extension 컴파일을 수행합니다.
+push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 변경이 없는 JS 전용 후속 작업은 수동 `core_only=true`로 core만 검사할 수 있다. 이 경우 ios는 건너뛰므로 전체 네이티브 빌드 성공이나 실제 화면 검증으로 기록하지 않는다.
 캡처 처리 실행 검사는 OCR/모델 응답을 테스트에서 주입합니다. 실제 OCR 정확도와 AI 정확도 점수를 측정한 결과가 아닙니다.
 
 별도의 `OCRSmoke.swift`는 macOS에서 합성 한국어 PNG를 직접 그려 실제 프로덕션 Vision OCR 함수로 읽고, 빈 이미지와 잘못된 이미지도 확인합니다. 실제 OCR API 실행 검사이지만 명확한 글꼴의 합성 이미지 몇 가지에 한정되며 iPhone·실제 대화 캡처의 OCR 품질·Foundation Models 추출 정확도와 구분합니다. 원문 OCR 결과는 로그에 출력하지 않고 합성 입력 fixture만 진단 artifact에 남깁니다.

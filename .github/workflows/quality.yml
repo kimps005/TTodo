@@ -5,6 +5,10 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      core_only:
+        description: 'JS 전용 변경 검사 (네이티브 빌드 성공으로 간주하지 않음)'
+        type: boolean
+        default: false
       macos_runner:
         description: '네이티브 컴파일 실행기 (ARM 용량 부족 시 Intel 선택)'
         type: choice
@@ -30,6 +34,7 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npx expo export --platform ios
   ios:
+    if: ${{ !inputs.core_only }}
     runs-on: ${{ inputs.macos_runner || 'macos-26' }}
     timeout-minutes: 45
     env:

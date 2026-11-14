@@ -53,7 +53,15 @@ function Application() {
     // Notification settings must not prevent offline tasks from opening.
     setPermission(await Notifications.getPermissionsAsync().catch(() => null));
   }, []);
-  const boot = useCallback(async () => { try { setError(''); clearTemporaryFiles(); const repository = await openRepository(); await refresh(repository); setRepo(repository); requestLockRefresh(); } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); } }, [refresh]);
+  const boot = useCallback(async () => {
+    try {
+      setError('');
+      let cleanupFailed = false;
+      try { clearTemporaryFiles(); } catch { cleanupFailed = true; }
+      const repository = await openRepository(); await refresh(repository); setRepo(repository); requestLockRefresh();
+      if (cleanupFailed) Alert.alert('임시 파일 일부가 남아 있어요', '할 일은 계속 사용할 수 있어요. 남은 임시 이미지·내보내기 파일은 다음 앱 실행 때 다시 정리해요.');
+    } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); }
+  }, [refresh]);
   useEffect(() => { void boot(); }, [boot]);
   useEffect(() => {
     let alive = true;

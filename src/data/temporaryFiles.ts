@@ -1,14 +1,16 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import { randomUUID } from 'expo-crypto';
 import { isCacheFileUri } from './temporaryPath';
+import { cleanupTemporaryEntries } from './temporaryCleanup';
 const captureDirectory = () => new Directory(Paths.cache, 'ttodo-captures');
 export function clearTemporaryFiles() {
-  const directory = captureDirectory();
-  if (directory.exists) directory.delete();
-  for (const name of ['TTodo-export.json', 'TTodo-model-evaluation.json']) {
-    const exported = new File(Paths.cache, name);
-    if (exported.exists) exported.delete();
-  }
+  cleanupTemporaryEntries([
+    () => { const directory = captureDirectory(); if (directory.exists) directory.delete(); },
+    ...['TTodo-export.json', 'TTodo-model-evaluation.json'].map(name => () => {
+      const exported = new File(Paths.cache, name);
+      if (exported.exists) exported.delete();
+    }),
+  ]);
 }
 export function ownTemporaryImage(uri: string): string {
   const original = new File(uri);
