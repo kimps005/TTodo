@@ -47,6 +47,12 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 ## 확인된 실행 결과
 
+[64e0e7b 확장 UI 전체 실행](https://github.com/kimps005/TTodo/actions/runs/43538482846): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 지정한 XCTest 1개 실행·1개 통과, 실패/건너뜀/예상 실패 0. Release 앱·두 확장 빌드와 온보딩·입력·재실행 보존·편집·완료/미완료·날짜만 있는 마감·삭제 취소/삭제·키보드 전체 문자열 단일 저장·미저장 입력 중 설정 진입·전체 데이터 삭제·입력 초기화·재실행 후 온보딩 초기화와 실제 빈 목록까지 통과했다. 최신 결과 집계 도구로 SDK JSON을 다시 대조했고 설정/초기화/0개 목록 화면도 직접 확인했다. 이후 cfa9383 임시 정리 실패 격리 변경은 포함하지 않는다.
+
+[cfa9383 JS 전용 품질 실행](https://github.com/kimps005/TTodo/actions/runs/43540173499): 51개 테스트·타입·보안·실제 iOS Hermes 성공. ios는 의도적으로 skipped다. 실제 iOS 캐시 접근 실패 경고나 네이티브 빌드 성공으로 해석하지 않는다.
+
+[b0eba70 확장 단독 실행](https://github.com/kimps005/TTodo/actions/runs/43536680852): 실제 iOS Simulator SDK 26.5/arm64에서 공유·위젯 각각 BUILD SUCCEEDED. 공유 재분석 실패 시 유효한 편집 유지 변경 포함. 이 Swift 변경은 위 64e0e7b 전체 Release 빌드에서도 컴파일됐다. 실제 공유 호스트의 메모리/수명/AI 동작은 미검증이다.
+
 [16a1d99 키보드 제출 수정 후 실행](https://github.com/kimps005/TTodo/actions/runs/43534761791): Release 앱/확장 컴파일 성공, 전체 XCTest는 1개 실행/1개 실패. 마지막 글자를 포함한 `CI reset task`가 정확히 한 개 저장되는 검사는 통과했고 첨부 화면도 확인했다. 이후 미저장 입력의 키보드가 설정 탭을 덮어 탭 이동이 실행되지 않았다. 실패 시점 트리는 여전히 할 일 화면이었고 키보드가 열린 상태였다. 하단 탭을 키보드 회피 영역 안으로 옮기고 설정 화면 진입 검사를 추가했으며 수정 후 결과는 새 실행에서 확인한다. 전체 삭제 검증은 아직 통과하지 않았다.
 
 [b475ba3 Intel 품질 실행](https://github.com/kimps005/TTodo/actions/runs/43504230297): core/ios 성공. 실제 Swift 저장소·캡처·JSON 계약·합성 한국어 Vision OCR 실행과 앱·위젯·공유 확장 arm64 교차 컴파일을 통과했다. Intel에서 macOS OCR을 실행한 결과이며 실제 iPhone OCR이나 기기 내 AI 생성/정확도는 미검증이다.
