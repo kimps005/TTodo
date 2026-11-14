@@ -26,6 +26,7 @@ test('합성 공유 호스트는 기존 앱 의존성과 배포를 바꾸지 않
     assert.equal(JSON.stringify(app.firstTarget.dependencies), originalDependencies);
     assert.ok(targets[ui].dependencies.some((item: { value: string }) => objects.PBXTargetDependency[item.value].target === id));
     assert.equal(target.productType, '"com.apple.product-type.application"');
+    assert.equal(target.dependencies.length, 0, '호스트 단독 컴파일이 앱이나 UI runner에 의존하면 안 된다');
     assert.equal(project.pbxFileReferenceSection()[target.productReference].path, 'TTodoCIShareHost.app');
     for (const ref of project.pbxXCConfigurationList()[target.buildConfigurationList].buildConfigurations) {
       const settings = project.pbxXCBuildConfigurationSection()[ref.value].buildSettings;

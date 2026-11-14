@@ -15,6 +15,8 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 `native-extensions.yml`은 무료 Intel 실행기에서 생성된 `TTodoShare`·`TTodoWidgets` 타깃을 실제 iOS Simulator SDK/arm64로 각각 빌드하는 수동 검사다. 두 타깃은 React Native나 CocoaPods 라이브러리를 사용하지 않으므로 Pods 설치와 앱 전체 빌드 전에 확장 Swift 오류를 분리해 확인할 수 있다. 서명·설치·앱/Expo 브리지 링크·실제 확장 실행은 검사하지 않는다. 전체 `quality.yml`과 실기기 검증은 계속 별도로 필요하다.
 
+기본 `target_set=extensions`는 제품 확장 두 개를 유지한다. `share-host`를 명시하면 CI 전용 호스트만 생성해 같은 SDK로 단독 컴파일한다. 호스트는 앱/테스트 runner를 의존하지 않으며 이 성공을 공유 확장 실행 성공으로 해석하지 않는다.
+
 ## 시뮬레이터 실행 검사
 
 `simulator-preview.yml`은 수동 실행용입니다.

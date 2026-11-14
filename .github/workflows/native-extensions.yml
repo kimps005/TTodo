@@ -1,6 +1,12 @@
-name: 네이티브 확장 단독 컴파일
+name: 네이티브 타깃 단독 컴파일
 on:
   workflow_dispatch:
+    inputs:
+      target_set:
+        description: '제품 확장 또는 CI 전용 합성 공유 호스트'
+        type: choice
+        default: extensions
+        options: [extensions, share-host]
 permissions:
   contents: read
 concurrency:
@@ -12,6 +18,7 @@ jobs:
     timeout-minutes: 20
     env:
       CI: '1'
+      TTODO_NATIVE_TARGET_SET: ${{ inputs.target_set || 'extensions' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,10 +27,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx expo prebuild --platform ios --no-install
+      - name: Configure isolated synthetic share host
+        if: inputs.target_set == 'share-host'
+        run: TTODO_UI_SCENARIO=share-extension node scripts/configure-ui-tests.cjs
       - name: Compile native extension targets with the actual simulator SDK
         run: |
           set -o pipefail
-          for target in TTodoShare TTodoWidgets; do
+          case "$TTODO_NATIVE_TARGET_SET" in
+            extensions) targets=(TTodoShare TTodoWidgets) ;;
+            share-host) targets=(TTodoCIShareHost) ;;
+            *) echo "Unknown native target set"; exit 1 ;;
+          esac
+          for target in "${targets[@]}"; do
             xcodebuild -project ios/TTodo.xcodeproj -target "$target" -configuration Debug -sdk iphonesimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO SYMROOT="$RUNNER_TEMP/ttodo-extensions" OBJROOT="$RUNNER_TEMP/ttodo-extension-objects" build 2>&1 | tee "$target-build.log"
           done
       - uses: actions/upload-artifact@v4
