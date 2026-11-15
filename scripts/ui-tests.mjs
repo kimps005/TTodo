@@ -58,6 +58,8 @@ try {
   writeFileSync(path.join(output, 'tests.json'), JSON.stringify(tests, null, 2));
   report.tests = resultValidation.validateManualUITestResult(summary, tests, flow);
   report.ios_ocr_tested = scenario === 'photo-ocr';
+  report.notification_denial_tested = flow === 'testManualTaskLifecycleAndDataReset';
+  report.system_app_settings_tested = flow === 'testManualTaskLifecycleAndDataReset';
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);

@@ -2,10 +2,15 @@
 
 기준일: 2026-11-15 (한국 시간)
 
+## 알림 권한 거부·기기 설정 왕복 UI 검사 준비
+- PRD 12.2·권한 거부 경로에 맞춰 기존 전체 수동 입력 UI 검사를 보강했다. 새 CI 시뮬레이터의 실제 알림 요청에서 거부를 누르고, 거부 상태 표시·재요청 버튼 제거·앱 전용 기기 설정 이동을 확인한다. 권한/DB 상태 주입은 없다.
+- 설정에서 앱으로 돌아온 뒤 저장한 할 일과 미저장 입력 유지, 전체 삭제·재실행 후 OS 권한은 여전히 거부로 표시되는지도 검사한다. 실제 알림 UI/설정 화면과 합성 앱 접근성 트리를 첨부한다. UI 테스트/workflow 변경 push는 기본 app/large 전체 검사를 자동 실행한다.
+- 로컬 74개 테스트·타입·구문·YAML·diff 통과. 새 Swift XCTest SDK 컴파일/실행과 알림 거부 성공은 CI 확인 전이며 실제 iPhone·AI/잠금 검증은 포함하지 않는다.
+
 ## 한국어 기본 언어와 지원 언어 선언 보완
 - PRD P0-12의 한국어 우선 지원을 점검했다. 실제 iPhoneOS 아카이브 로그에서 한국어 App Shortcut 문구를 en 언어로 학습하고 있었고 생성 플러그인은 기본/지원 언어를 선언하지 않았다. Apple의 CFBundleDevelopmentRegion·CFBundleLocalizations 및 언어 선택 문서를 확인했다.
 - 생성 Xcode 프로젝트의 기본 언어를 ko로 맞추고 앱·위젯·공유 확장 Info.plist에 기본 ko/지원 ko를 지정했다. JS에서 관리하는 한국어 UI도 번들 지원 언어로 선언한다. 재적용 중복 방지, 실제 생성 XML과 기존 entitlements 유지 검사를 보강했다. 로컬 74개 테스트·타입·구문·diff 통과.
-- 빌드 보고서에 실제 앱의 언어 메타데이터를 포함하고 프로젝트 생성 설정 변경 시 Release 아카이브도 검사하도록 연결했다. 수정 후 실제 SDK 메타데이터/한국어 단축어 학습은 CI 확인 전이며 한국어 Siri·잠금 실행·VoiceOver 실기기는 미검증이다.
+- [b2d7636 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43715163208)와 [iPhoneOS Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/43715163336) 모두 통과했다. 실제 SDK 로그에서 두 한국어 단축어 문구와 앱 이름을 ko로 학습하고 1개 locale을 아카이브한 것을 확인했다. ZIP digest·커밋·iPhoneOS 플랫폼·기본 ko/지원 [ko]·선언 12개를 직접 대조했다. 한국어 Siri·잠금 실행·VoiceOver 실기기는 미검증이다.
 
 ## 실제 iPhoneOS Release 아카이브 검사 통과
 - 계정 없이 가능한 후속 검증으로 iPhoneOS SDK·Release·arm64의 서명 없는 archive workflow를 추가했다. 기존 앱/위젯/공유 확장의 아카이브 포함과 메타데이터·실행 파일·개인정보 선언을 기록한다. 계정·프로비저닝·설치·배포·사이드로딩을 진행하지 않는다.
@@ -107,7 +112,7 @@
 - 홈, 할 일 편집, 분석함, 제안 검토, 설정 및 데이터 내보내기/삭제 UI 구현.
 - AI 제공자 인터페이스, 원문 근거·날짜·신뢰도·실제 할 일 여부 응답 검증, 민감 텍스트 제한 구현.
 - Apple Foundation Models 기기 내 추출 후보와 사진 선택→OCR→동의→추출→검토→승인 경로 연결. OS/기기/모델/한국어 준비 상태 확인. 외부 전송 없음. 실제 생성과 정확도는 미검증.
-- `npm test`: 실제 SQLite, 동시 승인, 스키마 이전, 평가셋/실행기, 동의 철회·재활성화 경합, 날짜 문맥·만료/중단 복구 경계와 임시 파일 오류 검사 등 69개 통과(최신 core CI). `npm run typecheck`: 통과.
+- `npm test`: SQLite·승인/마이그레이션·평가/입력 검증·동의 경합·시각 경계·임시 파일·개인정보 선언·한국어 프로젝트 생성 등 최근 CI 74개 통과. `npm run typecheck`: 통과. 이후 작업의 검증 범위는 위 최신 항목에서 구분한다.
 - Expo 전이 의존성 minimatch 취약점을 해당 의존성 범위의 override로 수정. 설치 시 보안 경고 0개.
 - 사진 선택/OCR과 앱 주요 흐름은 iPhone 16 Pro 시뮬레이터에서 일부 UI 검증 통과. 실제 iPhone 실행·시각 검증은 미완료. 네이티브 공유 저장소 없이는 iOS에서 별도 DB를 생성하지 않고 개발 빌드 필요 안내.
 - App Group SQLite, 잠금 이후 접근 정책(재부팅 후 최초 인증 필요), AddTodo App Intent, Vision 한국어/영어 OCR, WidgetKit 및 Live Activity 코드 구현.

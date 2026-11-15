@@ -43,7 +43,9 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 ## 별도 수동 입력 UI 검사
 
-`ui-tests.yml`은 수동 실행용이며, GitHub macOS 시뮬레이터에서 XCTest로 실제 화면의 온보딩 완료·수동 입력·프로세스 재실행 후 보존·제목 편집·완료/미완료 전환·날짜만 있는 마감 보존·삭제 취소·삭제 후 재실행·키보드 완료 입력·설정의 전체 데이터 삭제와 온보딩/미저장 입력 초기화를 검사합니다. 합성 제목만 사용하고 AI/OCR/알림/잠금 입력은 시험하지 않습니다. 확장한 흐름은 해당 커밋의 전체 실행이 통과해야 검증 완료로 인정합니다.
+`ui-tests.yml`은 수동 실행과 UI 테스트/workflow 변경 push에 연결되며, push는 기본 app/large 흐름을 실행합니다. GitHub macOS 시뮬레이터에서 XCTest로 실제 화면의 온보딩 완료·수동 입력·프로세스 재실행 후 보존·제목 편집·완료/미완료 전환·날짜만 있는 마감 보존·삭제 취소·삭제 후 재실행·키보드 완료 입력·설정의 전체 데이터 삭제와 온보딩/미저장 입력 초기화를 검사합니다. 합성 제목만 사용하고 기본 흐름에서 AI 생성/OCR·알림 전달/백그라운드 승인·잠금 입력은 시험하지 않습니다. 확장한 흐름은 해당 커밋의 전체 실행이 통과해야 검증 완료로 인정합니다.
+
+기본 전체 흐름에는 실제 알림 요청 거부·앱의 거부 상태 표시·재요청 버튼 제거·시스템의 TTodo 설정 페이지 이동·앱 복귀 후 저장 항목/미저장 입력 보존을 추가했습니다. 전체 데이터 삭제와 재실행 뒤에도 OS의 거부 상태는 유지되어야 합니다. 권한 값을 주입하거나 알림 전달 성공을 주장하지 않습니다. [Apple의 예상된 alert 처리 안내](https://developer.apple.com/videos/play/wwdc2020/10220/)에 따라 요청 직후 권한 alert를 직접 찾아 거부를 누르며, 시스템 설정 앱의 전경 상태와 해당 앱 페이지도 확인합니다. 실제 알림 UI·앱 설정 화면·합성 앱 접근성 트리를 첨부합니다. 지정 XCTest가 한 번 통과한 뒤에만 report의 notification_denial_tested/system_app_settings_tested를 기록합니다. 새 확장 흐름의 결과는 STATUS.md에서 구분합니다.
 
 `configure-ui-tests.cjs`가 생성된 프로젝트에 테스트 타깃과 스킴을 추가합니다. 일반 prebuild/plugin은 이 스크립트를 호출하지 않으며 테스트 타깃은 앱의 의존성이나 배포 제품에 포함하지 않습니다. `SKIP_INSTALL=YES`이고 스킴의 archive 참여도 꺼 둡니다. 실제 실행 전에는 준비 상태로만 표시하며, 성공 후에도 실기기·오프라인 네트워크 차단·VoiceOver 완료로 해석하지 않습니다.
 
@@ -54,6 +56,8 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 `scenario=share-extension`은 합성 PNG만 만드는 CI 전용 앱에서 [UIActivityViewController](https://developer.apple.com/documentation/uikit/uiactivityviewcontroller)로 실제 공유창을 열고 TTodo 확장의 동의 전 차단과 기존 수동 할 일 보존·분석 미생성을 검사한다. [XCUIApplication의 의존 앱 설치 규칙](https://developer.apple.com/documentation/xcuiautomation/xcuiapplication/init(bundleidentifier:))에 따라 테스트 타깃만 호스트를 빌드·설치한다. 일반 prebuild와 앱 배포 제품에는 호스트를 추가하지 않는다. 실제 OCR/모델 응답을 주입하지 않으며 AI 생성이나 공유 확장 전체 기능 통과로 해석하지 않는다. 앱과 공유 시나리오의 동시 실행 그룹은 분리해 서로 취소하지 않는다.
 
 ## 확인된 실행 결과
+
+[b2d7636 전체 CI](https://github.com/kimps005/TTodo/actions/runs/43715163208)와 [iPhoneOS 아카이브](https://github.com/kimps005/TTodo/actions/runs/43715163336): 74개 테스트·타입·보안·Hermes·Swift/합성 Vision OCR·앱/확장 시뮬레이터 빌드·실제 iPhoneOS Release 아카이브/선언 수집 통과. SDK 로그에서 두 한국어 단축어 문구와 앱 이름을 ko로 학습한 것을 확인했고 실제 보고서도 기본 ko/지원 [ko]다. 한국어 Siri·잠금 실행·VoiceOver 실기기는 미검증이며 후속 알림 거부 UI 보강은 이 실행 이후다.
 
 [c76df77 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43709090533): core/ios 모두 성공. 69개 테스트·타입·보안 취약점 0·실제 Hermes, Swift 저장소/캡처·계약·합성 한국어 Vision OCR과 앱·위젯·공유 확장 arm64 시뮬레이터 빌드를 통과했다. 초/밀리초/시간대별 만료 정리와 10분 중단 복구 유예 경계는 합성 입력의 실제 SQLite 회귀 검사로 확인했다. 실제 iPhone의 시각 변경·프로세스 수명·기기 내 모델·정확도·잠금 검증은 포함하지 않는다.
 

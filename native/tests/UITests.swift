@@ -111,6 +111,33 @@ final class TTodoUITests: XCTestCase {
     input.tap(); input.typeText("CI unsaved private draft")
     tap(control(app, label: "설정"), in: app)
     XCTAssertTrue(app.staticTexts["내 방식으로"].waitForExistence(timeout: 15), "The Settings tab must remain reachable with unsaved keyboard input.")
+    // Exercise the real OS permission prompt in this fresh CI simulator.
+    // No consent/permission values are injected into the app or its database.
+    let notRequested = control(app, label: "권한: 아직 요청하지 않음")
+    reveal(notRequested, in: app)
+    tap(app.buttons["알림 권한 요청"], in: app)
+    let permissionAlert = app.alerts.firstMatch
+    XCTAssertTrue(permissionAlert.waitForExistence(timeout: 20), "The real notification authorization prompt must appear.")
+    screenshot(app, name: "06-notification-request")
+    let permissionTree = XCTAttachment(string: app.debugDescription)
+    permissionTree.name = "notification-permission-tree"; permissionTree.lifetime = .keepAlways; add(permissionTree)
+    let deny = permissionAlert.buttons.matching(NSPredicate(format: "label == %@ OR label == %@ OR label == %@", "허용 안 함", "Don't Allow", "Don’t Allow")).firstMatch
+    XCTAssertTrue(deny.waitForExistence(timeout: 10)); deny.tap()
+    let denied = control(app, label: "권한: 허용되지 않음")
+    reveal(denied, in: app)
+    XCTAssertFalse(app.buttons["알림 권한 요청"].exists, "Denied notification permission must lead to system settings, not another prompt.")
+    screenshot(app, name: "06-notification-denied")
+    tap(app.buttons["기기 설정 열기"], in: app)
+    let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
+    XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 20))
+    XCTAssertTrue(settings.navigationBars["TTodo"].waitForExistence(timeout: 20), "The deep link must open this app's settings page.")
+    screenshot(settings, name: "06-system-app-settings")
+    app.activate()
+    tap(control(app, label: "할 일"), in: app)
+    reveal(input, in: app)
+    XCTAssertEqual(input.value as? String, "CI unsaved private draft", "Permission denial and settings navigation must preserve the unsaved draft.")
+    XCTAssertTrue(resetRow.exists, "Stored tasks must remain available without notification permission.")
+    tap(control(app, label: "설정"), in: app)
     screenshot(app, name: "06-settings-before-reset")
     tap(app.buttons["모든 데이터 삭제"], in: app)
     tap(app.alerts.buttons["모두 삭제"], in: app)
@@ -130,6 +157,10 @@ final class TTodoUITests: XCTestCase {
     assertTaskMissing(app, title: resetTitle)
     assertTaskMissing(app, title: "CI unsaved private draft")
     screenshot(app, name: "07-reset-empty-list")
+    tap(control(app, label: "설정"), in: app)
+    reveal(control(app, label: "권한: 허용되지 않음"), in: app)
+    XCTAssertFalse(app.buttons["알림 권한 요청"].exists, "Deleting app data must not pretend the OS permission was reset.")
+    screenshot(app, name: "08-denied-permission-after-reset")
   }
 
   @MainActor func testLargeTextInputEditingAndNavigation() throws {
