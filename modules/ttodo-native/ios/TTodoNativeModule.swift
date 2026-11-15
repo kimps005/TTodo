@@ -3,20 +3,20 @@ import Foundation
 import WidgetKit
 import UIKit
 import UserNotifications
+import OSLog
 
 public class TTodoNativeModule: Module {
+  private let settingsDiagnostics = Logger(subsystem: "app.ttodo.ci", category: "notification-settings")
   @MainActor private func openNotificationSettings() async -> Bool {
     guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
     // Only the isolated synthetic UI test opts in. Never record task content.
     let diagnostics = ProcessInfo.processInfo.environment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] == "1"
     if diagnostics {
       let settings = await UNUserNotificationCenter.current().notificationSettings()
-      NSLog("TTodoNotificationSettingsDiagnostic before bundle=%@ authorization=%ld appState=%ld url=%@",
-            Bundle.main.bundleIdentifier ?? "missing", settings.authorizationStatus.rawValue,
-            UIApplication.shared.applicationState.rawValue, url.absoluteString)
+      settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic before bundle=\(Bundle.main.bundleIdentifier ?? "missing", privacy: .public) authorization=\(settings.authorizationStatus.rawValue) appState=\(UIApplication.shared.applicationState.rawValue) url=\(url.absoluteString, privacy: .public)")
     }
     let opened = await UIApplication.shared.open(url)
-    if diagnostics { NSLog("TTodoNotificationSettingsDiagnostic after opened=%@", opened ? "true" : "false") }
+    if diagnostics { settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic after opened=\(opened, privacy: .public)") }
     return opened
   }
   private let storageQueue = DispatchQueue(label: "app.ttodo.sqlite")
