@@ -116,6 +116,18 @@ struct CaptureSmoke {
     let relative = raw.replacingOccurrences(of: text, with: "내일 자료 보내줘.")
     let guarded = try ExtractionValidator.validate(relative, sourceText: "내일 자료 보내줘.", messageDate: nil)
     check(guarded[0].due_at == nil && guarded[0].needs_confirmation)
+    struct DateContextCase: Decodable { let evidence: String; let message_date: String?; let keeps_due: Bool }
+    let dateContextData = try Data(contentsOf: URL(fileURLWithPath: "evaluation/date-context-seed.json"))
+    for item in try JSONDecoder().decode([DateContextCase].self, from: dateContextData) {
+      var rows = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [[String: Any]]
+      rows[0]["evidence_text"] = item.evidence
+      rows[0]["assignee"] = "사용자"; rows[0]["needs_confirmation"] = false
+      let json = String(decoding: try JSONSerialization.data(withJSONObject: rows), as: UTF8.self)
+      let result = try ExtractionValidator.validate(json, sourceText: item.evidence, messageDate: item.message_date)[0]
+      check(result.due_at == (item.keeps_due ? "2026-11-20" : nil))
+      check(result.due_precision == (item.keeps_due ? "date" : "unknown"))
+      check(result.needs_confirmation == !item.keeps_due && result.evidence_text == item.evidence)
+    }
     let bridgeData = try JSONEncoder().encode(guarded)
     let bridgeRows = try JSONSerialization.jsonObject(with: bridgeData) as! [[String: Any]]
     check(bridgeRows[0]["description"] is NSNull && bridgeRows[0]["due_at"] is NSNull && bridgeRows[0]["assignee"] is NSNull)

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { containsSensitiveText, enforceDateContext, validateExtraction } from '../src/ai/extraction';
 import sensitiveSeed from '../evaluation/sensitive-seed.json';
+import dateContextSeed from '../evaluation/date-context-seed.json';
 const task = { is_actionable: true, title: '발표자료 보내기', description: null, due_at: null, due_precision: 'unknown', assignee: null, confidence: .8, evidence_text: '발표자료 보내줘', needs_confirmation: true };
 test('근거 없는 응답·잘못된 날짜·신뢰도 범위를 거부한다', () => {
   assert.throws(() => validateExtraction([task], '안녕'));
@@ -23,6 +24,17 @@ test('메시지 기준일 없는 상대 날짜와 연도 추정은 모델 응답
   assert.equal(enforceDateContext([{ ...suggestion, evidence_text: '2026년 11월 14일까지 보내줘' }], context)[0].due_at, '2026-11-14');
   assert.equal(enforceDateContext([suggestion], { ...context, message_date: '2026-11-13' })[0].due_at, '2026-11-14');
 });
+test('다른 연도가 함께 있어도 기준일 없는 연·월·주 상대 표현의 마감은 확정하지 않는다', () => {
+  for (const item of dateContextSeed) {
+    const [suggestion] = validateExtraction([{ ...task, evidence_text: item.evidence, due_at: '2026-11-20', due_precision: 'date', assignee: '사용자', needs_confirmation: false }], item.evidence);
+    const [result] = enforceDateContext([suggestion], { text: item.evidence, captured_at: '2026-11-13T00:00:00Z', message_date: item.message_date, timezone: 'Asia/Seoul' });
+    assert.equal(result.due_at, item.keeps_due ? '2026-11-20' : null, item.evidence);
+    assert.equal(result.due_precision, item.keeps_due ? 'date' : 'unknown', item.evidence);
+    assert.equal(result.needs_confirmation, item.keeps_due ? 0 : 1, item.evidence);
+    assert.equal(result.evidence_text, item.evidence);
+  }
+});
+
 test('인증코드·비밀번호·주민번호·카드번호 의심 텍스트를 제한한다', () => {
   for (const text of ['인증번호 123456', 'password: test', '900101-1234567', '1234 5678 9012 3456']) assert.equal(containsSensitiveText(text), true);
   assert.equal(containsSensitiveText('내일 5시까지 자료 보내줘'), false);

@@ -1,0 +1,20 @@
+[
+  { "evidence": "2026년 공지를 확인하고 내년 3월까지 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 공지에 따라 올해 12월까지 신청해 주세요", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 계획을 참고해 내후년까지 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 금년 말까지 신청해 주세요", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 작년 12월 누락 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 지난해 12월 누락 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 지난주 마감 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 지난달 누락 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 어제 마감된 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 그제 요청한 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 다음 해 3월까지 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 이번 해 말까지 신청해 주세요", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 내일 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "2026년 안내: 내일 자료 보내줘", "message_date": "2026-11-19", "keeps_due": true },
+  { "evidence": "２０２６년 공지를 확인하고 내년 3월까지 자료 보내줘", "message_date": null, "keeps_due": false },
+  { "evidence": "２０２６년 11월 20일까지 자료 보내줘", "message_date": null, "keeps_due": true },
+  { "evidence": "2026년 11월 20일까지 자료 보내줘", "message_date": null, "keeps_due": true },
+  { "evidence": "2026-11-20까지 자료 보내줘", "message_date": null, "keeps_due": true }
+]
