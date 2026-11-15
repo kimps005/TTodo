@@ -13,7 +13,7 @@
 전체 `quality.yml`의 시뮬레이터 앱 빌드가 성공한 뒤 다음 명령을 실행한다.
 
 ```sh
-node scripts/privacy-manifests.mjs build/Build/Products/Debug-iphonesimulator/TTodo.app artifacts/privacy-manifests.json
+node scripts/privacy-manifests.mjs build/Build/Products/Debug-iphonesimulator/TTodo.app artifacts/privacy-manifests.json debug_simulator
 ```
 
 macOS의 `/usr/bin/plutil`로 XML/바이너리 plist를 JSON으로 읽는다. 외부 서버를 호출하거나 선언을 수정하지 않는다. 앱·프레임워크·리소스 번들·확장 하위의 실제 선언을 상대 경로별로 보존한다. 앱 ID·버전·플랫폼·커밋도 기록하며 `ios-build-log` 산출물에 JSON을 포함한다.
@@ -30,3 +30,26 @@ macOS의 `/usr/bin/plutil`로 XML/바이너리 plist를 JSON으로 읽는다. �
 - 최종 서명·Release Archive·공개 운영 정보가 준비된 뒤 실제 출시 산출물과 SDK 서명, Xcode 개인정보 보고서와 App Store Connect 응답을 대조한다. 현재 계정·결제·유료 서비스를 새로 활성화하지 않는다.
 
 실제 수집 결과를 확인하기 전에는 선언 개수나 추적/수집 여부를 확정하지 않는다.
+
+## Debug 앱의 실제 수집 결과
+
+[1c2021a 전체 CI](https://github.com/kimps005/TTodo/actions/runs/43712115642)에서 실제 plutil 수집을 통과했다. `ios-build-log` ZIP의 SHA-256은 `09b3d8df7fa03b45bc834fe0612d06ceaafd7f4c1de95d196dc259a127bef594`이며 연결 API의 digest와 내려받은 ZIP이 일치한다. JSON의 커밋·플랫폼은 해당 커밋과 iPhoneSimulator로 대조했다.
+
+앱 최상위·ExpoApplication·ExpoConstants·ExpoNotifications·ExpoFileSystem·React·ReactNativeDependencies(boost/folly/glog/SocketRocket)·React-cxxreact·React-timing에 선언 12개가 포함되었다. 모두 `NSPrivacyTracking=false`, `NSPrivacyCollectedDataTypes=[]`를 선언하며 미확인 최상위 키는 없었다. 추적 도메인 키가 없는 파일을 빈 배열로 보충하지 않았다.
+
+| 선언된 API 분류 | 발견한 사유 코드의 합집합 |
+|---|---|
+| FileTimestamp | C617.1, 0A2A.1, 3B52.1 |
+| UserDefaults | CA92.1 |
+| SystemBootTime | 35F9.1 |
+| DiskSpace | E174.1, 85F4.1 |
+
+위 값은 발견한 선언이며 각 사유의 적합성이나 실제 데이터 수집 없음의 증명이 아니다. 확장 하위에서 선언이 발견되지 않았다는 사실만으로 확장의 선언 충족 여부도 판단하지 않는다.
+
+## iPhone용 서명 없는 Release 아카이브
+
+`release-archive.yml`은 실제 iPhoneOS SDK·Release 구성·arm64로 `xcodebuild archive`를 실행한다. `CODE_SIGNING_ALLOWED=NO`를 명령에 지정하며 Apple 계정·프로비저닝·설치·TestFlight·사이드로딩을 진행하지 않는다. 이 workflow 자체를 변경한 push와 별도 수동 실행에만 연결해 매 개발 push마다 아카이브를 반복하지 않는다.
+
+생성된 아카이브의 앱과 위젯/공유 확장 존재, 아카이브 메타데이터와 실행 파일 형식, 같은 개인정보 선언 목록을 확인한다. 보고서의 `build_context=unsigned_release_archive`와 iPhoneOS 플랫폼을 시뮬레이터와 구분한다. 문맥 표시는 workflow의 명시적 빌드 구성에 근거하며 코드 서명 검증기는 아니다.
+
+아카이브 전체나 설치 파일은 배포하지 않고 도구 버전·빌드 로그·아카이브 메타데이터·선언 JSON만 CI 산출물로 남긴다. 이 검사가 통과해도 서명된 최종 배포 아카이브, SDK 서명 적합성, 실제 iPhone·App Store 응답은 미검증이다.

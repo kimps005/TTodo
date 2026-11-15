@@ -69,7 +69,7 @@ jobs:
           set -o pipefail
           xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO build 2>&1 | tee xcodebuild.log
       - name: Inventory privacy declarations in the built simulator app
-        run: node scripts/privacy-manifests.mjs build/Build/Products/Debug-iphonesimulator/TTodo.app artifacts/privacy-manifests.json
+        run: node scripts/privacy-manifests.mjs build/Build/Products/Debug-iphonesimulator/TTodo.app artifacts/privacy-manifests.json debug_simulator
       - uses: actions/upload-artifact@v4
         if: always()
         with:

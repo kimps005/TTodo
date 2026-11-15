@@ -22,6 +22,12 @@ test('실제 번들 위치의 선언을 구분하며 누락된 키를 수집 없
     assert.equal(report.manifests.length, 3);
     assert.equal(report.root_manifest_present, true);
     assert.deepEqual(report.supported_platforms, ['iPhoneSimulator']);
+    assert.equal(inventoryPrivacyManifests(app, read, 'debug_simulator').build_context, 'debug_simulator');
+    assert.throws(() => inventoryPrivacyManifests(app, read, 'unsigned_release_archive'), /Expected iPhoneOS/);
+    save('Info.plist', { CFBundleIdentifier: 'test.ttodo', CFBundleSupportedPlatforms: ['iPhoneOS'] });
+    assert.equal(inventoryPrivacyManifests(app, read, 'unsigned_release_archive').build_context, 'unsigned_release_archive');
+    assert.throws(() => inventoryPrivacyManifests(app, read, 'debug_simulator'), /Expected simulator/);
+    assert.throws(() => inventoryPrivacyManifests(app, read, 'release-approved'), /Unknown build context/);
     assert.deepEqual(report.manifests.find((item: { path: string }) => item.path.startsWith('Frameworks/')).declarations, sdk);
     assert.deepEqual(report.manifests.find((item: { path: string }) => item.path.startsWith('PlugIns/')).declarations, {});
     assert.ok(report.not_verified.includes('missing_SDK_manifests'));

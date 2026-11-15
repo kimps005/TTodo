@@ -1,0 +1,57 @@
+name: iPhone용 서명 없는 Release 아카이브
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/release-archive.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-archive-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  archive:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Record actual toolchain and SDKs
+        run: |
+          mkdir -p artifacts
+          xcodebuild -version | tee artifacts/release-toolchain.txt
+          xcodebuild -showsdks | tee -a artifacts/release-toolchain.txt
+      - run: npx expo prebuild --platform ios --no-install
+      - name: Install pods
+        working-directory: ios
+        run: pod install
+      - name: Archive for generic iPhoneOS without provisioning
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$GITHUB_WORKSPACE/artifacts/TTodo.xcarchive" -derivedDataPath build-release ARCHS=arm64 CODE_SIGNING_ALLOWED=NO archive 2>&1 | tee artifacts/release-archive.log
+      - name: Inspect archive products and privacy declarations
+        run: |
+          app=artifacts/TTodo.xcarchive/Products/Applications/TTodo.app
+          test -d "$app/PlugIns/TTodoWidgets.appex"
+          test -d "$app/PlugIns/TTodoShare.appex"
+          plutil -lint artifacts/TTodo.xcarchive/Info.plist
+          plutil -convert json -o artifacts/release-archive-info.json artifacts/TTodo.xcarchive/Info.plist
+          file "$app/TTodo" | tee artifacts/release-executable.txt
+          node scripts/privacy-manifests.mjs "$app" artifacts/release-privacy-manifests.json unsigned_release_archive
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unsigned-release-archive-report
+          path: |
+            artifacts/release-toolchain.txt
+            artifacts/release-archive.log
+            artifacts/release-archive-info.json
+            artifacts/release-executable.txt
+            artifacts/release-privacy-manifests.json
+          retention-days: 7

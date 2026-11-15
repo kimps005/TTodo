@@ -35,11 +35,16 @@ function readPlist(file) {
   return JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', file], { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 }));
 }
 
-export function inventoryPrivacyManifests(appPath, read = readPlist) {
+export function inventoryPrivacyManifests(appPath, read = readPlist, context = 'unspecified') {
+  if (!['unspecified', 'debug_simulator', 'unsigned_release_archive'].includes(context)) throw new Error('Unknown build context');
   const app = path.resolve(appPath);
   if (!app.endsWith('.app') || !statSync(app).isDirectory()) throw new Error('A built .app directory is required');
   const info = read(path.join(app, 'Info.plist'));
   if (!dictionary(info) || typeof info.CFBundleIdentifier !== 'string') throw new Error('Missing bundle identifier');
+  const platforms = info.CFBundleSupportedPlatforms ?? [];
+  if (!strings(platforms)) throw new Error('Invalid bundle platforms');
+  if (context === 'debug_simulator' && !platforms.includes('iPhoneSimulator')) throw new Error('Expected simulator bundle');
+  if (context === 'unsigned_release_archive' && !platforms.includes('iPhoneOS')) throw new Error('Expected iPhoneOS bundle');
   const manifests = [];
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -59,20 +64,21 @@ export function inventoryPrivacyManifests(appPath, read = readPlist) {
   return {
     format_version: 1,
     scope: 'built_bundle_declarations_only',
+    build_context: context,
     bundle_identifier: info.CFBundleIdentifier,
     bundle_version: info.CFBundleVersion ?? null,
-    supported_platforms: info.CFBundleSupportedPlatforms ?? [],
+    supported_platforms: platforms,
     root_manifest_present: manifests.some(item => item.path === 'PrivacyInfo.xcprivacy'),
     manifests,
-    not_verified: ['actual_network_behavior', 'API_use_matches_declared_reasons', 'approved_reason_and_data_type_values', 'missing_SDK_manifests', 'SDK_signatures', 'App_Store_privacy_answers', 'Release_archive'],
+    not_verified: ['actual_network_behavior', 'API_use_matches_declared_reasons', 'approved_reason_and_data_type_values', 'missing_SDK_manifests', 'SDK_signatures', 'App_Store_privacy_answers', 'signed_distribution_archive'],
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
-    const [app, output] = process.argv.slice(2);
-    if (!app || !output) throw new Error('Usage: node scripts/privacy-manifests.mjs <built.app> <report.json>');
-    const report = inventoryPrivacyManifests(app);
+    const [app, output, context] = process.argv.slice(2);
+    if (!app || !output) throw new Error('Usage: node scripts/privacy-manifests.mjs <built.app> <report.json> [build_context]');
+    const report = inventoryPrivacyManifests(app, undefined, context);
     mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
     writeFileSync(output, JSON.stringify({ ...report, commit: process.env.GITHUB_SHA ?? null }, null, 2) + '\n');
     console.log(`Bundled privacy declarations: ${report.manifests.length}; root manifest: ${report.root_manifest_present}. Declaration inventory only.`);

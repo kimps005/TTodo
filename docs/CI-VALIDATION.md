@@ -7,6 +7,7 @@
 
 `quality.yml`은 TypeScript 타입/도메인/SQLite 테스트, 의존성 보안 검사, iOS Hermes 번들, 실제 Swift 저장소와 캡처 처리 로직 실행, iOS 앱·Widget·Share Extension 컴파일을 수행합니다.
 빌드 성공 후 실제 시뮬레이터 앱의 개인정보 선언을 경로별 JSON으로 수집합니다. [PRIVACY-MANIFESTS.md](PRIVACY-MANIFESTS.md)의 제한을 따르며 Release 개인정보 보고서·SDK 서명·네트워크·App Store 신고 완료로 간주하지 않습니다.
+별도 `release-archive.yml`은 계정/프로비저닝 없이 iPhoneOS SDK의 서명 없는 Release 아카이브를 생성하고 앱·위젯·공유 확장 포함, 메타데이터와 선언을 검사합니다. workflow 변경 push 또는 수동 실행에만 연결합니다. iPhone에 설치하거나 서명 경로·App Store 배포를 변경하지 않으며 실제 첫 실행 결과는 STATUS.md에서 확인합니다.
 push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 변경이 없는 JS 전용 후속 작업은 수동 `core_only=true`로 core만 검사할 수 있다. 이 경우 ios는 건너뛰므로 전체 네이티브 빌드 성공이나 실제 화면 검증으로 기록하지 않는다.
 캡처 처리 실행 검사는 OCR/모델 응답을 테스트에서 주입합니다. 실제 OCR 정확도와 AI 정확도 점수를 측정한 결과가 아닙니다.
 
