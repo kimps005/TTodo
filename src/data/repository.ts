@@ -28,6 +28,10 @@ export interface ExtractedTask {
 export class Repository {
   constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString()) {}
   async initialize() {
+    // Reject a known newer database before changing its persistent journal mode.
+    // Migration still rechecks the version under the exclusive transaction below.
+    const initialVersion = await this.db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+    if ((initialVersion?.user_version ?? 0) > schema.version) throw new Error('새로운 앱 버전으로 데이터가 저장되었어요. 앱을 업데이트해 주세요.');
     await this.db.execAsync('PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON; PRAGMA temp_store=MEMORY;');
     await this.db.withExclusiveTransactionAsync(async tx => {
       const version = await tx.getFirstAsync<{ user_version: number }>('PRAGMA user_version');

@@ -1,5 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Repository, type Database, type SqlConnection, type SqlValue } from '../src/data/repository';
@@ -7,8 +10,8 @@ import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
 import { createSerializedDatabase } from '../src/data/serializedDatabase';
 import schema from '../src/data/schema.json';
 
-function fixture(now = () => '2026-11-13T02:00:00.000Z') {
-  const native = new DatabaseSync(':memory:');
+function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
+  const native = new DatabaseSync(path);
   const connection: SqlConnection = {
     execAsync: async sql => { native.exec(sql); },
     runAsync: async (sql, ...params) => native.prepare(sql).run(...params),
@@ -20,6 +23,20 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z') {
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+test('알 수 없는 새 스키마는 저널 설정과 데이터를 변경하기 전에 거부한다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-future-schema-'));
+  const { repo, native } = fixture(undefined, join(directory, 'future.sqlite'));
+  try {
+    await repo.initialize();
+    const id = await repo.addTodo({ title: '최신 앱이 저장한 할 일' });
+    native.exec(`PRAGMA journal_mode=WAL; PRAGMA user_version=${schema.version + 1}; CREATE TABLE future_data (value TEXT); INSERT INTO future_data VALUES('최신 앱 전용 데이터');`);
+    await assert.rejects(repo.initialize(), /앱을 업데이트/);
+    assert.equal(native.prepare('PRAGMA journal_mode').get()!.journal_mode, 'wal');
+    assert.equal(native.prepare('PRAGMA user_version').get()!.user_version, schema.version + 1);
+    assert.equal(native.prepare('SELECT title FROM todos WHERE id=?').get(id)!.title, '최신 앱이 저장한 할 일');
+    assert.equal(native.prepare('SELECT value FROM future_data').get()!.value, '최신 앱 전용 데이터');
+  } finally { native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
 test('보존 기한에 도착한 분석 응답은 원문과 제안을 저장하지 않고 명시적 재시도만 허용한다', async () => {
   let time = '2026-11-13T02:00:00.000Z';
   const { repo, native } = fixture(() => time); await repo.initialize();
