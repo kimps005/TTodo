@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readFileSync, openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import selection from './ui-simulator-selection.cjs';
 import helpValidation from './ui-diagnostic-help.cjs';
@@ -20,7 +20,8 @@ try {
   const types = JSON.parse(sim('list', 'devicetypes', '--json'));
   writeFileSync(path.join(output, 'runtimes.json'), JSON.stringify(runtimes, null, 2));
   const { runtime, deviceType } = selection.selectUISimulator(runtimes.runtimes, types.devicetypes, 'iphone-16-pro', process.env.TTODO_PROBE_RUNTIME ?? 'latest');
-  report.runtime = runtime; report.device_type = deviceType;
+  report.runtime = { identifier: runtime.identifier, version: runtime.version, build: runtime.buildversion };
+  report.device_type = { identifier: deviceType.identifier, name: deviceType.name };
   device = sim('create', 'TTodo native notification probe', deviceType.identifier, runtime.identifier);
   if (!/^[0-9a-f-]{36}$/i.test(device)) throw new Error('Invalid simulator UUID.');
   sim('boot', device);
@@ -43,10 +44,17 @@ finally {
       writeFileSync(path.join(output, 'log-show-help.txt'), (help.stdout ?? '') + (help.stderr ?? ''));
       if (!helpValidation.supportsDiagnosticHelp('xcrun', args, help, ['--last', '--style', '--info', '--predicate'])) throw new Error('SDK log options unavailable.');
       const predicate = 'process == "Preferences" OR process == "lsd" OR process == "SpringBoard" OR process == "usernotificationsd" OR (subsystem == "app.ttodo.ci" AND eventMessage BEGINSWITH "TTodoNotificationSettingsDiagnostic")';
-      writeFileSync(path.join(output, 'system.log'), sim('spawn', device, 'log', 'show', '--last', '12m', '--style', 'compact', '--info', '--predicate', predicate));
-      writeFileSync(path.join(output, 'appinfo.txt'), sim('appinfo', device, 'com.kimps005.ttodo.notificationprobe'));
+      // A fresh boot plus two Settings attempts exceeded the 16 MiB pipe buffer
+      // in 43748991228. Stream to files so neither truncation nor ENOBUFS loses
+      // the actual API/Settings evidence. Do not change or retry the UI test.
+      const stdout = openSync(path.join(output, 'system.log'), 'w');
+      const stderr = openSync(path.join(output, 'system-stderr.log'), 'w');
+      try { execFileSync('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--last', '12m', '--style', 'compact', '--info', '--predicate', predicate], { stdio: ['ignore', stdout, stderr], timeout: 60000 }); }
+      finally { closeSync(stdout); closeSync(stderr); }
       report.diagnostics_completed = true;
     } catch (error) { report.diagnostic_error = error.message; }
+    try { writeFileSync(path.join(output, 'appinfo.txt'), sim('appinfo', device, 'com.kimps005.ttodo.notificationprobe')); }
+    catch (error) { report.appinfo_error = error.message; }
     if (existsSync(result)) {
       for (const name of ['summary', 'tests']) {
         try { writeFileSync(path.join(output, `${name}.json`), run('xcrun', ['xcresulttool', 'get', 'test-results', name, '--path', result])); } catch (error) { report[`${name}_error`] = error.message; }

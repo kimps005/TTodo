@@ -2,6 +2,12 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 독립 네이티브 비교의 첫 실행·재진입 실패 확인
+- [58d7bb9 네이티브 비교](https://github.com/kimps005/TTodo/actions/runs/43748991228)는 Xcode 26.6 / SDK 26.5의 독립 앱·XCTest 빌드와 iOS 26.5 시뮬레이터 실행을 완료했다. 실제 권한 요청/거부 뒤 설정 앱 첫 실행과 재진입 모두 화면 도착 판정이 false다. 복귀 후 두 번 모두 authorization=1, opened=true를 UI로 확인했다. 마지막 [false,false] 대 [true,true] 단언에서 실패했으며 화면/트리를 첨부했다. 제품 통합 없이 재현됐지만 비교 앱의 시스템 로그 원문 대조는 아직 남아 있다.
+- 전체 시스템 로그가 동기 파이프 16 MiB 한도를 넘어 ENOBUFS로 저장되지 않았다. UI 단언은 유지하고 진단 출력을 파일로 직접 연결해 버퍼 한도를 제거했다. 앱 등록 수집도 독립시켰다. 제품 URL/코드 변경은 없으며 로그 수집 보완 후 재검증한다.
+- 기존 제품 UI의 oldest 원문도 확보했다(ZIP SHA-256 dd2c4c4b7d8a1432f653ecbc4f80dfdd6e690653725d0c2b398a39343dfe5768). iOS 26.2/23C54에서도 denied/active/opened=true이며 18:42:28.561 UTC에 같은 notifications 목적지 선택 불가 기록이 있다. 전체 UI workflow의 compact 실패는 최대 글자 입력 탐색 단계이며 알림 원인으로 분류하지 않는다.
+- [58d7bb9 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43748972881)의 core/ios가 성공했다. 82개 테스트·타입·보안·Hermes, Swift 저장소/캡처·합성 Vision OCR 및 제품 앱·확장 빌드 통과다. 실제 iPhone·알림 화면 도착·잠금·모델 정확도 완료를 뜻하지 않는다.
+
 ## 알림 설정 진단 로그 확보와 독립 네이티브 비교 준비
 - [4c27414 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43746163021)의 primary(iOS 26.5/23F77)에서 기존 시스템 로그 수집이 완료됐다. 산출물 ZIP SHA-256 d3108fbb2e0ae2e638e45dd4a4f4772209646c37b1c15566c1ce6d066697444f와 보고서 커밋을 대조했다. 지정 UI 검사 1개 실패이며 실제 PNG·접근성 트리 모두 설정 첫 화면이다.
 - 호출 직전 Bundle ID=com.kimps005.ttodo, authorization=1(denied), appState=0(active), 공개 URL=app-settings:notifications이고 반환값은 true다. 빌드/설치 앱의 실행 파일·서명 메타데이터가 일치하고 simctl appinfo에 User 앱·App Group 등록이 있다. 현재 호출은 [Apple 공식 예제](https://developer.apple.com/documentation/uikit/uiapplication/opennotificationsettingsurlstring)와 같다. [open 반환 Bool](https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:))은 URL 열기 성공이며 목적 화면 도착 증명으로 쓰지 않는다.
