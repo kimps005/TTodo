@@ -2,11 +2,22 @@ import ExpoModulesCore
 import Foundation
 import WidgetKit
 import UIKit
+import UserNotifications
 
 public class TTodoNativeModule: Module {
   @MainActor private func openNotificationSettings() async -> Bool {
     guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
-    return await UIApplication.shared.open(url)
+    // Only the isolated synthetic UI test opts in. Never record task content.
+    let diagnostics = ProcessInfo.processInfo.environment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] == "1"
+    if diagnostics {
+      let settings = await UNUserNotificationCenter.current().notificationSettings()
+      NSLog("TTodoNotificationSettingsDiagnostic before bundle=%@ authorization=%ld appState=%ld url=%@",
+            Bundle.main.bundleIdentifier ?? "missing", settings.authorizationStatus.rawValue,
+            UIApplication.shared.applicationState.rawValue, url.absoluteString)
+    }
+    let opened = await UIApplication.shared.open(url)
+    if diagnostics { NSLog("TTodoNotificationSettingsDiagnostic after opened=%@", opened ? "true" : "false") }
+    return opened
   }
   private let storageQueue = DispatchQueue(label: "app.ttodo.sqlite")
   private var sqlStore: SharedStore?

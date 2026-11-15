@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import resultValidation from './ui-test-result.cjs';
 import simulatorSelection from './ui-simulator-selection.cjs';
@@ -17,6 +18,89 @@ const runtimePolicy = process.env.TTODO_UI_RUNTIME ?? 'latest';
 if (!['app', 'share-extension', 'photo-ocr'].includes(scenario)) throw new Error('Unsupported UI scenario.');
 const flow = scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { requested_model: model, requested_runtime_policy: runtimePolicy, commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
+// These read-only diagnostics run only against this script's fresh synthetic CI
+// simulator. Never collect the host's logs or app data/OCR/notification payloads.
+function collectAppDiagnostics(device) {
+  const diagnostics = report.app_registration_diagnostics = {};
+  const attempt = (name, operation) => {
+    try { diagnostics[name] = { completed: true, ...operation() }; }
+    catch (error) { diagnostics[name] = { completed: false, error: error.message }; }
+  };
+  let commandCount = 0;
+  const command = (executable, args) => {
+    const name = `diagnostic-command-${++commandCount}-${path.basename(executable)}`;
+    const result = spawnSync(executable, args, { encoding: 'utf8', timeout: 60000, maxBuffer: 16 * 1024 * 1024 });
+    if (result.error || result.status !== 0) {
+      writeFileSync(path.join(output, `${name}.json`), JSON.stringify({ executable, args, status: result.status, signal: result.signal, code: result.error?.code ?? null }, null, 2));
+      for (const stream of ['stdout', 'stderr']) if (result[stream]) writeFileSync(path.join(output, `${name}-${stream}.log`), result[stream]);
+      throw new Error(`Diagnostic ${path.basename(executable)} failed (status=${result.status}, signal=${result.signal}, code=${result.error?.code ?? 'none'}); see ${name}.json.`);
+    }
+    return { stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  };
+  const requireHelp = (name, args, tokens) => {
+    const result = spawnSync('xcrun', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+    const help = (result.stdout ?? '') + (result.stderr ?? '');
+    writeFileSync(path.join(output, `${name}-help.txt`), help);
+    if (result.error || result.status !== 0 || tokens.some(token => !help.includes(token))) {
+      throw new Error(`SDK diagnostic help unavailable: ${name} (status=${result.status}, signal=${result.signal}, code=${result.error?.code ?? 'none'}).`);
+    }
+  };
+  let bundle;
+  attempt('built_app', () => {
+    const application = path.resolve('build/Build/Products/Release-iphonesimulator/TTodo.app');
+    const metadata = appMetadata(application);
+    bundle = metadata.bundle_identifier;
+    writeFileSync(path.join(output, 'built-app-registration.json'), JSON.stringify(metadata, null, 2));
+    return metadata;
+  });
+  // Do not let unavailable appinfo support prevent the independent installed
+  // bundle comparison or log collection. Diagnostic errors never replace XCTest.
+  if (bundle) {
+    attempt('installed_app', () => {
+      requireHelp('simctl-get-app-container', ['simctl', 'help', 'get_app_container'], ['get_app_container', 'app']);
+      const application = command('xcrun', ['simctl', 'get_app_container', device, bundle, 'app']).stdout.trim();
+      if (!path.isAbsolute(application) || !application.endsWith('.app')) throw new Error('SDK did not return an absolute installed app bundle path.');
+      const metadata = appMetadata(application);
+      const built = diagnostics.built_app;
+      const matches_built_app = metadata.bundle_identifier === built.bundle_identifier && metadata.executable === built.executable && metadata.executable_sha256 === built.executable_sha256 && metadata.signing.identifier === built.signing.identifier && metadata.signing.team_identifier === built.signing.team_identifier && metadata.signing.cdhash === built.signing.cdhash;
+      writeFileSync(path.join(output, 'installed-app-registration.json'), JSON.stringify({ ...metadata, matches_built_app }, null, 2));
+      return { ...metadata, matches_built_app };
+    });
+    attempt('registration', () => {
+      requireHelp('simctl-appinfo', ['simctl', 'help', 'appinfo'], ['appinfo']);
+      const result = command('xcrun', ['simctl', 'appinfo', device, bundle]);
+      writeFileSync(path.join(output, 'simctl-appinfo.txt'), result.stdout + result.stderr);
+      return {};
+    });
+  }
+  if (!report.completed) attempt('system_logs', () => {
+    requireHelp('simctl-spawn', ['simctl', 'help', 'spawn'], ['spawn']);
+    requireHelp('simulator-log-show', ['simctl', 'spawn', device, 'log', 'help', 'show'], ['--last', '--style', '--predicate', '--info']);
+    const predicate = 'process == "Preferences" OR process == "lsd" OR process == "SpringBoard" OR process == "usernotificationsd" OR (process == "TTodo" AND eventMessage BEGINSWITH "TTodoNotificationSettingsDiagnostic")';
+    const result = command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--last', '8m', '--style', 'compact', '--info', '--predicate', predicate]);
+    writeFileSync(path.join(output, 'notification-settings-system.log'), result.stdout);
+    if (result.stderr) writeFileSync(path.join(output, 'notification-settings-system-stderr.log'), result.stderr);
+    return {};
+  });
+  function appMetadata(application) {
+    const info = key => command('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, path.join(application, 'Info.plist')]).stdout.trim();
+    const bundle_identifier = info('CFBundleIdentifier');
+    const executable = info('CFBundleExecutable');
+    if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(bundle_identifier) || !/^[A-Za-z0-9_-]+$/.test(executable)) throw new Error('Unexpected built/installed app identifier or executable.');
+    const signature = command('codesign', ['--display', '--verbose=4', application]);
+    const signatureText = signature.stdout + signature.stderr;
+    // Keep only non-content signing metadata, including simulator ad-hoc state.
+    const signing = {
+      identifier: /^Identifier=(.+)$/m.exec(signatureText)?.[1] ?? null,
+      team_identifier: /^TeamIdentifier=(.+)$/m.exec(signatureText)?.[1] ?? null,
+      cdhash: /^CDHash=(.+)$/m.exec(signatureText)?.[1] ?? null,
+      code_directory: /^CodeDirectory (.+)$/m.exec(signatureText)?.[1] ?? null,
+      signature: /^Signature=(.+)$/m.exec(signatureText)?.[1] ?? null,
+    };
+    if (!signing.identifier || !signing.cdhash) throw new Error('Code signing display did not include the app Identifier/CDHash.');
+    return { bundle_identifier, executable, executable_sha256: createHash('sha256').update(readFileSync(path.join(application, executable))).digest('hex'), signing };
+  }
+}
 let device;
 try {
   const runtimeInventory = JSON.parse(sim('list', 'runtimes', '--json'));
@@ -82,6 +166,10 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (scenario === 'app' && device && /^[0-9a-f-]{36}$/i.test(device)) {
+    try { collectAppDiagnostics(device); }
+    catch (error) { report.app_diagnostic_error = error.message; }
+  }
   if (existsSync(resultPath)) {
     try { run('xcrun', ['xcresulttool', 'export', 'attachments', '--path', resultPath, '--output-path', path.join(output, 'attachments')]); }
     catch (error) { report.attachment_export_error = error.message; }

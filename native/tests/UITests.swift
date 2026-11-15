@@ -37,6 +37,7 @@ final class TTodoUITests: XCTestCase {
     continueAfterFailure = false
     let app = XCUIApplication()
     app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launchEnvironment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] = "1"
     app.launch()
     let start = app.buttons["이 설정으로 시작하기"]
     XCTAssertTrue(start.waitForExistence(timeout: 30), "A fresh CI simulator must show onboarding.")
