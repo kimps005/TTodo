@@ -91,3 +91,5 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 품질 검사의 수동 실행 `macos_runner`는 기본 `macos-26` 외에 `macos-26-intel`을 선택할 수 있다. GitHub가 ARM 호스팅 실행기 미배정/용량 부족으로 작업을 취소하면 Intel 표준 실행기로 Swift 저장소·캡처·실제 OCR 실행과 arm64 iOS 교차 컴파일을 확인한다. Intel에서 통과한 macOS OCR을 실제 iPhone이나 AI 모델 정확도 통과로 해석하지 않는다. 실제 iOS 시뮬레이터 UI 검사는 arm64 실행기를 유지한다.
 
 공식 [표준 실행기 사양](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)은 공개 저장소의 `macos-26-intel`을 무료 표준 실행기에 포함한다. 유료 `large`/`xlarge` 실행기를 사용하지 않는다.
+
+알림 복구 이동은 일반 앱 설정 URL 대신 Apple의 공개 `UIApplication.openNotificationSettingsURLString`을 네이티브 메인 액터에서 호출한다. OS가 열기 실패를 반환하면 앱에서 안내한다. CI는 설정 앱의 전경 전환만으로 성공 처리하지 않고 TTodo 제목·실제 알림 허용 스위치·거부 상태까지 확인한다. 455f6aa 실행은 거부까지 통과했지만 설정 첫 화면에 머물러 실패했으며 새 경로의 결과는 STATUS.md에 별도 기록한다.

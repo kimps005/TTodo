@@ -1,8 +1,13 @@
 import ExpoModulesCore
 import Foundation
 import WidgetKit
+import UIKit
 
 public class TTodoNativeModule: Module {
+  @MainActor private func openNotificationSettings() async -> Bool {
+    guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
+    return await UIApplication.shared.open(url)
+  }
   private let storageQueue = DispatchQueue(label: "app.ttodo.sqlite")
   private var sqlStore: SharedStore?
   private func storage() throws -> SharedStore {
@@ -13,6 +18,9 @@ public class TTodoNativeModule: Module {
     Name("TTodoNative")
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
     Function("systemVersion") { ProcessInfo.processInfo.operatingSystemVersionString }
+    AsyncFunction("openNotificationSettings") { () async -> Bool in
+      await self.openNotificationSettings()
+    }
     AsyncFunction("extractTasks") { (text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String in
       try await OnDeviceExtraction.extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
     }
