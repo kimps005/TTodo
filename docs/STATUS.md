@@ -2,6 +2,13 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 알림 설정 진단 로그 확보와 독립 네이티브 비교 준비
+- [4c27414 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43746163021)의 primary(iOS 26.5/23F77)에서 기존 시스템 로그 수집이 완료됐다. 산출물 ZIP SHA-256 d3108fbb2e0ae2e638e45dd4a4f4772209646c37b1c15566c1ce6d066697444f와 보고서 커밋을 대조했다. 지정 UI 검사 1개 실패이며 실제 PNG·접근성 트리 모두 설정 첫 화면이다.
+- 호출 직전 Bundle ID=com.kimps005.ttodo, authorization=1(denied), appState=0(active), 공개 URL=app-settings:notifications이고 반환값은 true다. 빌드/설치 앱의 실행 파일·서명 메타데이터가 일치하고 simctl appinfo에 User 앱·App Group 등록이 있다. 현재 호출은 [Apple 공식 예제](https://developer.apple.com/documentation/uikit/uiapplication/opennotificationsettingsurlstring)와 같다. [open 반환 Bool](https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:))은 URL 열기 성공이며 목적 화면 도착 증명으로 쓰지 않는다.
+- 설정 앱 로그는 전달된 TTodo 번들 ID를 포함한 알림 목적지로 변환한 다음 `selection not possible currently 'notifications' which doesn't have async loading, returning`을 기록한다(18:38:48.103 UTC). OS의 알림 목적지 선택 단계에서 중단된 근거지만, 시뮬레이터 공통 제한·앱 등록 영향·실기기 OS 결함 중 하나로 아직 확정하지 않는다. 로그에 보이는 내부 변환 URL을 제품에 사용하지 않는다.
+- 동일 공개 API를 호출하는 UIKit 전용 비교 앱과 XCTest를 별도 CI 프로젝트로 준비했다. Expo·확장·App Group·원격 알림·제품 프로젝트 의존성 없이 실제 권한 요청/거부 후 설정 앱의 첫 실행과 재진입을 각각 캡처한다. 반환 Bool·권한·화면/접근성 트리·SDK 헤더·시뮬레이터 로그를 보존한다. 설정 첫 화면은 계속 실패로 판정한다. 제품 URL·코드·서명 경로는 변경하지 않았다. 네이티브 비교 SDK 빌드/실행은 CI 확인 전이며 실제 iPhone 검증은 미완료다.
+- [4c27414 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43746162903)는 core/ios 모두 성공했다. 이는 기존 로그 도움말 수정까지의 81개 검사·타입·Hermes·네이티브 빌드 결과이며 새 비교 검사 성공을 뜻하지 않는다.
+
 ## 실제 SDK 도움말의 종료 코드와 로그 옵션 보완
 - [ea4b024 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43742993778)의 iOS 26.2/23C54 검사 1개가 같은 알림 설정 페이지 단언에서 실패했다. ZIP SHA-256 42efbab4b58a0e70f4c723829680e7bffe6aa7f2cff6f5dc1804a40b5eb76a92를 대조했고 실제 PNG/접근성 트리는 설정 첫 화면이다.
 - 실제 설치 앱은 빌드 앱과 Bundle ID(com.kimps005.ttodo)·실행 파일 SHA-256·서명 Identifier/TeamIdentifier/CDHash가 일치한다. simctl appinfo에도 User 앱 및 App Group 등록이 있다. 이를 알림 설정 페이지 등록의 정상 증명이나 OS 결함 확정으로 확대하지 않는다.

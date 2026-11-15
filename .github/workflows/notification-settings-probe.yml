@@ -1,0 +1,39 @@
+name: 알림 설정 공개 API 네이티브 비교
+on:
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: '기존 UI 검사와 비교할 설치된 iOS'
+        type: choice
+        default: latest
+        options: [latest, oldest-installed]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      TTODO_PROBE_RUNTIME: ${{ inputs.runtime }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test standalone native public API without product dependencies
+        run: |
+          set -o pipefail
+          node scripts/notification-settings-probe.mjs 2>&1 | tee notification-probe.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: notification-settings-probe
+          path: |
+            notification-probe.log
+            artifacts/notification-probe/report.json
+            artifacts/notification-probe/*.txt
+            artifacts/notification-probe/*.json
+            artifacts/notification-probe/*.log
+            artifacts/notification-probe/attachments/**
+            artifacts/notification-probe/results.xcresult/**
+          retention-days: 7
