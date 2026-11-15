@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import resultValidation from './ui-test-result.cjs';
 import simulatorSelection from './ui-simulator-selection.cjs';
+import diagnosticHelp from './ui-diagnostic-help.cjs';
 
 if (process.platform !== 'darwin') throw new Error('이 검사는 GitHub macOS CI에서만 실행합니다.');
 const output = path.resolve('artifacts/ui-tests'); mkdirSync(output, { recursive: true });
@@ -41,7 +42,7 @@ function collectAppDiagnostics(device) {
     const result = spawnSync('xcrun', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
     const help = (result.stdout ?? '') + (result.stderr ?? '');
     writeFileSync(path.join(output, `${name}-help.txt`), help);
-    if (result.error || result.status !== 0 || tokens.some(token => !help.includes(token))) {
+    if (!diagnosticHelp.supportsDiagnosticHelp('xcrun', args, result, tokens)) {
       throw new Error(`SDK diagnostic help unavailable: ${name} (status=${result.status}, signal=${result.signal}, code=${result.error?.code ?? 'none'}).`);
     }
   };
