@@ -7,6 +7,7 @@
 - 일회성 CI 시뮬레이터에서 실제 SDK 도움말을 보존하고 빌드/설치 앱의 식별자·실행 파일 SHA-256·서명 Identifier/TeamIdentifier/CDHash를 비교한다. 실패 시 해당 시뮬레이터의 설정·등록·알림 프로세스 및 지정 앱 진단 이벤트만 조회한다. 진단 명령 실패의 출력/상태는 별도로 남기고 기존 XCTest 오류/성공 조건은 유지한다.
 - 로컬 77개 테스트·타입·스크립트 구문·diff와 진단 명령 모킹을 통과했다. 실제 SDK 진단과 네이티브 기록·원인 구분은 CI 확인 전이다. 공개 URL 처리 성공만으로 올바른 알림 설정 화면 도착을 인정하지 않는다.
 - [Apple iOS 26 릴리스 노트](https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-26-release-notes)의 NSLog 변경(137129180)을 추가 대조했다. 동적 문자열이 통합 로그에서 가려질 수 있어 진단 전용 Logger의 public 메타데이터로 식별자/공개 URL/호출 Bool을 기록한다. 본문 기록은 추가하지 않는다. 5d319ea의 선행 실행과 후속 Logger 변경의 실제 SDK 결과를 구분한다.
+- 공개 알림 설정 브리지가 변경되어도 실제 UI 검사를 시작하도록 해당 네이티브 모듈을 workflow 경로에 포함했다. 네이티브 코드만 바뀐 후속 커밋을 이전 UI 실행으로 잘못 검증하지 않는다. YAML 파싱·diff 통과, 최신 소스의 UI 재실행 결과는 확인 전이다.
 
 ## UI 결과 진단의 산출물 선택 복구
 - UI 검사가 화면/OS별 산출물을 만들도록 바뀐 뒤에도 기존 결과 진단 workflow는 이전 이름 ui-tests에 고정되어 있었다. primary/compact/oldest/manual와 과거 ui-tests 중 하나를 선택해 해당 실행의 결과만 다운로드하도록 보완했다.
