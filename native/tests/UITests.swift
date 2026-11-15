@@ -116,13 +116,18 @@ final class TTodoUITests: XCTestCase {
     let notRequested = control(app, label: "권한: 아직 요청하지 않음")
     reveal(notRequested, in: app)
     tap(app.buttons["알림 권한 요청"], in: app)
-    let permissionAlert = app.alerts.firstMatch
-    XCTAssertTrue(permissionAlert.waitForExistence(timeout: 20), "The real notification authorization prompt must appear.")
-    screenshot(app, name: "06-notification-request")
-    let permissionTree = XCTAttachment(string: app.debugDescription)
+    let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+    let permissionAlert = springboard.alerts.firstMatch
+    let permissionAppeared = permissionAlert.waitForExistence(timeout: 20)
+    let permissionScreen = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    permissionScreen.name = "06-notification-request"; permissionScreen.lifetime = .keepAlways; add(permissionScreen)
+    let permissionTree = XCTAttachment(string: springboard.debugDescription)
     permissionTree.name = "notification-permission-tree"; permissionTree.lifetime = .keepAlways; add(permissionTree)
+    XCTAssertTrue(permissionAppeared, "The real system notification authorization prompt must appear.")
+    XCTAssertTrue(permissionAlert.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "TTodo")).firstMatch.exists)
     let deny = permissionAlert.buttons.matching(NSPredicate(format: "label == %@ OR label == %@ OR label == %@", "허용 안 함", "Don't Allow", "Don’t Allow")).firstMatch
     XCTAssertTrue(deny.waitForExistence(timeout: 10)); deny.tap()
+    app.activate()
     let denied = control(app, label: "권한: 허용되지 않음")
     reveal(denied, in: app)
     XCTAssertFalse(app.buttons["알림 권한 요청"].exists, "Denied notification permission must lead to system settings, not another prompt.")

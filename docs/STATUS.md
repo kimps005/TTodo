@@ -2,14 +2,15 @@
 
 기준일: 2026-11-15 (한국 시간)
 
-## UI 실행기 기준 SDK·기종 목록 점검 준비
+## UI 실행기 기준 SDK·기종 목록 점검 통과
 - PRD 13.4의 서로 다른 iPhone/OS 검증을 준비하며 기존 Intel SDK 점검을 실제 UI와 같은 macos-26 ARM 실행기로 맞췄다. 호스트 버전/아키텍처·Xcode·SDK·설치된 iOS 런타임과 기종 목록을 기록한다. 점검 workflow 변경 push와 수동 실행에만 연결한다.
-- YAML·diff 검사 통과. 현재 ARM 목록의 실제 수집과 작은 화면/이전 OS 실행 가능 여부는 CI 결과 확인 전이다. 목록 존재를 실제 실행 성공으로 표시하지 않는다. 앱 설치/서명·OS 다운로드·추가 비용은 발생시키지 않는다.
+- [f2b94f1 SDK 점검](https://github.com/kimps005/TTodo/actions/runs/43717786734) 통과. ZIP digest를 대조하고 macOS 26.7.2 arm64 / Xcode 26.6 / SDK 26.5와 사용 가능한 iOS 26.2·26.4.1·26.5를 직접 확인했다. iPhone 16 Pro·SE 3세대 프로필도 있다. iOS 18 런타임은 설치 목록에 없으며 최소 OS 실행을 검증한 것으로 표시하지 않는다. 작은 화면/이전 런타임의 실제 실행은 별도 확인 전이다. OS 다운로드·추가 비용은 발생시키지 않는다.
 
 ## 알림 권한 거부·기기 설정 왕복 UI 검사 준비
 - PRD 12.2·권한 거부 경로에 맞춰 기존 전체 수동 입력 UI 검사를 보강했다. 새 CI 시뮬레이터의 실제 알림 요청에서 거부를 누르고, 거부 상태 표시·재요청 버튼 제거·앱 전용 기기 설정 이동을 확인한다. 권한/DB 상태 주입은 없다.
 - 설정에서 앱으로 돌아온 뒤 저장한 할 일과 미저장 입력 유지, 전체 삭제·재실행 후 OS 권한은 여전히 거부로 표시되는지도 검사한다. 실제 알림 UI/설정 화면과 합성 앱 접근성 트리를 첨부한다. UI 테스트/workflow 변경 push는 기본 app/large 전체 검사를 자동 실행한다.
 - 로컬 74개 테스트·타입·구문·YAML·diff 통과. 새 Swift XCTest SDK 컴파일/실행과 알림 거부 성공은 CI 확인 전이며 실제 iPhone·AI/잠금 검증은 포함하지 않는다.
+- [첫 UI 실행](https://github.com/kimps005/TTodo/actions/runs/43716298788)은 실제 SDK 컴파일·앱 실행·수동 입력 흐름 뒤 앱 내부 alert 조회에서 실패했다. summary/tests JSON은 지정 검사 1개 실패이며 실패 화면에 시스템의 실제 TTodo 알림 요청 창과 Don’t Allow/Allow가 보인다. Apple 문서의 시스템 권한 alert 처리에 맞춰 SpringBoard 조회로 수정하고 대기 실패 전에도 전체 화면/시스템 접근성 트리를 남긴다. 시간 제한·검사 조건은 유지하며 수정 후 UI 재검증 전이다.
 
 ## 한국어 기본 언어와 지원 언어 선언 보완
 - PRD P0-12의 한국어 우선 지원을 점검했다. 실제 iPhoneOS 아카이브 로그에서 한국어 App Shortcut 문구를 en 언어로 학습하고 있었고 생성 플러그인은 기본/지원 언어를 선언하지 않았다. Apple의 CFBundleDevelopmentRegion·CFBundleLocalizations 및 언어 선택 문서를 확인했다.
