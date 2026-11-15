@@ -476,6 +476,29 @@ test('앱 재실행 없이 만료 시점에 조회·내보내기해도 원문과
   }
 });
 
+test('Swift와 앱의 서로 다른 날짜 형식도 실제 만료 시점에 정리한다', async () => {
+  for (const expiry of ['2026-11-20T02:00:00Z', '2026-11-20T02:00:00.000Z', '2026-11-20T11:00:00+09:00']) {
+    let now = '2026-11-13T02:00:00.000Z';
+    const { repo, native } = fixture(() => now); await repo.initialize();
+    try {
+      await repo.setPreference('ai_local_consent', 'yes');
+      const a = await repo.createAnalysis('mixed-expiry', 'shortcuts', null);
+      await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+      native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run(expiry, a.id);
+      now = '2026-11-20T01:59:59.999Z';
+      assert.equal((await repo.listExtracted(a.id))[0].evidence_text, task.evidence_text);
+      now = '2026-11-20T02:00:00.000Z';
+      const exported = JSON.parse(await repo.exportData());
+      assert.equal(exported.analyses[0].status, 'ignored', expiry);
+      assert.equal(exported.extracted_tasks[0].title, '보존 기간이 지난 제안', expiry);
+      assert.equal(exported.extracted_tasks[0].evidence_text, '', expiry);
+      assert.equal(exported.extracted_tasks[0].due_at, null);
+      assert.equal(exported.analyses[0].image_fingerprint, 'mixed-expiry');
+      assert.deepEqual(exported.todos, []);
+    } finally { native.close(); }
+  }
+});
+
 test('내보내기 정리에 실패하면 본문을 반환하지 않고 변경도 롤백한다', async () => {
   let now = '2026-11-13T02:00:00.000Z';
   const { repo, native } = fixture(() => now); await repo.initialize();

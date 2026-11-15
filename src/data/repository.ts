@@ -210,9 +210,11 @@ export class Repository {
     // Opening the app must not cancel a live App Intent process using the same DB.
     // Only recover abandoned work after a grace period; never recreate its image implicitly.
     await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED',processing_token=NULL WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());
-    await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
-    await tx.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE expires_at <= ?)", time);
-    await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review' AND expires_at<=?", time);
+    // Swift writes whole seconds; JS writes milliseconds. Compare actual instants,
+    // including offsets, so a native capture expires at the same boundary in JS.
+    await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE julianday(expires_at) <= julianday(?))", time);
+    await tx.runAsync("UPDATE extracted_tasks SET evidence_text='' WHERE analysis_id IN (SELECT id FROM analyses WHERE julianday(expires_at) <= julianday(?))", time);
+    await tx.runAsync("UPDATE analyses SET status=CASE WHEN EXISTS(SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review' AND julianday(expires_at)<=julianday(?)", time);
   }
   async revokeLocalAIConsent() {
     await this.db.withExclusiveTransactionAsync(async tx => {
