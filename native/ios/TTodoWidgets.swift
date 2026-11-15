@@ -9,6 +9,7 @@ struct TodoEntry: TimelineEntry {
   var hidden: Bool
   var contentHidden = false
   var unavailable = false
+  var deadlineText: String? = nil
 }
 struct TodoProvider: TimelineProvider {
   func placeholder(in context: Context) -> TodoEntry { .init(date: Date(), tasks: [], count: 0, hidden: true) }
@@ -17,7 +18,7 @@ struct TodoProvider: TimelineProvider {
     completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(900))))
   }
   private func entry() -> TodoEntry {
-    do { let value = try SharedStore().snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles, contentHidden: value.hideContent) }
+    do { let value = try SharedStore().snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles, contentHidden: value.hideContent, deadlineText: value.deadlineText) }
     catch { return .init(date: Date(), tasks: [], count: 0, hidden: true, unavailable: true) }
   }
 }
@@ -27,7 +28,10 @@ struct TodoWidget: Widget {
       VStack(alignment: .leading, spacing: 4) {
         Label(entry.unavailable ? "앱에서 확인" : entry.contentHidden ? "내용 숨김" : "할 일 \(entry.count)개", systemImage: "checklist").font(.headline)
         if entry.hidden { Text("TTodo에서 확인하세요").font(.caption) }
-        else { ForEach(entry.tasks.prefix(2), id: \.id) { task in Text(task.title).font(.caption).lineLimit(1).privacySensitive() } }
+        else {
+          ForEach(entry.tasks.prefix(entry.deadlineText == nil ? 2 : 1), id: \.id) { task in Text(task.title).font(.caption).lineLimit(1).privacySensitive() }
+          if let deadline = entry.deadlineText { Text("우선 마감 · \(deadline)").font(.caption).lineLimit(1).privacySensitive() }
+        }
       }.containerBackground(.fill.tertiary, for: .widget).widgetURL(URL(string: "ttodo://today"))
     }.configurationDisplayName("오늘의 할 일").description("잠금화면에서 남은 할 일을 확인해요.")
       .supportedFamilies([.accessoryRectangular, .systemSmall])

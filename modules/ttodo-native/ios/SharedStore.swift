@@ -21,6 +21,7 @@ struct LockSnapshot {
   let count: Int
   let hideTitles: Bool
   let hideContent: Bool
+  let deadlineText: String?
 }
 final class SharedStore {
   private var db: OpaquePointer?
@@ -124,7 +125,7 @@ final class SharedStore {
     sqlite3_bind_double(stmt, 5, Date().timeIntervalSince1970 * 1000)
     guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.database }
   }
-  func snapshot() throws -> LockSnapshot {
+  func snapshot(now: Date = Date()) throws -> LockSnapshot {
     try execute("BEGIN")
     do {
       let count = try scalar("SELECT COUNT(*) FROM todos WHERE status='pending'")
@@ -132,8 +133,12 @@ final class SharedStore {
       let hideAll = try scalar("SELECT CASE WHEN (SELECT value FROM preferences WHERE key='hide_lock_content')='yes' THEN 1 ELSE 0 END") != 0
       let configuredHide = try scalar("SELECT CASE WHEN (SELECT value FROM preferences WHERE key='private_lock')='no' THEN 0 ELSE 1 END") != 0
       let hide = hideAll || configuredHide
-      let stmt = try statement("WITH pending AS (SELECT *,CASE WHEN due_precision='datetime' THEN date(due_at,'localtime') ELSE substr(due_at,1,10) END AS due_day FROM todos WHERE status='pending') SELECT id,title FROM pending ORDER BY CASE WHEN due_day=date('now','localtime') THEN 0 WHEN due_day<date('now','localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_day,CASE WHEN due_precision='date' THEN 0 ELSE 1 END,julianday(due_at),sort_order,created_at LIMIT 5")
+      let time = ISO8601DateFormatter().string(from: now)
+      let pending = "WITH pending AS (SELECT *,CASE WHEN due_precision='datetime' THEN date(due_at,'localtime') ELSE substr(due_at,1,10) END AS due_day FROM todos WHERE status='pending') "
+      let order = " ORDER BY CASE WHEN due_day=date(?,'localtime') THEN 0 WHEN due_day<date(?,'localtime') THEN 1 WHEN due_at IS NULL THEN 2 ELSE 3 END,due_day,CASE WHEN due_precision='date' THEN 0 ELSE 1 END,julianday(due_at),sort_order,created_at"
+      let stmt = try statement(pending + "SELECT id,title FROM pending" + order + " LIMIT 5")
       defer { sqlite3_finalize(stmt) }
+      try bind([time, time], to: stmt)
       var tasks: [LockTask] = []
       var status = sqlite3_step(stmt)
       while status == SQLITE_ROW {
@@ -141,8 +146,15 @@ final class SharedStore {
         status = sqlite3_step(stmt)
       }
       guard status == SQLITE_DONE else { throw StoreError.database }
+      // Dates are private task content too. Apply the same ordering across all
+      // pending deadlines, even when undated tasks fill the five visible slots.
+      let deadline: String?
+      if hide { deadline = nil }
+      else {
+        deadline = try querySQL(pending + "SELECT CASE WHEN due_precision='date' THEN strftime('%Y.%m.%d',due_at) ELSE strftime('%Y.%m.%d %H:%M',due_at,'localtime') END AS deadline FROM pending WHERE due_at IS NOT NULL" + order + " LIMIT 1", params: [time, time]).first?["deadline"] as? String
+      }
       try execute("COMMIT")
-      return LockSnapshot(tasks: hideAll ? [] : tasks, count: hideAll ? 0 : count, hideTitles: hide, hideContent: hideAll)
+      return LockSnapshot(tasks: hideAll ? [] : tasks, count: hideAll ? 0 : count, hideTitles: hide, hideContent: hideAll, deadlineText: deadline)
     } catch { try? execute("ROLLBACK"); throw error }
   }
 }
