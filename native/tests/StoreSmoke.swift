@@ -10,6 +10,37 @@ struct StoreSmoke {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-store-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
+    for commit in [true, false] {
+      let concurrentDirectory = directory.appendingPathComponent(commit ? "reader-commit" : "reader-rollback")
+      try FileManager.default.createDirectory(at: concurrentDirectory, withIntermediateDirectories: true)
+      let writer = try SharedStore(directoryOverride: concurrentDirectory)
+      try writer.add(title: "확정한 할 일")
+      try writer.runSQL("INSERT INTO preferences(key,value) VALUES(?,?)", params: ["private_lock", "no"])
+      try writer.execSQL("BEGIN IMMEDIATE")
+      do {
+        try writer.runSQL("UPDATE todos SET title=?", params: ["아직 확정하지 않은 수정"])
+        try writer.add(title: "아직 확정하지 않은 추가")
+        // The writer stays open until after the reader's snapshot. A reader
+        // must see the last commit, not wait for this transaction to end.
+        let reader = try SharedStore(directoryOverride: concurrentDirectory)
+        let before = try reader.snapshot()
+        check(before.count == 1 && before.tasks[0].title == "확정한 할 일")
+        try writer.execSQL(commit ? "COMMIT" : "ROLLBACK")
+        let after = try reader.snapshot()
+        check(after.count == (commit ? 2 : 1))
+        check(after.tasks.contains { $0.title == (commit ? "아직 확정하지 않은 수정" : "확정한 할 일") })
+      } catch { try? writer.execSQL("ROLLBACK"); throw error }
+    }
+    do {
+      let futureDirectory = directory.appendingPathComponent("newer-schema")
+      try FileManager.default.createDirectory(at: futureDirectory, withIntermediateDirectories: true)
+      let future = try SharedStore(directoryOverride: futureDirectory)
+      try future.execSQL("PRAGMA journal_mode=WAL; BEGIN IMMEDIATE; PRAGMA user_version=4; COMMIT;")
+      do { _ = try SharedStore(directoryOverride: futureDirectory); fatalError("Newer schema was accepted") }
+      catch StoreError.newerSchema { }
+      check((try future.querySQL("PRAGMA journal_mode", params: []))[0]["journal_mode"] as? String == "wal")
+      check((try future.querySQL("PRAGMA user_version", params: []))[0]["user_version"] as? Int64 == 4)
+    }
     // Widget deadlines share list priority, but must not leak in count/hidden modes.
     do {
       let widgetDirectory = directory.appendingPathComponent("widget-deadlines")
@@ -93,6 +124,6 @@ struct StoreSmoke {
     catch StoreError.invalidTitle { }
     try store.runSQL("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at) VALUES(?,?,?,?,?,?,?)", params: ["new", "new-hash", nil, "2026-11-13", "processing", "manual", "2026-11-20"])
     check((try store.querySQL("SELECT captured_at FROM analyses WHERE id=?", params: ["new"]))[0]["captured_at"] is NSNull)
-    print("Swift 저장소 마이그레이션·개인정보 표시·바인딩·롤백 검사 통과")
+    print("Swift 저장소 마이그레이션·동시 읽기·개인정보 표시·바인딩·롤백 검사 통과")
   }
 }

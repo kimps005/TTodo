@@ -42,16 +42,22 @@ final class SharedStore {
     }
     do {
       sqlite3_busy_timeout(db, 5000)
+      let initialVersion = try scalar("PRAGMA user_version")
+      if initialVersion > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
       try execute("PRAGMA journal_mode=DELETE; PRAGMA foreign_keys=ON; PRAGMA secure_delete=ON; PRAGMA temp_store=MEMORY;")
-      try execute("BEGIN IMMEDIATE")
-      do {
-        let version = try scalar("PRAGMA user_version")
-        if version > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
-        if version == 1 { try execute(TTodoConfiguration.migrationFromOneSQL) }
-        else if version == 2 { try execute(TTodoConfiguration.migrationFromTwoSQL) }
-        else if version < TTodoConfiguration.schemaVersion { try execute(TTodoConfiguration.schemaSQL) }
-        try execute("COMMIT")
-      } catch { try? execute("ROLLBACK"); throw error }
+      // An initialized widget reader must not reserve the writer lock merely
+      // to open the database. Recheck under the lock when migration is needed.
+      if initialVersion < TTodoConfiguration.schemaVersion {
+        try execute("BEGIN IMMEDIATE")
+        do {
+          let version = try scalar("PRAGMA user_version")
+          if version > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
+          if version == 1 { try execute(TTodoConfiguration.migrationFromOneSQL) }
+          else if version == 2 { try execute(TTodoConfiguration.migrationFromTwoSQL) }
+          else if version < TTodoConfiguration.schemaVersion { try execute(TTodoConfiguration.schemaSQL) }
+          try execute("COMMIT")
+        } catch { try? execute("ROLLBACK"); throw error }
+      }
       // Existing DB and sidecars must follow the same policy as newly created files.
       #if os(iOS)
       for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: path + suffix) {
