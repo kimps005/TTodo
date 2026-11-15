@@ -53,5 +53,6 @@ macOS의 `/usr/bin/plutil`로 XML/바이너리 plist를 JSON으로 읽는다. �
 `release-archive.yml`은 실제 iPhoneOS SDK·Release 구성·arm64로 `xcodebuild archive`를 실행한다. `CODE_SIGNING_ALLOWED=NO`를 명령에 지정하며 Apple 계정·프로비저닝·설치·TestFlight·사이드로딩을 진행하지 않는다. 이 workflow 자체를 변경한 push와 별도 수동 실행에만 연결해 매 개발 push마다 아카이브를 반복하지 않는다.
 
 생성된 아카이브의 앱과 위젯/공유 확장 존재, 아카이브 메타데이터와 실행 파일 형식, 같은 개인정보 선언 목록을 확인한다. 보고서의 `build_context=unsigned_release_archive`와 iPhoneOS 플랫폼을 시뮬레이터와 구분한다. 문맥 표시는 workflow의 명시적 빌드 구성에 근거하며 코드 서명 검증기는 아니다.
+아카이브 최상위 Info.plist는 XML plist로 보존한다. 첫 실행에서 유효한 plist의 JSON 변환이 지원하지 않는 객체 때문에 실패했으므로, 날짜/데이터 등 plist 고유 타입을 손실시킬 수 있는 JSON 변환으로 강제하지 않는다. 앱 Info.plist와 개인정보 선언 자체의 JSON 수집은 별도다.
 
 아카이브 전체나 설치 파일은 배포하지 않고 도구 버전·빌드 로그·아카이브 메타데이터·선언 JSON만 CI 산출물로 남긴다. 이 검사가 통과해도 서명된 최종 배포 아카이브, SDK 서명 적합성, 실제 iPhone·App Store 응답은 미검증이다.

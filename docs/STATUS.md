@@ -5,6 +5,8 @@
 ## 실제 iPhoneOS Release 아카이브 검사 준비
 - 계정 없이 가능한 후속 검증으로 iPhoneOS SDK·Release·arm64의 서명 없는 archive workflow를 추가했다. 기존 앱/위젯/공유 확장의 아카이브 포함과 메타데이터·실행 파일·개인정보 선언을 기록한다. 계정·프로비저닝·설치·배포·사이드로딩을 진행하지 않는다.
 - 선언 보고서에 빌드 문맥을 추가하고 시뮬레이터/iPhoneOS 플랫폼이 바뀌어 표기되면 거부하는 검사를 보강했다. 로컬 74개 테스트·타입·구문·YAML·diff 통과. 실제 Release 아카이브 생성과 선언 수집은 CI 확인 전이다. 최종 서명된 배포·실제 iPhone 검증은 미완료다.
+- [ec1ec09 iPhoneOS 아카이브 실행](https://github.com/kimps005/TTodo/actions/runs/43713306562)은 Xcode 26.6 / iPhoneOS SDK 26.5의 Release arm64 archive 생성과 두 확장 포함 확인을 통과했다. 전체 job은 후속 메타데이터 JSON 변환에서 실패했다. plutil 원본 lint는 OK지만 JSON 변환은 `Invalid object in plist for JSON format`으로 중단되어 선언 수집까지 진행하지 않았다. JSON으로 표현할 수 없는 plist 타입을 제거하지 않고 XML plist로 보존하도록 수정했다. 수정 후 전체 아카이브/수집 검증 전이다.
+- [같은 커밋의 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43713306561)는 core/ios 모두 통과했다. 74개 테스트·Hermes·Swift·시뮬레이터 앱/확장 빌드와 새 문맥의 Debug 개인정보 수집을 확인했다. 이 성공을 위 실패한 아카이브 검사 전체 성공으로 대체하지 않는다.
 
 ## 빌드 산출물의 개인정보 선언 수집 통과
 - PRD 11의 개인정보·출시 기준과 Apple 공식 선언 문서를 대조했다. 전체 CI에서 실제 `.app` 안의 PrivacyInfo.xcprivacy를 macOS plutil로 읽고 번들 상대 경로·키 원문·플랫폼·커밋별 JSON을 남기도록 추가했다. 선언을 수정하거나 수집 없음으로 추정하지 않는다.
