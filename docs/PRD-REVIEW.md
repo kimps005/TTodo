@@ -11,6 +11,7 @@
 | 인증 없는 입력 완료를 보류 | 5.3, 14.1: 실제 기기 통과가 필수 | alwaysAllowed만으로 입력 UI 인증을 보장하지 않음 |
 | 잠금 목록 표시 수준 선택 | 7.4, 11: 민감정보 최소 노출 | 기본 개수만 표시. 제목/개수/내용 숨김을 제공하고 해당 스냅샷·Activity state에서 불필요한 본문 제거. 갱신 지연의 잔여 노출은 기기 검증 필요 |
 | 작은 위젯의 마감도 앱 목록 순서를 적용 | 5.4·5.6의 연결 기준에 대해 사용자가 2026-11-15 확정 | 오늘→지난→미래 마감, 날짜 없는/완료 항목 제외. 개수/전체 숨김에서는 마감 제거. af82d3b Swift 저장소 검사·앱/확장 빌드 통과, 실제 위젯 화면은 미검증 |
+| 한국어 기본/지원 언어 선언 | P0-12: 한국어 지원, 2.1: 한국어 우선 | 기존 아카이브는 한국어 단축어 문구를 en으로 학습했다. 프로젝트와 앱·위젯·공유의 기본/지원 언어를 ko로 맞춘다. 생성 설정/XML 검사 통과, 변경 후 SDK 학습 언어·실기기는 검증 전 |
 | 제안과 Todo 분리 | 10.3: 승인·무시·중복 방지 | 다중 승인 트랜잭션과 중복 요청 테스트 |
 | 개별 삭제 시 연결 분석 본문도 삭제 | 11.4의 미정 부분에 대해 사용자가 즉시 삭제 선택 | 같은 트랜잭션으로 본문 제거, 지문·saved 상태로 재승인 방지. 다른 항목 보존·롤백·과거 삭제 잔여 정리 검사 |
 | MVP 재분석은 저장 전 캡처만 허용 | 12.4·12.5의 저장 후 처리 범위를 사용자에게 확인해 1번 확정 | 미저장 결과 교체 확인, 부분 저장/삭제 후 차단, 승인과 재분석 경쟁 검사. 저장된 할 일은 직접 편집 |
@@ -25,6 +26,7 @@
 - [Expo SDK 58 기준](https://docs.expo.dev/versions/v58.0.0/): iOS 16.4+, Xcode 26.4+. 앱은 PRD 검토안에 맞춰 iOS 18을 배포 타깃으로 설정.
 - [Expo 네이티브 확장](https://docs.expo.dev/build-reference/app-extensions/): config plugin으로 확장 타깃 생성, EAS 서명 대상에 확장 선언 필요.
 - [Expo 로컬 네이티브 코드](https://docs.expo.dev/workflow/customizing/): 단일 앱 전용 모듈은 local module로 구성.
+- [Apple 언어 선택](https://developer.apple.com/library/archive/qa/qa1828/_index.html), [CFBundleLocalizations](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundlelocalizations): JS가 관리하는 한국어 UI도 번들 지원 언어로 선언하며 기본 언어를 내용과 맞춘다.
 - [Apple iOS 27 단축어 변경](https://support.apple.com/en-us/149045): 검색 인덱스를 통해 스크린샷 저장 트리거 존재 확인. 문서 직접 열기는 429. **이미지 전달 방식·잠금 실행 성공은 확인하지 못했으며 실기기 검증이 필요.**
 - [App Intent 인증 정책](https://developer.apple.com/documentation/appintents/intentauthenticationpolicy/alwaysallowed), [Vision OCR](https://developer.apple.com/documentation/vision/recognizing-text-in-images), [Live Activity](https://developer.apple.com/documentation/activitykit/displaying-live-data-with-live-activities): 네이티브 구현 근거. API 설정과 실제 기기 성공은 구분.
 

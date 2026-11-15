@@ -50,9 +50,13 @@ macOS의 `/usr/bin/plutil`로 XML/바이너리 plist를 JSON으로 읽는다. �
 
 ## iPhone용 서명 없는 Release 아카이브
 
-`release-archive.yml`은 실제 iPhoneOS SDK·Release 구성·arm64로 `xcodebuild archive`를 실행한다. `CODE_SIGNING_ALLOWED=NO`를 명령에 지정하며 Apple 계정·프로비저닝·설치·TestFlight·사이드로딩을 진행하지 않는다. 이 workflow 자체를 변경한 push와 별도 수동 실행에만 연결해 매 개발 push마다 아카이브를 반복하지 않는다.
+`release-archive.yml`은 실제 iPhoneOS SDK·Release 구성·arm64로 `xcodebuild archive`를 실행한다. `CODE_SIGNING_ALLOWED=NO`를 명령에 지정하며 Apple 계정·프로비저닝·설치·TestFlight·사이드로딩을 진행하지 않는다. 이 workflow·프로젝트 생성 설정·선언 수집 스크립트 변경 push와 별도 수동 실행에 연결해 매 개발 push마다 아카이브를 반복하지 않는다.
 
 생성된 아카이브의 앱과 위젯/공유 확장 존재, 아카이브 메타데이터와 실행 파일 형식, 같은 개인정보 선언 목록을 확인한다. 보고서의 `build_context=unsigned_release_archive`와 iPhoneOS 플랫폼을 시뮬레이터와 구분한다. 문맥 표시는 workflow의 명시적 빌드 구성에 근거하며 코드 서명 검증기는 아니다.
 아카이브 최상위 Info.plist는 XML plist로 보존한다. 첫 실행에서 유효한 plist의 JSON 변환이 지원하지 않는 객체 때문에 실패했으므로, 날짜/데이터 등 plist 고유 타입을 손실시킬 수 있는 JSON 변환으로 강제하지 않는다. 앱 Info.plist와 개인정보 선언 자체의 JSON 수집은 별도다.
 
 아카이브 전체나 설치 파일은 배포하지 않고 도구 버전·빌드 로그·아카이브 메타데이터·선언 JSON만 CI 산출물로 남긴다. 이 검사가 통과해도 서명된 최종 배포 아카이브, SDK 서명 적합성, 실제 iPhone·App Store 응답은 미검증이다.
+
+[abbfd32 Release 실행](https://github.com/kimps005/TTodo/actions/runs/43714107156)은 Xcode 26.6 / iPhoneOS SDK 26.5의 아카이브와 전체 수집 검사를 통과했다. 산출물 ZIP의 SHA-256 `edc1a5105174f21c0d7bd29f9062aa08219e43407b79e48e9a7e66c10e10469f`를 연결 API의 digest와 대조했다. 메타데이터에서 `Applications/TTodo.app`, arm64, 빈 SigningIdentity/Team을 확인했고, 실행 파일 보고서는 Mach-O 64-bit arm64다. CreationDate가 plist의 date 타입인 것도 확인했다.
+
+Release 보고서는 커밋 abbfd32·문맥 unsigned_release_archive·플랫폼 iPhoneOS·최상위 포함 선언 12개다. [같은 커밋의 Debug 실행](https://github.com/kimps005/TTodo/actions/runs/43714107179) 보고서와 비교해 경로와 선언 내용이 모두 같았다. 모두 추적 false·수집 배열 비어 있음을 선언한다. 이는 실제 네트워크나 최종 배포 서명의 검증 결과가 아니다.

@@ -2,7 +2,11 @@ name: iPhone용 서명 없는 Release 아카이브
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/release-archive.yml']
+    paths:
+      - '.github/workflows/release-archive.yml'
+      - 'plugins/with-ttodo-ios.js'
+      - 'app.config.ts'
+      - 'scripts/privacy-manifests.mjs'
   workflow_dispatch:
 permissions:
   contents: read

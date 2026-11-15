@@ -67,6 +67,8 @@ export function inventoryPrivacyManifests(appPath, read = readPlist, context = '
     build_context: context,
     bundle_identifier: info.CFBundleIdentifier,
     bundle_version: info.CFBundleVersion ?? null,
+    development_region: info.CFBundleDevelopmentRegion ?? null,
+    localizations: info.CFBundleLocalizations ?? null,
     supported_platforms: platforms,
     root_manifest_present: manifests.some(item => item.path === 'PrivacyInfo.xcprivacy'),
     manifests,

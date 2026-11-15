@@ -9,6 +9,9 @@ function swiftConfiguration(group) {
 function plist(body) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>${body}</dict></plist>`;
 }
+function koreanInfoPlist(body) {
+  return plist('<key>CFBundleDevelopmentRegion</key><string>ko</string><key>CFBundleLocalizations</key><array><string>ko</string></array>' + body);
+}
 function withTTodo(config) {
   const bundle = config.ios.bundleIdentifier;
   const appGroup = `group.${bundle}`;
@@ -16,12 +19,18 @@ function withTTodo(config) {
     c.modResults['com.apple.security.application-groups'] = [appGroup]; return c;
   });
   config = withInfoPlist(config, c => {
-    c.modResults.NSSupportsLiveActivities = true; return c;
+    c.modResults.NSSupportsLiveActivities = true;
+    c.modResults.CFBundleDevelopmentRegion = 'ko';
+    c.modResults.CFBundleLocalizations = ['ko'];
+    return c;
   });
   config = withXcodeProject(config, c => {
     const root = c.modRequest.projectRoot;
     const ios = c.modRequest.platformProjectRoot;
     const project = c.modResults;
+    const projectInfo = project.getFirstProject().firstProject;
+    projectInfo.developmentRegion = 'ko';
+    projectInfo.knownRegions = [...(projectInfo.knownRegions ?? []).filter(region => region.replaceAll('"', '') !== 'ko'), 'ko'];
     const main = project.getFirstTarget().uuid;
     const generated = 'TTodoGenerated';
     const common = ['SharedStore.swift', 'TodoActivity.swift'];
@@ -51,7 +60,7 @@ function withTTodo(config) {
     fs.mkdirSync(widgetDir, { recursive: true });
     for (const name of [...common, 'TTodoConfiguration.swift']) copy(name, coreDir, widgetDir);
     copy('TTodoWidgets.swift', path.join(root, 'native/ios'), widgetDir);
-    fs.writeFileSync(path.join(widgetDir, `${targetName}-Info.plist`), plist('<key>CFBundleDisplayName</key><string>TTodo</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>'));
+    fs.writeFileSync(path.join(widgetDir, `${targetName}-Info.plist`), koreanInfoPlist('<key>CFBundleDisplayName</key><string>TTodo</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>'));
     fs.writeFileSync(path.join(widgetDir, `${targetName}.entitlements`), plist(`<key>com.apple.security.application-groups</key><array><string>${appGroup}</string></array>`));
     const nativeTargets = project.pbxNativeTargetSection();
     let targetId = Object.keys(nativeTargets).find(key => nativeTargets[key]?.name?.replaceAll('"', '') === targetName);
@@ -82,7 +91,7 @@ function withTTodo(config) {
     fs.mkdirSync(shareDir, { recursive: true });
     for (const name of shareSources) copy(name, coreDir, shareDir);
     copy('ShareViewController.swift', path.join(root, 'native/ios'), shareDir);
-    fs.writeFileSync(path.join(shareDir, `${shareName}-Info.plist`), plist('<key>CFBundleDisplayName</key><string>TTodo로 할 일 찾기</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.share-services</string><key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).ShareViewController</string><key>NSExtensionAttributes</key><dict><key>NSExtensionActivationRule</key><dict><key>NSExtensionActivationSupportsImageWithMaxCount</key><integer>1</integer></dict></dict></dict>'));
+    fs.writeFileSync(path.join(shareDir, `${shareName}-Info.plist`), koreanInfoPlist('<key>CFBundleDisplayName</key><string>TTodo로 할 일 찾기</string><key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string><key>CFBundleExecutable</key><string>$(EXECUTABLE_NAME)</string><key>CFBundleName</key><string>$(PRODUCT_NAME)</string><key>CFBundlePackageType</key><string>XPC!</string><key>CFBundleShortVersionString</key><string>$(MARKETING_VERSION)</string><key>CFBundleVersion</key><string>$(CURRENT_PROJECT_VERSION)</string><key>NSExtension</key><dict><key>NSExtensionPointIdentifier</key><string>com.apple.share-services</string><key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).ShareViewController</string><key>NSExtensionAttributes</key><dict><key>NSExtensionActivationRule</key><dict><key>NSExtensionActivationSupportsImageWithMaxCount</key><integer>1</integer></dict></dict></dict>'));
     fs.writeFileSync(path.join(shareDir, `${shareName}.entitlements`), plist(`<key>com.apple.security.application-groups</key><array><string>${appGroup}</string></array>`));
     let shareId = Object.keys(nativeTargets).find(key => nativeTargets[key]?.name?.replaceAll('"', '') === shareName);
     if (!shareId) {

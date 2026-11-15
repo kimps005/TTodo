@@ -6,6 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 // Xcode project edits can be validated on Windows; Swift compilation still requires macOS.
 const xcode = require('xcode');
+const plist = require('@expo/plist').default;
 const withTTodo = require('../plugins/with-ttodo-ios');
 test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재적용 시 타깃을 중복하지 않는다', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'ttodo-plugin-'));
@@ -20,6 +21,19 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     const apply = () => config.mods.ios.xcodeproj({ ...config, modResults: project, modRequest: { projectRoot: root, platformProjectRoot: ios, platform: 'ios', modName: 'xcodeproj' } });
     await apply();
     const first = project.writeSync(); await apply(); assert.equal(project.writeSync(), first);
+    assert.equal(project.getFirstProject().firstProject.developmentRegion, 'ko');
+    assert.equal(project.getFirstProject().firstProject.knownRegions.filter((region: string) => region.replaceAll('"', '') === 'ko').length, 1);
+    const appInfo = await config.mods.ios.infoPlist({ ...config, modResults: { CFBundleDevelopmentRegion: 'en', CFBundleLocalizations: ['en'], NSCustomPreservedKey: 'preserve' }, modRequest: {} });
+    assert.equal(appInfo.modResults.CFBundleDevelopmentRegion, 'ko');
+    assert.deepEqual(appInfo.modResults.CFBundleLocalizations, ['ko']);
+    assert.equal(appInfo.modResults.NSCustomPreservedKey, 'preserve');
+    for (const target of ['TTodoWidgets', 'TTodoShare']) {
+      const info = plist.parse(readFileSync(path.join(ios, target, `${target}-Info.plist`), 'utf8'));
+      assert.equal(info.CFBundleDevelopmentRegion, 'ko');
+      assert.deepEqual(info.CFBundleLocalizations, ['ko']);
+      const entitlement = plist.parse(readFileSync(path.join(ios, target, `${target}.entitlements`), 'utf8'));
+      assert.deepEqual({ ...entitlement }, { 'com.apple.security.application-groups': ['group.com.kimps005.ttodo'] });
+    }
     assert.ok(!first.includes('TTodoUITests'), '일반 앱 생성에 CI UI 테스트 타깃을 포함하면 안 된다');
     const targets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoWidgets"') as any[];
     assert.equal(targets.length, 1);

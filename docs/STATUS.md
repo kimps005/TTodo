@@ -2,11 +2,17 @@
 
 기준일: 2026-11-15 (한국 시간)
 
-## 실제 iPhoneOS Release 아카이브 검사 준비
+## 한국어 기본 언어와 지원 언어 선언 보완
+- PRD P0-12의 한국어 우선 지원을 점검했다. 실제 iPhoneOS 아카이브 로그에서 한국어 App Shortcut 문구를 en 언어로 학습하고 있었고 생성 플러그인은 기본/지원 언어를 선언하지 않았다. Apple의 CFBundleDevelopmentRegion·CFBundleLocalizations 및 언어 선택 문서를 확인했다.
+- 생성 Xcode 프로젝트의 기본 언어를 ko로 맞추고 앱·위젯·공유 확장 Info.plist에 기본 ko/지원 ko를 지정했다. JS에서 관리하는 한국어 UI도 번들 지원 언어로 선언한다. 재적용 중복 방지, 실제 생성 XML과 기존 entitlements 유지 검사를 보강했다. 로컬 74개 테스트·타입·구문·diff 통과.
+- 빌드 보고서에 실제 앱의 언어 메타데이터를 포함하고 프로젝트 생성 설정 변경 시 Release 아카이브도 검사하도록 연결했다. 수정 후 실제 SDK 메타데이터/한국어 단축어 학습은 CI 확인 전이며 한국어 Siri·잠금 실행·VoiceOver 실기기는 미검증이다.
+
+## 실제 iPhoneOS Release 아카이브 검사 통과
 - 계정 없이 가능한 후속 검증으로 iPhoneOS SDK·Release·arm64의 서명 없는 archive workflow를 추가했다. 기존 앱/위젯/공유 확장의 아카이브 포함과 메타데이터·실행 파일·개인정보 선언을 기록한다. 계정·프로비저닝·설치·배포·사이드로딩을 진행하지 않는다.
-- 선언 보고서에 빌드 문맥을 추가하고 시뮬레이터/iPhoneOS 플랫폼이 바뀌어 표기되면 거부하는 검사를 보강했다. 로컬 74개 테스트·타입·구문·YAML·diff 통과. 실제 Release 아카이브 생성과 선언 수집은 CI 확인 전이다. 최종 서명된 배포·실제 iPhone 검증은 미완료다.
+- 선언 보고서에 빌드 문맥을 추가하고 시뮬레이터/iPhoneOS 플랫폼이 바뀌어 표기되면 거부하는 검사를 보강했다. 로컬 74개 테스트·타입·구문·YAML·diff 통과. 최종 서명된 배포·실제 iPhone 검증은 미완료다.
 - [ec1ec09 iPhoneOS 아카이브 실행](https://github.com/kimps005/TTodo/actions/runs/43713306562)은 Xcode 26.6 / iPhoneOS SDK 26.5의 Release arm64 archive 생성과 두 확장 포함 확인을 통과했다. 전체 job은 후속 메타데이터 JSON 변환에서 실패했다. plutil 원본 lint는 OK지만 JSON 변환은 `Invalid object in plist for JSON format`으로 중단되어 선언 수집까지 진행하지 않았다. JSON으로 표현할 수 없는 plist 타입을 제거하지 않고 XML plist로 보존하도록 수정했다. 수정 후 전체 아카이브/수집 검증 전이다.
 - [같은 커밋의 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43713306561)는 core/ios 모두 통과했다. 74개 테스트·Hermes·Swift·시뮬레이터 앱/확장 빌드와 새 문맥의 Debug 개인정보 수집을 확인했다. 이 성공을 위 실패한 아카이브 검사 전체 성공으로 대체하지 않는다.
+- 수정 후 [abbfd32 iPhoneOS 아카이브 검사](https://github.com/kimps005/TTodo/actions/runs/43714107156)와 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43714107179)가 모두 통과했다. 실제 XML 메타데이터의 arm64·앱 경로·빈 SigningIdentity/Team과 CreationDate의 date 타입을 직접 확인했다. 이전 JSON 오류는 이 타입을 보존하는 XML 출력으로 해소되었다. 실행 파일은 Mach-O 64-bit arm64이며 앱·두 확장의 아카이브 포함과 Release의 iPhoneOS/선언 12개를 확인했다. ZIP digest와 커밋이 일치하고 같은 커밋 Debug의 선언 원문과 경로도 모두 같았다. 한국어 언어 선언 보완은 이 실행 이후다.
 
 ## 빌드 산출물의 개인정보 선언 수집 통과
 - PRD 11의 개인정보·출시 기준과 Apple 공식 선언 문서를 대조했다. 전체 CI에서 실제 `.app` 안의 PrivacyInfo.xcprivacy를 macOS plutil로 읽고 번들 상대 경로·키 원문·플랫폼·커밋별 JSON을 남기도록 추가했다. 선언을 수정하거나 수집 없음으로 추정하지 않는다.
@@ -64,6 +70,7 @@
 - 로컬 63개 테스트·타입·diff와 [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43584368392), [사진 UI 재검증](https://github.com/kimps005/TTodo/actions/runs/43584375416) 통과. 실제 iPhone·AI 정확도는 미검증이다.
 
 ## 최근 검증 요약
+- [abbfd32 전체 CI](https://github.com/kimps005/TTodo/actions/runs/43714107179)와 [서명 없는 iPhoneOS Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/43714107156) 모두 성공. 74개 테스트·타입·보안·Hermes·Swift/합성 Vision OCR·앱/확장 시뮬레이터 빌드와 실제 iPhoneOS arm64 archive 및 Debug/Release 개인정보 수집을 확인했다. 실제 iPhone 설치·실행, SDK 서명 적합성·배포 서명·App Store 신고는 미검증이다.
 - [af82d3b 전체 CI](https://github.com/kimps005/TTodo/actions/runs/43711483762): 72개 테스트·타입·보안·Hermes, 실제 Swift 위젯 마감 우선순위/개인정보·날짜 문맥 18개 사례·캡처/계약·합성 Vision OCR 및 앱·위젯·공유 확장 arm64 시뮬레이터 빌드 통과. 실제 위젯 화면·AI 모델 정확도·실기기는 미검증이다. 후속 개인정보 선언 수집 검사는 별도 CI에서 확인한다.
 - [c76df77 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43709090533): core/ios 모두 성공. 69개 테스트·타입·보안·Hermes, Swift 저장소/캡처·계약·합성 Vision OCR과 앱·위젯·공유 확장 시뮬레이터 빌드 통과. 날짜 표기별 만료/중단 복구 경계는 실제 SQLite에서 확인했으며 실제 모델/기기 검증은 미완료다.
 - [00e5187 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43707459043): core/ios 모두 성공. 67개 테스트·타입·보안·Hermes, Swift 저장소/캡처·계약·합성 한국어 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드 통과. 분석 완료 기한 경계와 재시도 검사는 합성 응답을 사용했으며 실제 모델·기기 시각 변경/중단·iPhone 검증은 미완료다.
