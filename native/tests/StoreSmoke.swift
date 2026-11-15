@@ -10,6 +10,28 @@ struct StoreSmoke {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-store-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
+    do {
+      let textDirectory = directory.appendingPathComponent("utf8-text")
+      try FileManager.default.createDirectory(at: textDirectory, withIntermediateDirectories: true)
+      let textStore = try SharedStore(directoryOverride: textDirectory)
+      let samples = ["", "한글 👨‍👩‍👧‍👦", "\u{0000}앞", "앞\u{0000}뒤 🚀", "끝\u{0000}"]
+      for (index, sample) in samples.enumerated() {
+        let key = "text-\(index)"
+        try textStore.runSQL("INSERT INTO preferences(key,value) VALUES(?,?)", params: [key, sample])
+        let value = try textStore.querySQL("SELECT value FROM preferences WHERE key=?", params: [key]).first?["value"] as? String
+        check(value == sample)
+      }
+      let title = "한글\u{0000} 뒤의 할 일 🚀"
+      try textStore.add(title: title)
+      try textStore.runSQL("UPDATE todos SET description=?", params: ["설명\u{0000} 뒤의 본문"])
+      let row = try textStore.querySQL("SELECT title,description FROM todos", params: []).first!
+      check(row["title"] as? String == title)
+      check(row["description"] as? String == "설명\u{0000} 뒤의 본문")
+      try textStore.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
+      check(try textStore.snapshot().tasks.first?.title == title)
+      let reopened = try SharedStore(directoryOverride: textDirectory)
+      check(try reopened.snapshot().tasks.first?.title == title)
+    }
     for commit in [true, false] {
       let concurrentDirectory = directory.appendingPathComponent(commit ? "reader-commit" : "reader-rollback")
       try FileManager.default.createDirectory(at: concurrentDirectory, withIntermediateDirectories: true)

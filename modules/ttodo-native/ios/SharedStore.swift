@@ -81,14 +81,24 @@ final class SharedStore {
     return Int(sqlite3_column_int(stmt, 0))
   }
   func execSQL(_ sql: String) throws { try execute(sql) }
+  private func bindText(_ value: String, to stmt: OpaquePointer, at index: Int32) throws {
+    guard let byteCount = Int32(exactly: value.utf8.count) else { throw StoreError.database }
+    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+    // A negative length stops at an embedded NUL. Copy every UTF-8 byte instead.
+    let status = value.withCString { sqlite3_bind_text(stmt, index, $0, byteCount, transient) }
+    guard status == SQLITE_OK else { throw StoreError.database }
+  }
+  private func textColumn(_ stmt: OpaquePointer, at index: Int32) throws -> String {
+    guard let bytes = sqlite3_column_text(stmt, index) else { throw StoreError.database }
+    let count = Int(sqlite3_column_bytes(stmt, index))
+    guard let value = String(bytes: UnsafeBufferPointer(start: bytes, count: count), encoding: .utf8) else { throw StoreError.database }
+    return value
+  }
   private func bind(_ params: [String?], to stmt: OpaquePointer) throws {
     guard sqlite3_bind_parameter_count(stmt) == params.count else { throw StoreError.database }
-    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     for (index, value) in params.enumerated() {
-      let status: Int32
-      if let value { status = sqlite3_bind_text(stmt, Int32(index + 1), value, -1, transient) }
-      else { status = sqlite3_bind_null(stmt, Int32(index + 1)) }
-      guard status == SQLITE_OK else { throw StoreError.database }
+      if let value { try bindText(value, to: stmt, at: Int32(index + 1)) }
+      else if sqlite3_bind_null(stmt, Int32(index + 1)) != SQLITE_OK { throw StoreError.database }
     }
   }
   func runSQL(_ sql: String, params: [String?]) throws {
@@ -108,7 +118,7 @@ final class SharedStore {
         switch sqlite3_column_type(stmt, column) {
         case SQLITE_INTEGER: row[name] = sqlite3_column_int64(stmt, column)
         case SQLITE_FLOAT: row[name] = sqlite3_column_double(stmt, column)
-        case SQLITE_TEXT: row[name] = String(cString: sqlite3_column_text(stmt, column))
+        case SQLITE_TEXT: row[name] = try textColumn(stmt, at: column)
         default: row[name] = NSNull()
         }
       }
@@ -124,11 +134,10 @@ final class SharedStore {
     let stmt = try statement("INSERT INTO todos(id,title,created_at,updated_at,sort_order) VALUES(?,?,?,?,?)")
     defer { sqlite3_finalize(stmt) }
     let time = ISO8601DateFormatter().string(from: Date())
-    let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     for (index, value) in [UUID().uuidString.lowercased(), title, time, time].enumerated() {
-      guard sqlite3_bind_text(stmt, Int32(index + 1), value, -1, transient) == SQLITE_OK else { throw StoreError.database }
+      try bindText(value, to: stmt, at: Int32(index + 1))
     }
-    sqlite3_bind_double(stmt, 5, Date().timeIntervalSince1970 * 1000)
+    guard sqlite3_bind_double(stmt, 5, Date().timeIntervalSince1970 * 1000) == SQLITE_OK else { throw StoreError.database }
     guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.database }
   }
   func snapshot(now: Date = Date()) throws -> LockSnapshot {
@@ -148,7 +157,9 @@ final class SharedStore {
       var tasks: [LockTask] = []
       var status = sqlite3_step(stmt)
       while status == SQLITE_ROW {
-        tasks.append(LockTask(id: String(cString: sqlite3_column_text(stmt, 0)), title: hide ? "할 일" : String(cString: sqlite3_column_text(stmt, 1))))
+        let id = try textColumn(stmt, at: 0)
+        let title = try (hide ? "할 일" : textColumn(stmt, at: 1))
+        tasks.append(LockTask(id: id, title: title))
         status = sqlite3_step(stmt)
       }
       guard status == SQLITE_DONE else { throw StoreError.database }
