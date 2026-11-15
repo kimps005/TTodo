@@ -6,6 +6,12 @@ on:
         description: UI 검사 workflow 실행 ID
         required: true
         type: string
+      artifact_name:
+        description: 진단할 UI 검사 산출물
+        required: true
+        type: choice
+        default: ui-tests-primary
+        options: [ui-tests-primary, ui-tests-compact, ui-tests-oldest, ui-tests-manual, ui-tests]
 permissions:
   contents: read
   actions: read
@@ -16,7 +22,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ui-tests
+          name: ${{ inputs.artifact_name }}
           path: artifacts/source
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
