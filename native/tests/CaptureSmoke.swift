@@ -112,6 +112,30 @@ struct CaptureSmoke {
     try store.ignoreCapture(id: first.id)
     check((try store.querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=?", params: [first.id]))[0]["evidence_text"] as? String == "")
     let expired = try store.registerCapture(fingerprint: "expired", channel: "shortcuts")
+    let expiryTasks = try ExtractionValidator.validate(clear, sourceText: text, messageDate: nil)
+    for offset in [-0.001, 0.0, 0.001] {
+      let late = try store.registerCapture(fingerprint: "finish-expiry-\(offset)", channel: "share")
+      let row = try store.querySQL("SELECT expires_at FROM analyses WHERE id=?", params: [late.id])[0]
+      let expiry = ExtractionValidator.timestamp(row["expires_at"] as! String)!
+      do {
+        try store.finishCapture(id: late.id, tasks: expiryTasks, provider: "expiry-test", token: late.token!, now: expiry.addingTimeInterval(offset))
+        check(offset < 0)
+      } catch CaptureError.expired { check(offset >= 0) }
+      check((try store.querySQL("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=?", params: [late.id]))[0]["count"] as? Int64 == (offset < 0 ? 1 : 0))
+      if offset >= 0 {
+        check((try store.querySQL("SELECT model_version FROM analyses WHERE id=?", params: [late.id]))[0]["model_version"] is NSNull)
+        try store.failCapture(id: late.id, code: "LOCAL_AI_FAILED", token: late.token!)
+        let fresh = try store.registerCapture(fingerprint: "finish-expiry-\(offset)", channel: "share", retryFailed: true)
+        do { try store.finishCapture(id: late.id, tasks: expiryTasks, provider: "old", token: late.token!); fatalError("Expired attempt replaced retry") }
+        catch CaptureError.stateChanged { }
+        try store.finishCapture(id: fresh.id, tasks: expiryTasks, provider: "fresh", token: fresh.token!)
+      }
+    }
+    let invalidExpiry = try store.registerCapture(fingerprint: "finish-invalid-expiry", channel: "share")
+    try store.runSQL("UPDATE analyses SET expires_at='invalid' WHERE id=?", params: [invalidExpiry.id])
+    do { try store.finishCapture(id: invalidExpiry.id, tasks: expiryTasks, provider: "invalid", token: invalidExpiry.token!); fatalError("Invalid expiry accepted") }
+    catch CaptureError.expired { }
+    check((try store.querySQL("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=?", params: [invalidExpiry.id]))[0]["count"] as? Int64 == 0)
     try store.finishCapture(id: expired.id, tasks: ExtractionValidator.validate(clear, sourceText: text, messageDate: nil), provider: "test-only", token: expired.token!)
     try store.runSQL("UPDATE analyses SET expires_at='2000-01-01T00:00:00.000Z' WHERE id=?", params: [expired.id])
     do { _ = try store.approveSingleCapture(id: expired.id, expectedTaskId: "old-task"); fatalError("Expired result was approved") }

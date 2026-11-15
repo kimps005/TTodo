@@ -20,6 +20,36 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z') {
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+test('보존 기한에 도착한 분석 응답은 원문과 제안을 저장하지 않고 명시적 재시도만 허용한다', async () => {
+  let time = '2026-11-13T02:00:00.000Z';
+  const { repo, native } = fixture(() => time); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const before = await repo.createAnalysis('before-expiry', 'manual', null);
+    const boundary = await repo.createAnalysis('at-expiry', 'shortcuts', null);
+    const after = await repo.createAnalysis('after-expiry', 'share', null);
+    const invalid = await repo.createAnalysis('invalid-expiry', 'manual', null);
+    native.prepare('UPDATE analyses SET expires_at=? WHERE id=?').run('invalid', invalid.id);
+    time = '2026-11-20T01:59:59.999Z';
+    await repo.finishAnalysis(before.id, [task], 'before', before.token!);
+    time = '2026-11-20T02:00:00.000Z';
+    await assert.rejects(repo.finishAnalysis(boundary.id, [task], 'late', boundary.token!), /보존 기간/);
+    time = '2026-11-20T02:00:00.001Z';
+    await assert.rejects(repo.finishAnalysis(after.id, [task], 'late', after.token!), /보존 기간/);
+    await assert.rejects(repo.finishAnalysis(invalid.id, [task], 'late', invalid.token!), /보존 기간/);
+    for (const analysis of [boundary, after, invalid]) {
+      assert.equal(native.prepare('SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=?').get(analysis.id)!.count, 0);
+      assert.equal(native.prepare('SELECT model_version FROM analyses WHERE id=?').get(analysis.id)!.model_version, null);
+    }
+    assert.deepEqual(await repo.listTodos(), []);
+    await repo.pruneEvidence();
+    const token = await repo.retryFailedAnalysis(boundary.id);
+    await assert.rejects(repo.finishAnalysis(boundary.id, [task], 'old', boundary.token!), /상태/);
+    await repo.finishAnalysis(boundary.id, [task], 'fresh', token);
+    assert.equal((await repo.listExtracted(boundary.id)).length, 1);
+    assert.deepEqual(await repo.listTodos(), []);
+  } finally { native.close(); }
+});
 test('동의 확인 뒤 철회가 먼저 처리되면 새 분석 등록과 기존 지문 재사용을 거부한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   try {

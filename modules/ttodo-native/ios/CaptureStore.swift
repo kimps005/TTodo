@@ -1,13 +1,14 @@
 import Foundation
 
 enum CaptureError: LocalizedError {
-  case consentRequired, stateChanged, reviewRequired, alreadyStored
+  case consentRequired, stateChanged, reviewRequired, alreadyStored, expired
   var errorDescription: String? {
     switch self {
     case .consentRequired: return "먼저 TTodo 앱에서 기기 내 AI 분석에 동의해 주세요."
     case .stateChanged: return "분석 상태가 변경되었어요. 앱의 분석함에서 확인해 주세요."
     case .reviewRequired: return "이 결과는 앱에서 내용을 확인한 뒤 저장해 주세요."
     case .alreadyStored: return "한 번이라도 할 일을 저장한 캡처는 다시 분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요."
+    case .expired: return "보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요."
     }
   }
 }
@@ -138,11 +139,13 @@ extension SharedStore {
       return CaptureRegistration(id: id, created: true, token: token)
     }
   }
-  func finishCapture(id: String, tasks: [NativeSuggestion], provider: String, token: String) throws {
+  func finishCapture(id: String, tasks: [NativeSuggestion], provider: String, token: String, now: Date = Date()) throws {
     try transaction {
       guard try hasLocalAIConsent() else { throw CaptureError.consentRequired }
-      let current = try querySQL("SELECT status,processing_token FROM analyses WHERE id=?", params: [id]).first
+      let current = try querySQL("SELECT status,processing_token,expires_at FROM analyses WHERE id=?", params: [id]).first
       guard current?["status"] as? String == "processing", current?["processing_token"] as? String == token else { throw CaptureError.stateChanged }
+      guard let raw = current?["expires_at"] as? String,
+        let expiry = ExtractionValidator.timestamp(raw), expiry > now else { throw CaptureError.expired }
       for task in tasks {
         try runSQL("INSERT INTO extracted_tasks(id,analysis_id,title,description,due_at,due_precision,assignee,confidence,evidence_text,needs_confirmation) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [UUID().uuidString.lowercased(), id, task.title, task.description, task.due_at, task.due_precision, task.assignee, String(task.confidence), task.evidence_text, task.needs_confirmation ? "1" : "0"])
       }

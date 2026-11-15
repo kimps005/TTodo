@@ -148,6 +148,7 @@ export class Repository {
       if (consent?.value !== 'yes') throw new Error('기기 내 AI 분석 동의가 변경되었어요. 설정을 확인해 주세요.');
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       if (!analysis || analysis.status !== 'processing' || analysis.processing_token !== token) throw new Error('분석 상태가 변경되었어요. 다시 확인해 주세요.');
+      if (!(Date.parse(analysis.expires_at) > Date.parse(this.now()))) throw new Error('보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요.');
       for (const task of tasks) {
         validateDue(task.due_at, task.due_precision);
         await tx.runAsync('INSERT INTO extracted_tasks (id,analysis_id,title,description,due_at,due_precision,assignee,confidence,evidence_text,needs_confirmation) VALUES (?,?,?,?,?,?,?,?,?,?)',
