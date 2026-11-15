@@ -93,7 +93,11 @@ extension SharedStore {
   }
   func similarCaptures(id: String, now: Date = Date()) throws -> [SimilarCapture] {
     let source = try querySQL("SELECT evidence_text FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["evidence_text"] as? String }.joined(separator: "\n")
-    let rows = try querySQL("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", params: [id])
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let time = formatter.string(from: now)
+    // Eligibility precedes the cap; compare instants across Swift/JS date formats.
+    let rows = try querySQL("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' AND julianday(a.received_at) BETWEEN julianday(?) AND julianday(?) AND julianday(a.expires_at)>julianday(?) ORDER BY julianday(a.received_at) DESC,e.rowid DESC LIMIT 200", params: [id, formatter.string(from: now.addingTimeInterval(-7 * 86400)), time, time])
     var matches: [SimilarCapture] = []
     for row in rows {
       guard let other = row["analysis_id"] as? String, !matches.contains(where: { $0.id == other }),

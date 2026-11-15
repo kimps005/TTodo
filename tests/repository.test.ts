@@ -416,6 +416,42 @@ test('최근 원문이 남은 다른 분석만 비슷한 기록으로 안내하�
   native.close();
 });
 
+test('분석함과 유사 기록은 날짜 표기 대신 실제 최신 시각으로 정렬한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const dates = ['2026-11-13T01:00:00Z', '2026-11-13T01:00:00.500Z', '2026-11-13T09:59:59+09:00'];
+    const ids: string[] = [];
+    for (const [index, date] of dates.entries()) {
+      const a = await repo.createAnalysis(`order-${index}`, 'manual', null);
+      await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+      native.prepare('UPDATE analyses SET received_at=? WHERE id=?').run(date, a.id);
+      ids.push(a.id);
+    }
+    const expected = [ids[1], ids[0], ids[2]];
+    assert.deepEqual((await repo.listAnalyses()).map(a => a.id), expected);
+    assert.deepEqual((await repo.findSimilarAnalyses('new-capture', task.evidence_text)).map(a => a.analysis_id), expected);
+  } finally { native.close(); }
+});
+
+test('만료되거나 미래 시각인 기록은 최근 유사 근거 200개 제한을 소모하지 않는다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const valid = await repo.createAnalysis('valid-similar', 'manual', null);
+    await repo.finishAnalysis(valid.id, [task], 'test', valid.token!);
+    native.prepare('UPDATE analyses SET received_at=? WHERE id=?').run('2026-11-13T01:00:00Z', valid.id);
+    for (let index = 0; index < 200; index++) {
+      const a = await repo.createAnalysis(`ineligible-${index}`, 'manual', null);
+      await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+      native.prepare('UPDATE analyses SET received_at=?,expires_at=? WHERE id=?').run(
+        index % 2 ? '2026-11-14T02:00:00Z' : '2026-11-13T01:59:00Z',
+        index % 2 ? '2026-11-21T02:00:00Z' : '2026-11-13T02:00:00Z', a.id);
+    }
+    assert.deepEqual((await repo.findSimilarAnalyses('new-capture', task.evidence_text)).map(a => a.analysis_id), [valid.id]);
+  } finally { native.close(); }
+});
+
 test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 설정까지 제거한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.addTodo({ title: '개인 정보' }); await repo.setPreference('ai_consent', 'yes');

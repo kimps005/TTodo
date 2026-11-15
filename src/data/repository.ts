@@ -79,7 +79,7 @@ export class Repository {
     let rows: Analysis[] = [];
     await this.db.withExclusiveTransactionAsync(async tx => {
       await this.pruneEvidenceInTransaction(tx, this.now());
-      rows = await tx.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY received_at DESC');
+      rows = await tx.getAllAsync<Analysis>('SELECT * FROM analyses ORDER BY julianday(received_at) DESC,rowid DESC');
     });
     return rows;
   }
@@ -95,8 +95,9 @@ export class Repository {
     });
   }
   async findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
-    const rows = await this.db.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' ORDER BY a.received_at DESC,e.rowid DESC LIMIT 200", id);
-    const now = Date.parse(this.now()), matches: SimilarCapture[] = [];
+    const time = this.now(), now = Date.parse(time), matches: SimilarCapture[] = [];
+    // Filter before limiting so expired/future records cannot hide valid evidence.
+    const rows = await this.db.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' AND julianday(a.received_at) BETWEEN julianday(?) AND julianday(?) AND julianday(a.expires_at)>julianday(?) ORDER BY julianday(a.received_at) DESC,e.rowid DESC LIMIT 200", id, new Date(now - 7 * 86400000).toISOString(), time, time);
     for (const row of rows) {
       const age = now - Date.parse(row.received_at);
       if (!(age >= 0 && age <= 7 * 86400000 && Date.parse(row.expires_at) > now) || matches.some(m => m.analysis_id === row.analysis_id)) continue;

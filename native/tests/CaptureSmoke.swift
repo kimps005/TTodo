@@ -32,6 +32,40 @@ struct CaptureSmoke {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-capture-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
+    // Separate store: excluded records must not consume the recent evidence cap.
+    do {
+      let recentDirectory = directory.appendingPathComponent("recent-evidence")
+      try FileManager.default.createDirectory(at: recentDirectory, withIntermediateDirectories: true)
+      let recent = try SharedStore(directoryOverride: recentDirectory)
+      let now = ExtractionValidator.timestamp("2026-11-13T02:00:00.500Z")!
+      try recent.runSQL("INSERT INTO preferences(key,value) VALUES('ai_local_consent','yes')", params: [])
+      try recent.runSQL("INSERT INTO preferences(key,value) VALUES('private_lock','no')", params: [])
+      let evidence = "발표자료 수정해서 보내주세요."
+      let raw = #"[{"is_actionable":true,"title":"발표자료 전달","description":null,"due_at":null,"due_precision":"unknown","assignee":"사용자","confidence":0.9,"evidence_text":"발표자료 수정해서 보내주세요.","needs_confirmation":false}]"#
+      let tasks = try ExtractionValidator.validate(raw, sourceText: evidence, messageDate: nil)
+      func add(_ fingerprint: String, received: String, expires: String = "2026-11-20T02:00:00Z") throws -> String {
+        let a = try recent.registerCapture(fingerprint: fingerprint, channel: "share", now: now)
+        try recent.finishCapture(id: a.id, tasks: tasks, provider: "test-only", token: a.token!, now: now)
+        try recent.runSQL("UPDATE analyses SET received_at=?,expires_at=? WHERE id=?", params: [received, expires, a.id])
+        return a.id
+      }
+      let source = try add("source", received: "2026-11-13T02:00:00.500Z")
+      let seconds = try add("seconds", received: "2026-11-13T01:00:00Z")
+      let milliseconds = try add("milliseconds", received: "2026-11-13T01:00:00.500Z")
+      let offset = try add("offset", received: "2026-11-13T09:59:59+09:00")
+      check(try recent.similarCaptures(id: source, now: now).map { $0.id } == [milliseconds, seconds, offset])
+      for index in 0..<200 {
+        _ = try add("excluded-\(index)", received: index % 2 == 0 ? "2026-11-14T02:00:00Z" : "2026-11-13T02:00:00Z",
+          expires: index % 2 == 0 ? "2026-11-21T02:00:00Z" : "2026-11-13T02:00:00.500Z")
+      }
+      check(try recent.similarCaptures(id: source, now: now).map { $0.id } == [milliseconds, seconds, offset])
+      let taskId = try recent.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [source])[0]["id"] as! String
+      do {
+        _ = try recent.approveSingleCapture(id: source, expectedTaskId: taskId, now: now)
+        fatalError("Excluded records hid a duplicate from direct approval")
+      } catch CaptureError.reviewRequired { }
+      check((try recent.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 0)
+    }
     let store = try SharedStore(directoryOverride: directory)
     let factory = { try SharedStore(directoryOverride: directory) }
     let text = "2026년 11월 20일까지 자료 보내줘."
