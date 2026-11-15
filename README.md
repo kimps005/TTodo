@@ -20,13 +20,13 @@ npm start -- --dev-client
 ```
 
 Node 24 이상을 사용합니다. iOS 네이티브 기능 때문에 Expo Go 대신 development build가 필요합니다.
-Windows에서는 iOS prebuild와 Xcode 빌드를 실행하지 않습니다. GitHub Actions의 `ios` 작업 또는 EAS를 사용하세요.
+Windows에서는 iOS prebuild와 Xcode 빌드를 실행하지 않습니다. UI 검사 구성 변경은 기본 화면·작은 화면 최대 글자·설치된 이전 iOS를 별도 CI로 확인하며 실제 결과와 제한은 [CI 검증 기록](docs/CI-VALIDATION.md)에 남깁니다. GitHub Actions의 `ios` 작업 또는 EAS를 사용하세요.
 Windows 앱 제어 정책이 Hermes 바이너리를 차단하면 보안 정책을 변경하지 말고 CI에서 실제 바이트코드를 검사합니다.
 `npx expo export --platform ios --no-bytecode`는 JavaScript 번들 진단용이며 출시 빌드 성공으로 간주하지 않습니다.
 
 ## iPhone 개발 빌드 준비
 
-무료 검증은 사용할 수 있는 Mac의 최신 Xcode와 무료 Apple Developer 계정으로 서명하는 경로를 먼저 확인합니다. Apple의 [현재 기능 지원 표](https://developer.apple.com/help/account/reference/supported-capabilities-ios)는 무료 Apple Developer 계정에도 App Groups 지원을 표시합니다. 실제 계정의 서명/프로비저닝 및 기기 동작은 아직 미검증입니다. Mac이 없다면 CI에서는 서명 없는 컴파일까지만 검증할 수 있습니다.
+현재 사용자는 Mac을 사용할 수 없으며 ‘CI 개발 유지, 실기기 설치는 나중에’를 선택했습니다. Windows 파일/CLI 개발과 GitHub macOS CI의 시뮬레이터 앱·확장 빌드 및 서명 없는 iPhoneOS Release 아카이브 검증을 계속합니다. 설치·서명 경로는 지금 변경하지 않습니다. 향후 사용 가능한 Mac/서명 경로가 준비되면 무료 계정 검증 여부를 별도로 확인합니다. Apple의 [현재 기능 지원 표](https://developer.apple.com/help/account/reference/supported-capabilities-ios)는 무료 Apple Developer 계정에도 App Groups 지원을 표시합니다. 실제 계정의 서명/프로비저닝 및 기기 동작은 아직 미검증입니다. Mac이 없다면 CI에서는 서명 없는 컴파일까지만 검증할 수 있습니다.
 
 EAS를 이용한 기기 배포 또는 향후 TestFlight/App Store 배포를 준비할 때는 아래 절차를 진행합니다. 현재는 무료 우선이므로 유료 가입이나 결제를 진행하지 않습니다.
 

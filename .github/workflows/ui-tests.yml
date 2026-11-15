@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/ui-tests.yml'
       - 'native/tests/UITests.swift'
+      - 'scripts/ui-tests.mjs'
+      - 'scripts/ui-simulator-selection.cjs'
   workflow_dispatch:
     inputs:
       scenario:
@@ -18,6 +20,16 @@ on:
         type: choice
         default: large
         options: [large, accessibility-extra-extra-extra-large]
+      model:
+        description: '설치된 SDK에서 확인할 iPhone 화면'
+        type: choice
+        default: iphone-16-pro
+        options: [iphone-16-pro, iphone-se-3]
+      runtime:
+        description: '설치된 최신 또는 가장 이전 iOS (최소 지원 OS 보장 아님)'
+        type: choice
+        default: latest
+        options: [latest, oldest-installed]
 permissions:
   contents: read
 concurrency:
@@ -25,12 +37,19 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ui:
+    name: UI · ${{ matrix.profile }}
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: ${{ fromJSON(github.event_name == 'push' && '["primary", "compact", "oldest"]' || '["manual"]') }}
     runs-on: macos-26
     timeout-minutes: 45
     env:
       CI: '1'
-      TTODO_UI_TEXT_SIZE: ${{ inputs.text_size || 'large' }}
+      TTODO_UI_TEXT_SIZE: ${{ matrix.profile == 'compact' && 'accessibility-extra-extra-extra-large' || inputs.text_size || 'large' }}
       TTODO_UI_SCENARIO: ${{ inputs.scenario || 'app' }}
+      TTODO_UI_MODEL: ${{ matrix.profile == 'compact' && 'iphone-se-3' || inputs.model || 'iphone-16-pro' }}
+      TTODO_UI_RUNTIME: ${{ matrix.profile == 'oldest' && 'oldest-installed' || inputs.runtime || 'latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,7 +71,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-tests
+          name: ui-tests-${{ matrix.profile }}
           path: |
             ui-test.log
             artifacts/ui-tests/**

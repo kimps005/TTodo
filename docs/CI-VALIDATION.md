@@ -93,3 +93,5 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 공식 [표준 실행기 사양](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)은 공개 저장소의 `macos-26-intel`을 무료 표준 실행기에 포함한다. 유료 `large`/`xlarge` 실행기를 사용하지 않는다.
 
 알림 복구 이동은 일반 앱 설정 URL 대신 Apple의 공개 `UIApplication.openNotificationSettingsURLString`을 네이티브 메인 액터에서 호출한다. OS가 열기 실패를 반환하면 앱에서 안내한다. CI는 설정 앱의 전경 전환만으로 성공 처리하지 않고 TTodo 제목·실제 알림 허용 스위치·거부 상태까지 확인한다. 455f6aa 실행은 거부까지 통과했지만 설정 첫 화면에 머물러 실패했으며 새 경로의 결과는 STATUS.md에 별도 기록한다.
+
+UI 검사 구성이 바뀌는 push는 서로 독립적인 세 job을 준비한다: primary(iPhone 16 Pro/설치된 최신 iOS/기본 전체 흐름), compact(iPhone SE 3세대/최신 iOS/최대 접근성 글자 흐름), oldest(iPhone 16 Pro/설치된 가장 이전 iOS/기본 전체 흐름). 한 job 실패로 다른 job을 취소하지 않으며 산출물 이름도 구분한다. 수동 실행은 model/runtime/text_size/scenario를 선택한 단일 job이다. 런타임·기종 목록 원문과 실제 선택 버전/빌드/기종을 보고서에 남긴다. 설치 목록에 다른 두 버전이 없으면 oldest는 실패한다. arm64와 해당 기종의 SDK 지원 목록을 확인하며 OS 다운로드나 다른 모델로의 대체는 하지 않는다. 가장 이전 설치 버전은 앱의 최소 지원 iOS 18 검증을 뜻하지 않는다. 새 조합의 실행 결과는 STATUS.md 확인 전이다.
