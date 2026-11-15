@@ -53,6 +53,8 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 ## 확인된 실행 결과
 
+[c76df77 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43709090533): core/ios 모두 성공. 69개 테스트·타입·보안 취약점 0·실제 Hermes, Swift 저장소/캡처·계약·합성 한국어 Vision OCR과 앱·위젯·공유 확장 arm64 시뮬레이터 빌드를 통과했다. 초/밀리초/시간대별 만료 정리와 10분 중단 복구 유예 경계는 합성 입력의 실제 SQLite 회귀 검사로 확인했다. 실제 iPhone의 시각 변경·프로세스 수명·기기 내 모델·정확도·잠금 검증은 포함하지 않는다.
+
 [918a4f5 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43586569826): core/ios 모두 성공. 동의 철회 시 진행 중 분석 토큰을 무효화한 소스로 65개 테스트·타입·보안 취약점 0·Hermes 번들, Swift 저장소/캡처 실행·Swift JSON→TypeScript 계약·macOS 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드를 통과했다. 철회 후 재동의해도 이전 응답은 거부하고 새 재시도만 저장하며, 철회 실패 시 동의·토큰·근거 변경을 함께 롤백하는 실제 SQLite 검사를 포함한다. 실제 모델/프로세스 경합·UI·잠금·실제 iPhone 검증으로 대체하지 않는다.
 
 [4302f90 사진 UI 재검증](https://github.com/kimps005/TTodo/actions/runs/43584375416): iOS 26.5 / iPhone 16 Pro 시뮬레이터에서 `testPhotoOCRAndCancelPreservesDraft` 1개 실행·1개 통과, 실패/건너뜀 0. 실제 사진 선택·합성 한국어 Vision OCR·키보드 전체 삭제 후 빈 편집칸 존재·재입력·재선택 취소 후 글자/기준일 보존·재실행 후 미승인 데이터 부재를 확인했다. SDK JSON의 정확한 ID/개별 Passed/집계를 로컬에서도 대조했다. 재입력과 기준일 보존 첨부 화면을 확인했으며 전체 삭제 직후 첨부는 편집칸이 화면 밖이므로 빈 편집칸 자체는 XCTest 단언으로 확인한다. [같은 소스의 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43584368392)도 core/ios 모두 통과했다. 앞선 사진 가져오기 시간 초과는 제한이나 성공 조건을 완화하지 않은 새 실행에서 재현되지 않았다. 최초 지연의 근본 원인, 실제 iPhone·AI 생성/정확도는 미확정/미검증을 유지한다.
