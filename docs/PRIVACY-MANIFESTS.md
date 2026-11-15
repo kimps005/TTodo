@@ -46,6 +46,8 @@ macOS의 `/usr/bin/plutil`로 XML/바이너리 plist를 JSON으로 읽는다. �
 
 위 값은 발견한 선언이며 각 사유의 적합성이나 실제 데이터 수집 없음의 증명이 아니다. 확장 하위에서 선언이 발견되지 않았다는 사실만으로 확장의 선언 충족 여부도 판단하지 않는다.
 
+2026-11-15 [Apple의 API 분류별 사유 목록](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)에서 위 7개 코드가 해당 분류에 존재함을 수동 대조했다. SDK 전용 wrapper 사유인 0A2A.1은 ExpoFileSystem 선언에서 발견되었고 앱 최상위에는 없다. 이 확인은 코드 값의 존재 대조이며 실제 호출 목적·SDK의 모든 동작·향후 문서 변경까지 검증하지 않는다. 자동 보고서의 미검증 항목을 없애지 않는다.
+
 ## iPhone용 서명 없는 Release 아카이브
 
 `release-archive.yml`은 실제 iPhoneOS SDK·Release 구성·arm64로 `xcodebuild archive`를 실행한다. `CODE_SIGNING_ALLOWED=NO`를 명령에 지정하며 Apple 계정·프로비저닝·설치·TestFlight·사이드로딩을 진행하지 않는다. 이 workflow 자체를 변경한 push와 별도 수동 실행에만 연결해 매 개발 push마다 아카이브를 반복하지 않는다.
