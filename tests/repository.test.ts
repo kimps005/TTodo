@@ -476,6 +476,32 @@ test('앱 재실행 없이 만료 시점에 조회·내보내기해도 원문과
   }
 });
 
+test('중단 복구는 날짜 표기와 무관하게 실제 10분 유예를 지킨다', async () => {
+  for (const received of ['2026-11-13T02:00:00Z', '2026-11-13T02:00:00.000Z', '2026-11-13T11:00:00+09:00']) {
+    let now = '2026-11-13T02:00:00.000Z';
+    const { repo, native } = fixture(() => now); await repo.initialize();
+    try {
+      await repo.setPreference('ai_local_consent', 'yes');
+      const a = await repo.createAnalysis('mixed-recovery', 'shortcuts', null);
+      native.prepare('UPDATE analyses SET received_at=? WHERE id=?').run(received, a.id);
+      for (const time of ['2026-11-13T02:09:59.999Z', '2026-11-13T02:10:00.000Z']) {
+        now = time;
+        const row = (await repo.listAnalyses())[0];
+        assert.equal(row.status, 'processing'); assert.equal(row.processing_token, a.token);
+      }
+      now = '2026-11-13T02:10:00.001Z';
+      const row = (await repo.listAnalyses())[0];
+      assert.equal(row.status, 'failed', received);
+      assert.equal(row.error_code, 'INTERRUPTED'); assert.equal(row.processing_token, null);
+      await assert.rejects(repo.finishAnalysis(a.id, [task], 'stale', a.token!), /상태/);
+      const token = await repo.retryFailedAnalysis(a.id);
+      await repo.finishAnalysis(a.id, [task], 'retry', token);
+      assert.equal((await repo.listExtracted(a.id))[0].title, task.title);
+      assert.deepEqual(await repo.listTodos(), []);
+    } finally { native.close(); }
+  }
+});
+
 test('Swift와 앱의 서로 다른 날짜 형식도 실제 만료 시점에 정리한다', async () => {
   for (const expiry of ['2026-11-20T02:00:00Z', '2026-11-20T02:00:00.000Z', '2026-11-20T11:00:00+09:00']) {
     let now = '2026-11-13T02:00:00.000Z';

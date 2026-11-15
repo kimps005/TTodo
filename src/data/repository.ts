@@ -209,7 +209,7 @@ export class Repository {
     await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1 WHERE review_status='saved' AND linked_todo_id IS NULL AND (title<>'삭제한 할 일' OR description IS NOT NULL OR due_at IS NOT NULL OR assignee IS NOT NULL OR evidence_text<>'')");
     // Opening the app must not cancel a live App Intent process using the same DB.
     // Only recover abandoned work after a grace period; never recreate its image implicitly.
-    await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED',processing_token=NULL WHERE status IN ('queued','processing') AND received_at<?", new Date(Date.parse(time) - 10 * 60000).toISOString());
+    await tx.runAsync("UPDATE analyses SET status='failed',error_code='INTERRUPTED',processing_token=NULL WHERE status IN ('queued','processing') AND julianday(received_at)<julianday(?)", new Date(Date.parse(time) - 10 * 60000).toISOString());
     // Swift writes whole seconds; JS writes milliseconds. Compare actual instants,
     // including offsets, so a native capture expires at the same boundary in JS.
     await tx.runAsync("UPDATE extracted_tasks SET title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,review_status='ignored',confidence=0 WHERE review_status='pending' AND analysis_id IN (SELECT id FROM analyses WHERE julianday(expires_at) <= julianday(?))", time);
