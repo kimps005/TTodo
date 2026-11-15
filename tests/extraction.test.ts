@@ -4,6 +4,34 @@ import { containsSensitiveText, enforceDateContext, validateExtraction } from '.
 import sensitiveSeed from '../evaluation/sensitive-seed.json';
 import dateContextSeed from '../evaluation/date-context-seed.json';
 const task = { is_actionable: true, title: '발표자료 보내기', description: null, due_at: null, due_precision: 'unknown', assignee: null, confidence: .8, evidence_text: '발표자료 보내줘', needs_confirmation: true };
+const textLimits = [
+  { text: '가' + '🚀'.repeat(2000), expected: '가' + '🚀'.repeat(1999) },
+  { text: '가'.repeat(3999) + '🚀', expected: '가'.repeat(3999) },
+  { text: '가'.repeat(3998) + '🚀나', expected: '가'.repeat(3998) + '🚀' },
+  { text: '가'.repeat(4001), expected: '가'.repeat(4000) },
+  { text: '가'.repeat(3998) + '🚀', expected: '가'.repeat(3998) + '🚀' },
+  { text: '한글 👨‍👩‍👧‍👦', expected: '한글 👨‍👩‍👧‍👦' },
+];
+test('설명은 4000 UTF-16 단위 안에서 이모지를 나누지 않고 제한한다', () => {
+  for (const { text, expected } of [...textLimits, { text: '', expected: '' }]) {
+    const [result] = validateExtraction([{ ...task, description: text }], task.evidence_text);
+    assert.equal(result.description, expected);
+    assert.ok(result.description!.length <= 4000);
+    assert.equal(Buffer.from(result.description!, 'utf8').toString('utf8'), result.description);
+  }
+  assert.equal(validateExtraction([task], task.evidence_text)[0].description, null);
+});
+test('긴 원문 근거는 정상 Unicode와 실제 원문의 부분 문자열을 유지한다', () => {
+  for (const { text, expected } of textLimits) {
+    const source = `공지 시작: ${text} 공지 끝`;
+    const [result] = validateExtraction([{ ...task, evidence_text: text }], source);
+    assert.equal(result.evidence_text, expected);
+    assert.ok(result.evidence_text.length <= 4000);
+    assert.ok(source.includes(result.evidence_text));
+    assert.equal(Buffer.from(result.evidence_text, 'utf8').toString('utf8'), result.evidence_text);
+  }
+});
+
 test('근거 없는 응답·잘못된 날짜·신뢰도 범위를 거부한다', () => {
   assert.throws(() => validateExtraction([task], '안녕'));
   assert.throws(() => validateExtraction([{ ...task, confidence: 1.1 }], task.evidence_text));

@@ -7,6 +7,13 @@ export interface TaskExtractionProvider {
   extract(context: ExtractionContext, signal: AbortSignal): Promise<TaskSuggestion[]>;
 }
 const clean = (value: string) => value.normalize('NFKC').replace(/\s+/g, ' ').trim();
+function truncateText(value: string, limit: number): string {
+  let end = Math.min(value.length, limit);
+  const before = value.charCodeAt(end - 1), after = value.charCodeAt(end);
+  // Keep the UTF-16 size cap without leaving half of a supplementary character.
+  if (before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF) end -= 1;
+  return value.slice(0, end);
+}
 export function validateExtraction(raw: unknown, sourceText: string): TaskSuggestion[] {
   if (!Array.isArray(raw) || raw.length > 30) throw new Error('INVALID_RESPONSE');
   return raw.flatMap((item: unknown): TaskSuggestion[] => {
@@ -26,9 +33,10 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
     const precision = t.due_precision as DuePrecision;
     validateDue(due, precision);
     const assignee = (t.assignee as string | null)?.trim() || null;
-    return [{ title: normalizeTitle(t.title), description: (t.description as string | null)?.slice(0, 4000) ?? null,
+    const description = t.description as string | null;
+    return [{ title: normalizeTitle(t.title), description: description === null ? null : truncateText(description, 4000),
       due_at: due, due_precision: precision, assignee, confidence: t.confidence,
-      evidence_text: t.evidence_text.slice(0, 4000), needs_confirmation: t.needs_confirmation || !assignee ? 1 : 0 }];
+      evidence_text: truncateText(t.evidence_text, 4000), needs_confirmation: t.needs_confirmation || !assignee ? 1 : 0 }];
   });
 }
 export function containsSensitiveText(text: string): boolean {
