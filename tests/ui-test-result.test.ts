@@ -56,3 +56,12 @@ test('사진 OCR 흐름은 실제 지정 검사가 통과해야 하며 기본 �
   assert.throws(() => validateManualUITestResult(summary, photo));
   assert.throws(() => validateManualUITestResult(summary, tests, flow));
 });
+
+test('독립 데이터 삭제 결과는 알림 전체 흐름과 구분하고 지정 테스트만 인정한다', () => {
+  const flow = 'testDataResetAndConsentWithoutSettingsNavigation';
+  const reset = { testNodes: [{ ...passedCase, nodeIdentifier: `TTodoUITests/${flow}()`, name: `${flow}()` }] };
+  assert.equal(validateManualUITestResult(summary, reset, flow).flow, flow);
+  assert.throws(() => validateManualUITestResult(summary, reset));
+  assert.throws(() => validateManualUITestResult(summary, tests, flow));
+  assert.throws(() => validateManualUITestResult({ ...summary, skippedTests: 1 }, reset, flow));
+});

@@ -2,9 +2,10 @@ const manualFlow = 'testManualTaskLifecycleAndDataReset';
 const largeTextFlow = 'testLargeTextInputEditingAndNavigation';
 const shareFlow = 'testShareExtensionRequiresConsent';
 const photoFlow = 'testPhotoOCRAndCancelPreservesDraft';
+const resetFlow = 'testDataResetAndConsentWithoutSettingsNavigation';
 
 function validateManualUITestResult(summary, tests, flow = manualFlow) {
-  if (![manualFlow, largeTextFlow, shareFlow, photoFlow].includes(flow)) throw new Error('Unknown UI flow.');
+  if (![manualFlow, largeTextFlow, shareFlow, photoFlow, resetFlow].includes(flow)) throw new Error('Unknown UI flow.');
   const cases = [];
   function visit(nodes) {
     if (!Array.isArray(nodes)) return;

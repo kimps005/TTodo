@@ -33,6 +33,66 @@ final class TTodoUITests: XCTestCase {
     let attachment = XCTAttachment(screenshot: app.screenshot())
     attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
   }
+  @MainActor func testDataResetAndConsentWithoutSettingsNavigation() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launch()
+    let start = app.buttons["이 설정으로 시작하기"]
+    XCTAssertTrue(start.waitForExistence(timeout: 30))
+    tap(start, in: app)
+    let input = app.textFields["새 할 일"]
+    XCTAssertTrue(input.waitForExistence(timeout: 15))
+    let taskTitle = "CI independent reset task"
+    input.tap(); input.typeText(taskTitle + "\n")
+    let saved = row(app, title: taskTitle)
+    XCTAssertTrue(saved.waitForExistence(timeout: 15))
+    tap(control(app, label: "설정"), in: app)
+    tap(app.buttons["기기 내 AI 분석 켜기"], in: app)
+    tap(app.alerts.buttons["취소"], in: app)
+    XCTAssertTrue(app.buttons["기기 내 AI 분석 켜기"].exists, "Cancelling consent must not enable analysis.")
+    tap(app.buttons["기기 내 AI 분석 켜기"], in: app)
+    tap(app.alerts.buttons["동의하고 켜기"], in: app)
+    let stopAI = app.buttons["AI 중지 및 원문 근거 삭제"]
+    expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: stopAI)
+    waitForExpectations(timeout: 15)
+    app.terminate(); app.launch()
+    tap(control(app, label: "설정"), in: app)
+    reveal(stopAI, in: app)
+    XCTAssertTrue(stopAI.isEnabled, "Consent must survive relaunch until reset.")
+    tap(app.buttons["모든 데이터 삭제"], in: app)
+    tap(app.alerts.buttons["취소"], in: app)
+    tap(control(app, label: "할 일"), in: app)
+    reveal(saved, in: app)
+    XCTAssertFalse(start.exists, "Cancelling reset must preserve onboarding.")
+    app.terminate(); app.launch()
+    XCTAssertTrue(saved.waitForExistence(timeout: 30), "Cancelling reset must preserve the stored task after relaunch.")
+    input.tap(); input.typeText("CI unsaved reset draft")
+    tap(control(app, label: "설정"), in: app)
+    reveal(stopAI, in: app)
+    XCTAssertTrue(stopAI.isEnabled, "Cancelling reset must preserve consent.")
+    tap(app.buttons["모든 데이터 삭제"], in: app)
+    tap(app.alerts.buttons["모두 삭제"], in: app)
+    tap(control(app, label: "할 일"), in: app)
+    XCTAssertTrue(start.waitForExistence(timeout: 20))
+    reveal(input, in: app)
+    let value = input.value as? String ?? ""
+    XCTAssertTrue(value.isEmpty || value == input.placeholderValue, "Reset must clear the unsaved draft.")
+    assertTaskMissing(app, title: taskTitle)
+    screenshot(app, name: "reset-independent-cleared")
+    app.terminate(); app.launch()
+    XCTAssertTrue(start.waitForExistence(timeout: 30))
+    assertTaskMissing(app, title: taskTitle)
+    tap(start, in: app)
+    XCTAssertTrue(app.staticTexts["머릿속을 조금 비워 보세요"].waitForExistence(timeout: 15))
+    tap(control(app, label: "분석함"), in: app)
+    XCTAssertTrue(app.staticTexts["아직 분석 내역이 없어요"].waitForExistence(timeout: 15))
+    tap(control(app, label: "설정"), in: app)
+    reveal(stopAI, in: app)
+    XCTAssertFalse(stopAI.isEnabled, "Reset must revoke persisted AI consent.")
+    XCTAssertTrue(app.buttons["기기 내 AI 분석 켜기"].exists)
+    screenshot(app, name: "reset-independent-consent-off")
+  }
   @MainActor func testManualTaskLifecycleAndDataReset() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
