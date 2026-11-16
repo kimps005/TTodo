@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { nativeBridge } from '../native/bridge';
@@ -21,7 +21,10 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   const working = useRef(false);
   const draftVersion = useRef(0);
   const closeIfIdle = () => { if (!working.current) { draftVersion.current++; close(); } };
-  useEffect(() => () => { draftVersion.current++; }, []);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', () => { draftVersion.current++; });
+    return () => { draftVersion.current++; subscription.remove(); };
+  }, []);
   const transferred = useRef<string | null>(null);
   useEffect(() => () => { if (image && transferred.current !== image) discardTemporaryImage(image); }, [image]);
   const openReview = async (id: string) => {
