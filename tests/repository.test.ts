@@ -560,6 +560,42 @@ test('내보내기는 데이터 복사본이고 전체 삭제는 개인정보 �
   assert.equal(await repo.getPreference('ai_consent'), null); native.close();
 });
 
+test('저장한 할 일의 근거만 조회하고 삭제·철회·만료 후에는 반환하지 않는다', async () => {
+  let now = '2026-11-13T02:00:00.000Z';
+  const { repo, native } = fixture(() => now); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analysis = await repo.createAnalysis('evidence-detail', 'manual', null);
+    await repo.finishAnalysis(analysis.id, [task, { ...task, title: '다른 작업', evidence_text: '다른 작업의 원문' }], 'test', analysis.token!);
+    const proposals = await repo.listExtracted(analysis.id);
+    await repo.approve(analysis.id, proposals.map(p => ({ id: p.id, input: { title: p.title } })));
+    const todos = await repo.listTodos();
+    const first = todos.find(t => t.source_id === proposals[0].id)!;
+    const second = todos.find(t => t.source_id === proposals[1].id)!;
+    assert.equal(await repo.getTodoEvidence(first.id), task.evidence_text);
+    assert.equal(await repo.getTodoEvidence(second.id), '다른 작업의 원문');
+    const manual = await repo.addTodo({ title: '직접 입력' });
+    assert.equal(await repo.getTodoEvidence(manual), null);
+    await repo.removeTodo(first.id);
+    assert.equal(await repo.getTodoEvidence(first.id), null);
+    assert.equal(await repo.getTodoEvidence(second.id), '다른 작업의 원문');
+    await repo.revokeLocalAIConsent();
+    assert.equal(await repo.getTodoEvidence(second.id), null);
+    await repo.setPreference('ai_local_consent', 'yes');
+    const next = await repo.createAnalysis('evidence-expiry', 'share', null);
+    await repo.finishAnalysis(next.id, [task], 'test', next.token!);
+    const proposal = (await repo.listExtracted(next.id))[0];
+    await repo.approve(next.id, [{ id: proposal.id, input: { title: proposal.title } }]);
+    const saved = (await repo.listTodos()).find(t => t.source_id === proposal.id)!;
+    now = '2026-11-20T02:00:00.000Z';
+    native.exec("CREATE TRIGGER fail_detail_cleanup BEFORE UPDATE OF evidence_text ON extracted_tasks BEGIN SELECT RAISE(ABORT, 'detail cleanup failed'); END;");
+    await assert.rejects(repo.getTodoEvidence(saved.id), /detail cleanup failed/);
+    native.exec('DROP TRIGGER fail_detail_cleanup');
+    assert.equal(await repo.getTodoEvidence(saved.id), null);
+    assert.equal((await repo.listTodos()).find(t => t.id === saved.id)!.title, task.title);
+  } finally { native.close(); }
+});
+
 test('전체 삭제 트랜잭션이 실패하면 본문·할 일·설정을 모두 보존하고 실패를 전달한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');

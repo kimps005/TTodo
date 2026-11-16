@@ -46,6 +46,15 @@ export class Repository {
     await this.pruneEvidence();
   }
   listTodos() { return this.db.getAllAsync<Todo>('SELECT * FROM todos'); }
+  async getTodoEvidence(id: string): Promise<string | null> {
+    let evidence: string | null = null;
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await this.pruneEvidenceInTransaction(tx, this.now());
+      const row = await tx.getFirstAsync<{ evidence_text: string }>("SELECT e.evidence_text FROM todos t JOIN extracted_tasks e ON e.id=t.source_id AND e.linked_todo_id=t.id WHERE t.id=? AND t.source_type IN ('screenshot','share') AND e.review_status='saved'", id);
+      evidence = row?.evidence_text || null;
+    });
+    return evidence;
+  }
   async addTodo(input: TodoInput, source: SourceType = 'manual', sourceId: string | null = null): Promise<string> {
     const title = normalizeTitle(input.title);
     const due = input.due_at ?? null;
