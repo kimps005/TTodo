@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createVerdictTemplate, scoreEvaluation } from '../evaluation/score';
 import seed from '../evaluation/ko-seed.json';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -58,6 +58,11 @@ test('집계 명령이 합성 파일을 읽어 결과만 출력하고 잘못된 
     const prepared = spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/prepare-evaluation-verdict.ts', reportPath], { encoding: 'utf8' });
     assert.equal(prepared.status, 0); assert.equal(JSON.parse(prepared.stdout)[0].matches, null);
     writeFileSync(verdictPath, prepared.stdout); assert.notEqual(run().status, 0);
+    const newPath = join(directory, 'new-verdict.json');
+    const prepareFile = () => spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/prepare-evaluation-verdict.ts', reportPath, newPath], { encoding: 'utf8' });
+    assert.equal(prepareFile().status, 0); const saved = readFileSync(newPath, 'utf8');
+    assert.equal(JSON.parse(saved)[0].matches, null);
+    assert.notEqual(prepareFile().status, 0); assert.equal(readFileSync(newPath, 'utf8'), saved);
     verdicts.pop(); writeFileSync(verdictPath, JSON.stringify(verdicts));
     const bad = run(); assert.notEqual(bad.status, 0); assert.equal(bad.stdout, '');
   } finally { rmSync(directory, { recursive: true, force: true }); }
