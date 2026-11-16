@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { createVerdictTemplate } from '../evaluation/score';
+import { readEvaluationJson } from './read-evaluation-json';
 
 const [reportPath, outputPath] = process.argv.slice(2);
 if (!reportPath || process.argv.length > 4) {
@@ -7,7 +8,7 @@ if (!reportPath || process.argv.length > 4) {
   process.exitCode = 1;
 } else {
   try {
-    const report = JSON.parse(readFileSync(reportPath, 'utf8'));
+    const report = readEvaluationJson(reportPath) as Parameters<typeof createVerdictTemplate>[0];
     const output = JSON.stringify(createVerdictTemplate(report), null, 2) + '\n';
     if (outputPath) writeFileSync(outputPath, output, { encoding: 'utf8', flag: 'wx' });
     else process.stdout.write(output);

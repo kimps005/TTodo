@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
 import { scoreEvaluation } from '../evaluation/score';
+import { readEvaluationJson } from './read-evaluation-json';
 
 const [reportPath, verdictPath] = process.argv.slice(2);
 if (!reportPath || !verdictPath || process.argv.length !== 4) {
@@ -7,8 +7,8 @@ if (!reportPath || !verdictPath || process.argv.length !== 4) {
   process.exitCode = 1;
 } else {
   try {
-    const report = JSON.parse(readFileSync(reportPath, 'utf8'));
-    const verdicts = JSON.parse(readFileSync(verdictPath, 'utf8'));
+    const report = readEvaluationJson(reportPath) as Parameters<typeof scoreEvaluation>[0];
+    const verdicts = readEvaluationJson(verdictPath) as Parameters<typeof scoreEvaluation>[1];
     console.log(JSON.stringify(scoreEvaluation(report, verdicts), null, 2));
   } catch {
     // Do not print raw file contents or exceptions that might contain paths or text.

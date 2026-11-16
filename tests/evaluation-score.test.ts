@@ -71,6 +71,8 @@ test('집계 명령이 합성 파일을 읽어 결과만 출력하고 잘못된 
     const run = () => spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/score-evaluation.ts', reportPath, verdictPath], { encoding: 'utf8' });
     const good = run(); assert.equal(good.status, 0); assert.equal(JSON.parse(good.stdout).total.tp, 1);
     assert.equal(good.stdout.includes(seed.cases[0].text), false);
+    writeFileSync(reportPath, '\uFEFF' + JSON.stringify(report)); writeFileSync(verdictPath, '\uFEFF' + JSON.stringify(verdicts));
+    assert.equal(run().status, 0, 'UTF-8 BOM이 있어도 평가 결과와 판정을 읽는다');
     const prepared = spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/prepare-evaluation-verdict.ts', reportPath], { encoding: 'utf8' });
     assert.equal(prepared.status, 0); assert.equal(JSON.parse(prepared.stdout)[0].matches, null);
     writeFileSync(verdictPath, prepared.stdout); assert.notEqual(run().status, 0);
