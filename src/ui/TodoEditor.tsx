@@ -39,7 +39,7 @@ export function TodoEditor({ todo, save, remove, close, loadEvidence }: { todo: 
   const confirmDelete = () => {
     const isCurrent = deleteConfirmation.capture();
     Alert.alert('할 일을 삭제할까요?', todo.source_type === 'manual' ? '삭제한 할 일은 복구할 수 없어요.' : '연결된 AI 제안의 제목·설명·원문도 함께 삭제해요. 중복 방지용 지문과 처리 기록은 남으며, 삭제한 내용은 복구할 수 없어요.', [
-      { text: '취소', style: 'cancel', onPress: () => deleteConfirmation.invalidate() },
+      { text: '취소', style: 'cancel', onPress: () => { isCurrent(); } },
       { text: '삭제', style: 'destructive', onPress: () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '화면 상태가 바뀌었어요. 삭제할 할 일을 다시 확인해 주세요.'); return; } void act(remove); } },
     ]);
   };
