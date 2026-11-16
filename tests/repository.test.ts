@@ -300,22 +300,28 @@ test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 �
 });
 
 test('다른 경로에서 무시된 제안의 오래된 승인은 저장 성공으로 처리하지 않는다', async () => {
-  const { repo, native } = fixture(); await repo.initialize();
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-ignored-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path); await repo.initialize();
+  const other = fixture(undefined, path); await other.repo.initialize();
   try {
     await repo.setPreference('ai_local_consent', 'yes');
     const analysis = await repo.createAnalysis('stale-ignored-approval', 'manual', null);
     await repo.finishAnalysis(analysis.id, [task, { ...task, title: '나중에 무시할 제안' }], 'test', analysis.token!);
     const proposals = await repo.listExtracted(analysis.id);
     await repo.approve(analysis.id, [{ id: proposals[0].id, input: { title: '먼저 저장한 할 일' } }]);
-    await repo.ignoreAnalysis(analysis.id, [proposals[1].id]);
+    await other.repo.ignoreAnalysis(analysis.id, [proposals[1].id]);
     await assert.rejects(repo.approve(analysis.id, [{ id: proposals[1].id, input: { title: '오래된 승인' } }]), /변경.*다시 확인/);
+    // A stale batch can contain both an already saved proposal and a now ignored one.
+    // The idempotent saved entry must not hide the rejected entry.
+    await assert.rejects(repo.approve(analysis.id, proposals.map(p => ({ id: p.id, input: { title: '오래된 일괄 승인' } }))), /변경.*다시 확인/);
     const todos = await repo.listTodos();
     assert.equal(todos.length, 1);
     assert.equal(todos[0].title, '먼저 저장한 할 일');
     assert.equal((await repo.listExtracted(analysis.id))[1].review_status, 'ignored');
     await repo.approve(analysis.id, [{ id: proposals[0].id, input: { title: '중복 요청' } }]);
     assert.equal((await repo.listTodos()).length, 1);
-  } finally { native.close(); }
+  } finally { other.native.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 test('할 일 삭제는 연결된 분석 본문을 지우며 나머지 제안과 중복 방지 상태를 보존한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
