@@ -11,6 +11,7 @@ import type { Analysis, Repository } from '../data/repository';
 import { availabilityLabels, onDeviceProvider } from '../ai/onDeviceProvider';
 import { validateDue } from '../domain/todo';
 import { requestCaptureAnalysis } from './captureAction';
+import { createReviewConfirmation } from './reviewConfirmation';
 export function Capture({ close, repository, analyzed }: { close: () => void; repository: Repository; analyzed: (id: string, imageUri?: string) => Promise<void> }) {
   const [image, setImage] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -20,6 +21,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   const [hasPrevious, setHasPrevious] = useState(false);
   const working = useRef(false);
   const draftVersion = useRef(0);
+  const confirmation = useRef(createReviewConfirmation()).current;
   const closeIfIdle = () => { if (!working.current) { draftVersion.current++; close(); } };
   useEffect(() => {
     const subscription = AppState.addEventListener('change', () => { draftVersion.current++; });
@@ -92,15 +94,20 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     isCurrent: () => draftVersion.current === version,
     analyze: () => { draftVersion.current++; return analyze(reanalyze); },
     // Waiting for an alert response holds no work lock, including cancellation.
-    prompt: () => Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel' }, { text: '동의하고 분석', onPress: () => { void requestAnalysis(reanalyze, true, version).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]),
+    prompt: () => {
+      const take = confirmation.capture();
+      Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: '동의하고 분석', onPress: () => { if (take()) void requestAnalysis(reanalyze, true, version).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
+    },
   }, grantConsent);
   const confirmReanalysis = async () => {
     if (working.current || !fingerprint) return;
     working.current = true; setBusy(true);
+    const version = draftVersion.current;
+    const take = confirmation.capture();
     try {
       const snapshot = await repository.reanalysisSnapshot(fingerprint);
-      const version = draftVersion.current;
-      Alert.alert('다시 분석할까요?', '이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.', [{ text: '취소', style: 'cancel' }, { text: '다시 분석', style: 'destructive', onPress: () => { void requestAnalysis(snapshot, false, version).catch(() => Alert.alert('분석을 시작하지 못했어요', '잠시 후 다시 시도해 주세요.')); } }]);
+      if (version !== draftVersion.current) return;
+      Alert.alert('다시 분석할까요?', '이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: '다시 분석', style: 'destructive', onPress: () => { if (take()) void requestAnalysis(snapshot, false, version).catch(() => Alert.alert('분석을 시작하지 못했어요', '잠시 후 다시 시도해 주세요.')); } }]);
     } catch (error) { Alert.alert('분석 기록을 확인하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.'); }
     finally { working.current = false; setBusy(false); }
   };
