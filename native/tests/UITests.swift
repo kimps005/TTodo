@@ -9,9 +9,10 @@ final class TTodoUITests: XCTestCase {
       for _ in 0..<16 {
         if element.waitForExistence(timeout: 1) {
           if element.isHittable { return }
-          if element.frame.midY < scroll.frame.minY { scroll.swipeDown() }
-          else { scroll.swipeUp() }
-        } else if searchDown { scroll.swipeDown() }
+        }
+        // React Native AX frames can retain their unscrolled positions. Sweep
+        // both directions instead of using those frames to choose a direction.
+        if searchDown { scroll.swipeDown() }
         else { scroll.swipeUp() }
       }
     }

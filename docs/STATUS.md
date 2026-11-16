@@ -2,6 +2,19 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 작은 화면 탐색의 오래된 접근성 좌표 의존 제거
+- [4c27414 compact 실패](https://github.com/kimps005/TTodo/actions/runs/43746163021)의 지정 산출물 ZIP SHA-256 33e68260a3c92ba2362676d0e903bba4f32a034584d9f0a834998efdde8c30cd·커밋·SE3/iOS26.5/최대 글자·검사 1개 실패를 대조했다. 녹화 100초/158초에는 편집 화면 맨 아래가 표시되지만 같은 시점 접근성 snapshot의 제목 좌표는 화면 안의 예전 위치로 남아 있었다.
+- reveal이 존재하는 비가시 요소의 오래된 좌표로 방향을 고정해 두 번째 pass에서도 같은 방향만 탐색했다. 실제 모달 ScrollView를 조작한 로그도 대조했다. 좌표 추정 대신 기존 위/아래 두 pass가 각각 실행되도록 수정했다. 2×16회·대기값·최종 존재/실제 터치 가능 단언은 유지하며 좌표 탭·임의 지연은 없다.
+- 로컬 88개 테스트·타입·스크립트 구문·diff 통과. 변경 후 실제 SDK/작은 화면 UI는 CI 재검증 전이다. 제품 화면 배치/알림 성공으로 해석하지 않는다.
+
+## 사진 재검사의 앱 실행 전 가져오기 시간 초과 구분
+- [6ebef27 photo-ocr](https://github.com/kimps005/TTodo/actions/runs/43798629039)는 부팅 완료·최대 글자 설정 조회·macOS 합성 Vision OCR 사전 검사를 지난 후 simctl addmedia가 240초 제한으로 SIGTERM/ETIMEDOUT에 종료됐다. 앱/XCTest 빌드·실행 전이다. ZIP SHA-256 69e5fac748e2e0f8aaafcf736e56bc23edc80ca85a366e5944b08fe4afafe2a2·보고서·빈 명령 stdout/stderr·시뮬레이터 홈 화면을 대조했다.
+- 제품 OCR/동의 잠금 결함이나 UI 성공으로 집계하지 않는다. 정확한 Photos 서비스 원인은 기존 산출물에 없어 미확정이다. 실패 시 같은 일회성 시뮬레이터의 사진 관련 시스템 로그를 수집하도록 추가했다. 실제 SDK 도움말을 확인하고 파일 직접 출력으로 버퍼 제한을 피하며, 진단 실패는 원래 오류를 덮지 않는다. 시간 제한·fixture·통과 조건은 변경하지 않았다.
+
+## CI 호스트의 모델 미가용 확인 — 실제 추론 미실행
+- [104e11b 호스트 점검](https://github.com/kimps005/TTodo/actions/runs/43800041126)은 제품 추출/검증 코드와 probe를 macOS SDK로 컴파일하고 점검을 마쳤다. ZIP SHA-256 4cb28e1f3c3c537841a7818ca2fe52529996f1ff5e990abf715cd8e28729921f·보고서 소스/OS26.7.2를 대조했다.
+- 실제 host API는 device_not_eligible이며 inference_attempted=false/inference_completed=false/accuracy_measured=false다. workflow 녹색은 검사 실행의 성공이며 모델 생성 성공이 아니다. 시뮬레이터 UI의 available 표시를 실제 생성으로 간주하지 않는다. 계정/설정/다운로드 없이 종료했고 실제 모델·한국어 정확도·iPhone은 미검증으로 유지한다.
+
 ## CI 호스트의 실제 모델 가용성 점검 준비
 - 삭제 UI에서 실제 Foundation Models 가용성 API가 available로 표시된 것을 확인해, PRD의 무료 기기 내 모델 우선 평가를 위한 수동 호스트 점검 workflow를 추가했다. [Apple 공식 시뮬레이터 안내](https://developer.apple.com/videos/play/wwdc2025/259/)는 Apple Intelligence가 준비된 최신 macOS에서 기능 검사가 가능하지만 iPhone 성능과 다르다고 설명한다.
 - 일회성 CI Mac에서 제품 추출/검증 코드를 그대로 컴파일하고 가용하면 합성 한국어 요청 1개만 실제 호출한다. 미가용이면 상태만 기록한다. Apple Intelligence 설정·계정·모델 다운로드·유료 API는 변경하지 않는다. 사용자 DB/이미지/글자를 읽지 않으며 생성 글자와 근거를 로그에 남기지 않는다.

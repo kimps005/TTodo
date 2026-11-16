@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import resultValidation from './ui-test-result.cjs';
@@ -19,6 +19,31 @@ const runtimePolicy = process.env.TTODO_UI_RUNTIME ?? 'latest';
 if (!['app', 'share-extension', 'photo-ocr', 'data-reset'].includes(scenario)) throw new Error('Unsupported UI scenario.');
 const flow = scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { requested_model: model, requested_runtime_policy: runtimePolicy, commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
+function collectPhotoImportDiagnostics(device) {
+  // Only this fresh synthetic simulator is inspected, before product execution.
+  // Preserve the original import timeout even if diagnostics also fail.
+  const diagnostics = report.photo_import_diagnostics = { completed: false };
+  const args = ['simctl', 'spawn', device, 'log', 'help', 'show'];
+  const help = spawnSync('xcrun', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+  writeFileSync(path.join(output, 'photo-import-log-help.txt'), (help.stdout ?? '') + (help.stderr ?? ''));
+  if (!diagnosticHelp.supportsDiagnosticHelp('xcrun', args, help, ['--last', '--style', '--predicate', '--info'])) {
+    throw new Error('SDK photo import diagnostic log help unavailable.');
+  }
+  const stdout = openSync(path.join(output, 'photo-import-system.log'), 'w');
+  try {
+    const stderr = openSync(path.join(output, 'photo-import-system-stderr.log'), 'w');
+    try {
+      const predicate = 'process == "assetsd" OR process == "photolibraryd" OR process == "Photos" OR process == "SpringBoard" OR subsystem BEGINSWITH "com.apple.photos"';
+      // Direct file output avoids the pipe buffer limit for simulator logs.
+      const result = spawnSync('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--last', '8m', '--style', 'compact', '--info', '--predicate', predicate], { stdio: ['ignore', stdout, stderr], timeout: 60000 });
+      diagnostics.status = result.status;
+      diagnostics.signal = result.signal;
+      diagnostics.code = result.error?.code ?? null;
+      diagnostics.completed = !result.error && result.status === 0;
+      if (!diagnostics.completed) throw new Error('Photo import system log collection failed.');
+    } finally { closeSync(stderr); }
+  } finally { closeSync(stdout); }
+}
 // These read-only diagnostics run only against this script's fresh synthetic CI
 // simulator. Never collect the host's logs or app data/OCR/notification payloads.
 function collectAppDiagnostics(device) {
@@ -169,6 +194,10 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (scenario === 'photo-ocr' && report.phase === 'photo-import' && device && /^[0-9a-f-]{36}$/i.test(device)) {
+    try { collectPhotoImportDiagnostics(device); }
+    catch (error) { report.photo_import_diagnostic_error = error.message; }
+  }
   if (scenario === 'app' && device && /^[0-9a-f-]{36}$/i.test(device)) {
     try { collectAppDiagnostics(device); }
     catch (error) { report.app_diagnostic_error = error.message; }
