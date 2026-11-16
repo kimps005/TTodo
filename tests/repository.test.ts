@@ -23,6 +23,26 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+test('재분석 확인 후 제안이 교체되면 새 제안을 보존하고 다시 확인하도록 한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analysis = await repo.createAnalysis('reanalysis-confirmation', 'manual', null);
+    await repo.finishAnalysis(analysis.id, [task], 'first', analysis.token!);
+    const old = await repo.listExtracted(analysis.id);
+    const confirmed = { status: 'review' as const, taskIds: old.map(t => t.id) };
+    const otherToken = await repo.restartUnstoredAnalysis(analysis.id, false, confirmed);
+    await repo.finishAnalysis(analysis.id, [{ ...task, title: '새 제안' }], 'second', otherToken);
+    const fresh = await repo.listExtracted(analysis.id);
+    await assert.rejects(repo.restartUnstoredAnalysis(analysis.id, false, confirmed), /변경/);
+    assert.deepEqual(await repo.listExtracted(analysis.id), fresh);
+    assert.equal((await repo.listAnalyses())[0].status, 'review');
+    assert.deepEqual(await repo.listTodos(), []);
+    const token = await repo.restartUnstoredAnalysis(analysis.id, false, { status: 'review', taskIds: fresh.map(t => t.id) });
+    assert.ok(token);
+    assert.deepEqual(await repo.listExtracted(analysis.id), []);
+  } finally { native.close(); }
+});
 test('알 수 없는 새 스키마는 저널 설정과 데이터를 변경하기 전에 거부한다', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ttodo-future-schema-'));
   const { repo, native } = fixture(undefined, join(directory, 'future.sqlite'));
