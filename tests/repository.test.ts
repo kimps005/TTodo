@@ -261,6 +261,27 @@ test('오래된 편집은 다른 연결의 변경을 덮지 않고 최신 내용
   } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('오래된 완료·복원 요청은 다른 연결이 변경한 항목을 처리하지 않는다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-completion-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  await repo.initialize();
+  const other = new DatabaseSync(path);
+  try {
+    const id = await repo.addTodo({ title: '기존 항목' });
+    const pending = (await repo.listTodos())[0];
+    other.prepare('UPDATE todos SET title=? WHERE id=?').run('변경된 항목', id);
+    await assert.rejects(repo.setCompleted(id, true, pending), /변경.*다시 확인/);
+    const changed = (await repo.listTodos())[0];
+    assert.equal(changed.status, 'pending');
+    await repo.setCompleted(id, true, changed);
+    const completed = (await repo.listTodos())[0];
+    other.prepare("UPDATE todos SET status='pending', completed_at=NULL WHERE id=?").run(id);
+    await assert.rejects(repo.setCompleted(id, false, completed), /변경.*다시 확인/);
+    assert.equal((await repo.listTodos())[0].status, 'pending');
+  } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');

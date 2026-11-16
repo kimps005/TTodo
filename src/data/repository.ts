@@ -82,10 +82,15 @@ export class Repository {
         title, input.description?.trim() || null, due, precision, this.now(), id);
     });
   }
-  async setCompleted(id: string, complete: boolean) {
+  async setCompleted(id: string, complete: boolean, expected?: Todo) {
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
       await this.requireTodo(tx, id);
+      if (expected) {
+        const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
+        const fields: (keyof Todo)[] = ['id', 'title', 'status', 'due_at', 'due_precision', 'source_type', 'source_id'];
+        if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 할 일 탭을 눌러 최신 목록을 다시 확인해 주세요.');
+      }
       await tx.runAsync('UPDATE todos SET status=?,completed_at=?,updated_at=? WHERE id=?', complete ? 'completed' : 'pending', complete ? time : null, time, id);
     });
   }
