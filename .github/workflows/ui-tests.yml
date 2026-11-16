@@ -1,5 +1,5 @@
 name: 시뮬레이터 수동 입력·권한 UI 검사
-run-name: 'UI 검사 · ${{ inputs.scenario || ''app'' }} · ${{ inputs.text_size || ''large'' }}'
+run-name: 'UI 검사 · ${{ inputs.scenario || ''자동 회귀'' }} · ${{ inputs.text_size || ''large'' }}'
 on:
   push:
     branches: [main]
@@ -14,7 +14,7 @@ on:
       scenario:
         description: '앱 조작, 공유·사진 OCR, 독립 삭제 또는 할 일 수명주기'
         type: choice
-        default: app
+        default: task-lifecycle
         options: [app, share-extension, photo-ocr, data-reset, task-lifecycle]
       text_size:
         description: '기본 전체 흐름 또는 최대 접근성 글자 흐름'
@@ -34,7 +34,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ui-tests-${{ github.ref }}-${{ inputs.scenario || 'app' }}
+  group: ui-tests-${{ github.ref }}-${{ inputs.scenario || 'automatic' }}
   cancel-in-progress: true
 jobs:
   ui:
@@ -48,7 +48,7 @@ jobs:
     env:
       CI: '1'
       TTODO_UI_TEXT_SIZE: ${{ matrix.profile == 'compact' && 'accessibility-extra-extra-extra-large' || inputs.text_size || 'large' }}
-      TTODO_UI_SCENARIO: ${{ inputs.scenario || 'app' }}
+      TTODO_UI_SCENARIO: ${{ matrix.profile == 'compact' && 'app' || inputs.scenario || 'task-lifecycle' }}
       TTODO_UI_MODEL: ${{ matrix.profile == 'compact' && 'iphone-se-3' || inputs.model || 'iphone-16-pro' }}
       TTODO_UI_RUNTIME: ${{ matrix.profile == 'oldest' && 'oldest-installed' || inputs.runtime || 'latest' }}
     steps:
