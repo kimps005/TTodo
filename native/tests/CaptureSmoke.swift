@@ -269,6 +269,11 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT source_type FROM todos WHERE source_id=?", params: [review[0].id]))[0]["source_type"] as? String == "share")
     try store.ignoreCapture(id: multi.id)
     check((try store.captureReviewItems(id: multi.id)).isEmpty)
+    let ignoredEdit = CaptureTaskEdit(id: review[1].id, title: "오래된 승인", description: nil, dueAt: nil, duePrecision: "unknown")
+    do { _ = try store.approveReviewedCapture(id: multi.id, edits: [ignoredEdit]); fatalError("Ignored proposal was reported as saved") }
+    catch CaptureError.reviewRequired { }
+    check(try store.approveReviewedCapture(id: multi.id, edits: [firstEdit]) == 0)
+    check((try store.querySQL("SELECT COUNT(*) AS count FROM todos WHERE source_id=?", params: [review[1].id]))[0]["count"] as? Int64 == 0)
     let stale = try store.registerCapture(fingerprint: "retry-race", channel: "share")
     try store.failCapture(id: stale.id, code: "INTERRUPTED", token: stale.token!)
     let retried = try store.registerCapture(fingerprint: "retry-race", channel: "share", retryFailed: true)

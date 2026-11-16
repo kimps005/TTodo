@@ -224,7 +224,8 @@ export class Repository {
       for (const edit of edits) {
         const task = await tx.getFirstAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE id=? AND analysis_id=?', edit.id, id);
         if (!task) throw new Error('분석 항목을 찾을 수 없어요.');
-        if (task.review_status !== 'pending') continue;
+        if (task.review_status === 'saved') continue;
+        if (task.review_status !== 'pending') throw new Error('분석 제안이 변경되었어요. 분석함에서 다시 확인해 주세요.');
         const todoId = this.uuid();
         const time = this.now();
         const due = edit.input.due_at ?? null;

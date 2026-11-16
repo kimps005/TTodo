@@ -218,8 +218,7 @@ extension SharedStore {
   func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], now: Date = Date()) throws -> Int {
     try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
-      if analysis["status"] as? String == "saved" { return 0 }
-      guard analysis["status"] as? String == "review", let expires = analysis["expires_at"] as? String,
+      guard let status = analysis["status"] as? String, ["review", "saved"].contains(status), let expires = analysis["expires_at"] as? String,
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
       let time = ISO8601DateFormatter().string(from: now)
       var count = 0
@@ -228,7 +227,9 @@ extension SharedStore {
         guard !title.isEmpty, title.unicodeScalars.count <= 200,
           ExtractionValidator.validDue(edit.dueAt, precision: edit.duePrecision),
           let task = try querySQL("SELECT review_status FROM extracted_tasks WHERE id=? AND analysis_id=?", params: [edit.id, id]).first else { throw CaptureError.reviewRequired }
-        if task["review_status"] as? String != "pending" { continue }
+        if task["review_status"] as? String == "ignored" { throw CaptureError.reviewRequired }
+        if task["review_status"] as? String == "saved" { continue }
+        guard task["review_status"] as? String == "pending" else { throw CaptureError.reviewRequired }
         let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [edit.id]).first?["id"] as? String
         let todoId = existing ?? UUID().uuidString.lowercased()
         if existing == nil {
