@@ -66,13 +66,18 @@ export class Repository {
       id, title, input.description?.trim() || null, due, precision, time, time, source, sourceId, Date.parse(time));
     return id;
   }
-  async updateTodo(id: string, input: TodoInput) {
+  async updateTodo(id: string, input: TodoInput, expected?: Todo) {
     const due = input.due_at ?? null;
     const precision = input.due_precision ?? 'unknown';
     validateDue(due, precision);
     const title = normalizeTitle(input.title);
     await this.db.withExclusiveTransactionAsync(async tx => {
       await this.requireTodo(tx, id);
+      if (expected) {
+        const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
+        const fields: (keyof Todo)[] = ['id', 'title', 'description', 'due_at', 'due_precision', 'source_type', 'source_id'];
+        if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 입력 내용을 확인한 뒤 화면을 닫고 할 일 탭을 눌러 최신 내용을 다시 확인해 주세요.');
+      }
       await tx.runAsync('UPDATE todos SET title=?,description=?,due_at=?,due_precision=?,updated_at=? WHERE id=?',
         title, input.description?.trim() || null, due, precision, this.now(), id);
     });

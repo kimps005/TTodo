@@ -237,6 +237,30 @@ test('삭제 확인 후 다른 연결에서 바뀐 항목은 보존하고 최신
   } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('오래된 편집은 다른 연결의 변경을 덮지 않고 최신 내용을 다시 편집할 수 있다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-update-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  await repo.initialize();
+  const other = new DatabaseSync(path);
+  try {
+    const id = await repo.addTodo({ title: '기존 제목', description: '기존 메모' });
+    const snapshot = (await repo.listTodos())[0];
+    other.prepare('UPDATE todos SET description=? WHERE id=?').run('다른 곳에서 수정한 메모', id);
+    await assert.rejects(repo.updateTodo(id, { title: '이전 화면의 제목', description: '기존 메모' }, snapshot), /변경.*다시 확인/);
+    const current = (await repo.listTodos())[0];
+    assert.equal(current.title, '기존 제목');
+    assert.equal(current.description, '다른 곳에서 수정한 메모');
+    await repo.updateTodo(id, { title: '다시 확인한 제목', description: current.description }, current);
+    const updated = (await repo.listTodos())[0];
+    assert.equal(updated.title, '다시 확인한 제목');
+    assert.equal(updated.description, '다른 곳에서 수정한 메모');
+    other.prepare("UPDATE todos SET status='completed' WHERE id=?").run(id);
+    await repo.updateTodo(id, { title: '완료 상태를 유지한 편집', description: updated.description }, updated);
+    assert.equal((await repo.listTodos())[0].status, 'completed');
+  } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');
