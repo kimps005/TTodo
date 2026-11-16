@@ -218,6 +218,25 @@ test('다른 연결에서 삭제한 할 일의 오래된 편집·완료·삭제 
   } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('삭제 확인 후 다른 연결에서 바뀐 항목은 보존하고 최신 확인 후 삭제한다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-delete-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  await repo.initialize();
+  const other = new DatabaseSync(path);
+  try {
+    const id = await repo.addTodo({ title: '이전 제목' });
+    const snapshot = (await repo.listTodos())[0];
+    other.prepare('UPDATE todos SET title=?, description=? WHERE id=?').run('수정된 제목', '보존할 메모', id);
+    await assert.rejects(repo.removeTodo(id, snapshot), /변경.*다시 확인/);
+    const current = (await repo.listTodos())[0];
+    assert.equal(current.title, '수정된 제목');
+    assert.equal(current.description, '보존할 메모');
+    await repo.removeTodo(id, current);
+    assert.deepEqual(await repo.listTodos(), []);
+  } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');

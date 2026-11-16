@@ -91,10 +91,15 @@ export class Repository {
       throw new Error('이미 삭제된 할 일이에요. 목록을 다시 확인해 주세요.');
     }
   }
-  async removeTodo(id: string) {
+  async removeTodo(id: string, expected?: Todo) {
     let analyses: string[] = [];
     await this.db.withExclusiveTransactionAsync(async tx => {
       await this.requireTodo(tx, id);
+      if (expected) {
+        const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
+        const fields: (keyof Todo)[] = ['id', 'title', 'description', 'status', 'due_at', 'due_precision', 'completed_at', 'source_type', 'source_id'];
+        if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 목록을 다시 확인한 뒤 삭제해 주세요.');
+      }
       analyses = (await tx.getAllAsync<{ analysis_id: string }>('SELECT DISTINCT analysis_id FROM extracted_tasks WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)', id, id)).map(row => row.analysis_id);
       // Keep the saved marker and image fingerprint so a cached approval cannot
       // recreate the task. Remove both original and edited proposal content.
