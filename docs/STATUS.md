@@ -2,6 +2,13 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 알림 설정 실패의 네이티브 비교·시스템 로그 대조 완료
+- [0342e2b 독립 비교 재검사](https://github.com/kimps005/TTodo/actions/runs/43750027357)는 macOS 26.7.2 ARM / Xcode 26.6(17F113) / SDK 26.5 / iPhone 16 Pro 시뮬레이터 iOS 26.5(23F77)에서 실행했다. ZIP SHA-256 47f89a5e2f5ac370e0297846f38ef2e5a30890a0f45167ee360d0ce9023b35d2·보고서 커밋·지정 XCTest 1개 실패/건너뜀 0을 대조했다. 24,356,561바이트 시스템 로그와 appinfo가 모두 수집됐고 ENOBUFS는 재발하지 않았다.
+- 독립 앱의 첫 호출(19:08:41 UTC)과 재진입(19:09:33 UTC) 모두 Bundle ID=com.kimps005.ttodo.notificationprobe, denied/active, 공개 API 반환 true다. 설정 앱은 올바른 비교 앱 ID의 알림 목적지로 변환한 다음 각각 19:08:58.056·19:09:34.164 UTC에 제품 앱과 동일한 `selection not possible currently 'notifications'`를 기록했다. PNG·접근성 트리는 두 번 모두 설정 첫 화면이며 앱 복귀 후에도 denied/opened=true다. appinfo는 비교 앱 User 등록 및 빈 App Group을 확인한다.
+- **확인한 원인 범위:** 이 CI 시뮬레이터 환경에서는 공개 API의 URL 열기와 대상 앱 ID 전달 뒤, 설정 앱의 notifications 목적지 선택 단계에서 중단된다. Expo·제품 브리지·확장·App Group이 없는 별도 앱에서도 동일하여 TTodo 통합에만 특화된 실패가 아니다. 설정 앱의 첫 실행 지연만으로 설명할 수도 없다. **미확정:** 시뮬레이터의 의도된 지원 제한인지 OS 결함인지, 실제 iPhone에서도 발생하는지와 설정 앱 내부에서 해당 목적지를 선택할 수 없는 더 깊은 원인. 앱 등록/엔타이틀먼트 수정이 필요하다는 증거는 없으며 이를 완전히 일반화해 배제하지도 않는다.
+- 제품 코드는 Apple 공식 공개 API를 유지했다. 다른 URL·사설 URL·지연/재시도·서명 변경을 넣지 않았고 화면 단언도 완화하지 않았다. 제품 문제 해결 완료로 표시하지 않는다. 직접 이동 성공과 복귀 후 제품 데이터 보존의 해당 전체 UI 단계, 실제 iPhone 검증은 미완료다. 기존 선택대로 실기기 설치는 나중에 진행하며 새 설치 경로를 요청하지 않는다.
+- [0342e2b 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43749994992)의 core/ios 모두 성공했다. 82개 테스트·타입·보안·Hermes, Swift 저장소/캡처·합성 OCR, 제품 앱·확장 빌드/선언 수집 통과다. 로컬 스크립트 구문·YAML/프로젝트 파싱·diff 및 20 MiB 파일 직접 출력 보존도 확인했다. 상세 근거·재현 절차·추천 방안은 [알림 설정 조사](NOTIFICATION-SETTINGS-INVESTIGATION.md)에 기록했다.
+
 ## 독립 네이티브 비교의 첫 실행·재진입 실패 확인
 - [58d7bb9 네이티브 비교](https://github.com/kimps005/TTodo/actions/runs/43748991228)는 Xcode 26.6 / SDK 26.5의 독립 앱·XCTest 빌드와 iOS 26.5 시뮬레이터 실행을 완료했다. 실제 권한 요청/거부 뒤 설정 앱 첫 실행과 재진입 모두 화면 도착 판정이 false다. 복귀 후 두 번 모두 authorization=1, opened=true를 UI로 확인했다. 마지막 [false,false] 대 [true,true] 단언에서 실패했으며 화면/트리를 첨부했다. 제품 통합 없이 재현됐지만 비교 앱의 시스템 로그 원문 대조는 아직 남아 있다.
 - 전체 시스템 로그가 동기 파이프 16 MiB 한도를 넘어 ENOBUFS로 저장되지 않았다. UI 단언은 유지하고 진단 출력을 파일로 직접 연결해 버퍼 한도를 제거했다. 앱 등록 수집도 독립시켰다. 제품 URL/코드 변경은 없으며 로그 수집 보완 후 재검증한다.
