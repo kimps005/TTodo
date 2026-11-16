@@ -115,6 +115,16 @@ struct CaptureSmoke {
     let factory = { try SharedStore(directoryOverride: directory) }
     let text = "2026년 11월 20일까지 자료 보내줘."
     let raw = #"[{"is_actionable":true,"title":"자료 전달","description":null,"due_at":"2026-11-20","due_precision":"date","assignee":null,"confidence":0.8,"evidence_text":"2026년 11월 20일까지 자료 보내줘.","needs_confirmation":true}]"#
+    for (source, evidence) in [("자료　보내줘", "자료 보내줘"), ("자료  보내줘", "자료 보내줘"), ("가 보내줘", "가 보내줘")] {
+      func response(_ evidence: String) throws -> String {
+        let item: [String: Any] = ["is_actionable": true, "title": "자료 전달", "description": NSNull(), "due_at": NSNull(), "due_precision": "unknown", "assignee": NSNull(), "confidence": 0.8, "evidence_text": evidence, "needs_confirmation": true]
+        return String(decoding: try JSONSerialization.data(withJSONObject: [item]), as: UTF8.self)
+      }
+      do { _ = try ExtractionValidator.validate(response(evidence), sourceText: source, messageDate: nil); fatalError("Changed evidence was accepted") }
+      catch ExtractionValidationError.invalid { }
+      let exact = try ExtractionValidator.validate(response(source), sourceText: source, messageDate: nil)
+      check(exact.count == 1 && Array(exact[0].evidence_text.utf8) == Array(source.utf8))
+    }
     try checkAtomicWrites(directory: directory.appendingPathComponent("atomic-writes"), tasks: ExtractionValidator.validate(raw, sourceText: text, messageDate: nil))
     for assignee in ["", " \n\t", "\u{00A0}", "  사용자  "] {
       var rows = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [[String: Any]]

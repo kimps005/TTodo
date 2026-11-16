@@ -22,7 +22,7 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
     if (t.is_actionable === false) return [];
     if (t.is_actionable !== true) throw new Error('INVALID_RESPONSE');
     if (typeof t.title !== 'string' || typeof t.evidence_text !== 'string' || !clean(t.evidence_text) ||
-      !clean(sourceText).includes(clean(t.evidence_text)) ||
+      !sourceText.includes(t.evidence_text) ||
       typeof t.confidence !== 'number' || !Number.isFinite(t.confidence) || t.confidence < 0 || t.confidence > 1 ||
       !['date', 'datetime', 'unknown'].includes(String(t.due_precision)) ||
       (t.due_at !== null && typeof t.due_at !== 'string') ||

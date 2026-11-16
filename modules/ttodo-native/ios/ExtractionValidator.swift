@@ -113,7 +113,7 @@ enum ExtractionValidator {
     return try raw.compactMap { value in
       if !value.is_actionable { return nil }
       guard let title = value.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty, title.unicodeScalars.count <= 200,
-        let evidence = value.evidence_text, !clean(evidence).isEmpty, clean(sourceText).contains(clean(evidence)),
+        let evidence = value.evidence_text, !clean(evidence).isEmpty, Data(sourceText.utf8).range(of: Data(evidence.utf8)) != nil,
         let precision = value.due_precision, validDue(value.due_at, precision: precision),
         let confidence = value.confidence, confidence.isFinite, (0...1).contains(confidence),
         let confirmation = value.needs_confirmation else { throw ExtractionValidationError.invalid }

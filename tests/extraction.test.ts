@@ -44,6 +44,12 @@ test('근거 없는 응답·잘못된 날짜·신뢰도 범위를 거부한다',
   assert.deepEqual(validateExtraction([], '일반 대화'), []);
   assert.deepEqual(validateExtraction([{ is_actionable: false }], '일반 대화'), []);
 });
+test('정규화하면 같아도 원문에 없는 문장을 원문 근거로 저장하지 않는다', () => {
+  for (const [source, evidence] of [['자료　보내줘', '자료 보내줘'], ['자료  보내줘', '자료 보내줘'], ['가 보내줘', '가 보내줘']]) {
+    assert.throws(() => validateExtraction([{ ...task, evidence_text: evidence }], source));
+    assert.equal(validateExtraction([{ ...task, evidence_text: source }], source)[0].evidence_text, source);
+  }
+});
 test('메시지 기준일 없는 상대 날짜와 연도 추정은 모델 응답에 있어도 제거한다', () => {
   const context = { text: '내일 보내줘', captured_at: '2026-11-13T00:00:00Z', message_date: null, timezone: 'Asia/Seoul' };
   const suggestion = { ...validateExtraction([task], task.evidence_text)[0], due_at: '2026-11-14', due_precision: 'date' as const, evidence_text: '내일 보내줘' };
