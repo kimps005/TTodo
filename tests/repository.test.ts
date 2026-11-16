@@ -161,6 +161,29 @@ test('수동 중복 입력은 허용하고 완료·수정·삭제를 보존한�
   assert.equal(saved.visibility, 'private');
   await repo.removeTodo(first); assert.equal((await repo.listTodos()).length, 1); native.close();
 });
+test('다른 연결에서 삭제한 할 일의 오래된 편집·완료 요청은 성공으로 처리하지 않는다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-edit-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  await repo.initialize();
+  const other = new DatabaseSync(path);
+  try {
+    const deleted = await repo.addTodo({ title: '다른 경로에서 삭제할 항목' });
+    const preserved = await repo.addTodo({ title: '유지할 항목' });
+    const saved = await repo.listTodos(); // Open editor's earlier snapshot.
+    assert.ok(saved.some(row => row.id === deleted));
+    other.prepare('DELETE FROM todos WHERE id=?').run(deleted);
+    await assert.rejects(repo.updateTodo(deleted, { title: '오래된 편집 내용', description: '되살리면 안 되는 메모' }), /삭제.*다시 확인/);
+    await assert.rejects(repo.setCompleted(deleted, true), /삭제.*다시 확인/);
+    await assert.rejects(repo.setCompleted(deleted, false), /삭제.*다시 확인/);
+    assert.deepEqual(await repo.listTodos(), saved.filter(row => row.id !== deleted));
+    await repo.updateTodo(preserved, { title: '정상 수정' });
+    await repo.setCompleted(preserved, true);
+    assert.equal((await repo.listTodos())[0].title, '정상 수정');
+    assert.equal((await repo.listTodos())[0].status, 'completed');
+  } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');

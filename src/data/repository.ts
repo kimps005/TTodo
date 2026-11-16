@@ -61,12 +61,26 @@ export class Repository {
     const due = input.due_at ?? null;
     const precision = input.due_precision ?? 'unknown';
     validateDue(due, precision);
-    await this.db.runAsync('UPDATE todos SET title=?,description=?,due_at=?,due_precision=?,updated_at=? WHERE id=?',
-      normalizeTitle(input.title), input.description?.trim() || null, due, precision, this.now(), id);
+    const title = normalizeTitle(input.title);
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await this.requireTodo(tx, id);
+      await tx.runAsync('UPDATE todos SET title=?,description=?,due_at=?,due_precision=?,updated_at=? WHERE id=?',
+        title, input.description?.trim() || null, due, precision, this.now(), id);
+    });
   }
-  setCompleted(id: string, complete: boolean) {
+  async setCompleted(id: string, complete: boolean) {
     const time = this.now();
-    return this.db.runAsync('UPDATE todos SET status=?,completed_at=?,updated_at=? WHERE id=?', complete ? 'completed' : 'pending', complete ? time : null, time, id);
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await this.requireTodo(tx, id);
+      await tx.runAsync('UPDATE todos SET status=?,completed_at=?,updated_at=? WHERE id=?', complete ? 'completed' : 'pending', complete ? time : null, time, id);
+    });
+  }
+  private async requireTodo(tx: SqlConnection, id: string) {
+    // Another process can delete a row after the editor/list has loaded it.
+    // Check and update under one writer lock so a missing row is never a save success.
+    if (!await tx.getFirstAsync<{ id: string }>('SELECT id FROM todos WHERE id=?', id)) {
+      throw new Error('이미 삭제된 할 일이에요. 목록을 다시 확인해 주세요.');
+    }
   }
   async removeTodo(id: string) {
     let analyses: string[] = [];
