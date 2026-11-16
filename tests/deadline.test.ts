@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { composeDeadline, deadlineFields } from '../src/domain/deadline';
-import { validateDue } from '../src/domain/todo';
+import { dueDay, validateDue } from '../src/domain/todo';
 test('공유 네이티브 저장소와 같은 서기 날짜만 저장한다', () => {
   for (const due of ['0000-01-01', '0000-01-01T09:00:00+09:00']) {
     assert.throws(() => validateDue(due, due.includes('T') ? 'datetime' : 'date'));
@@ -22,4 +22,10 @@ test('수정한 시각을 기기 시간대의 정확한 시점으로 저장하�
   assert.equal(due.due_at, new Date('2026-11-20T09:30:00').toISOString());
   assert.equal(due.due_precision, 'datetime');
   assert.deepEqual(deadlineFields(due), { day: '2026-11-20', time: '09:30' });
+});
+test('네 자리보다 짧은 연도의 시각도 날짜 형식을 유지하며 다시 편집한다', () => {
+  const due = composeDeadline('0500-06-15', '09:30');
+  assert.deepEqual(deadlineFields(due), { day: '0500-06-15', time: '09:30' });
+  assert.equal(dueDay(due), '0500-06-15');
+  assert.ok(dueDay(due)! < '2026-11-16');
 });

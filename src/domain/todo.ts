@@ -49,7 +49,7 @@ export function validateDue(due: string | null, precision: DuePrecision): void {
   }
 }
 export function localDay(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 export function dueDay(todo: Pick<Todo, 'due_at' | 'due_precision'>): string | null {
   if (!todo.due_at) return null;
