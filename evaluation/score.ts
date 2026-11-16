@@ -1,4 +1,4 @@
-type Task = { due_at: string | null };
+type Task = { due_at: string | null; due_precision: string };
 type Result = { id: string; category: string; input: { text: string; captured_at: string; message_date: string | null; timezone: string }; expected: Task[]; actual: unknown[] | null; elapsed_ms: number; error: string | null };
 type Report = { format_version: number; dataset_version: number; provider: string; generated_at: string; operating_system?: string; completed: boolean; results: Result[] };
 type Match = { expected: number; actual: number };
@@ -42,10 +42,10 @@ export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
     seen.add(row.id);
     const verdict = byId.get(row.id);
     if (!verdict || !Array.isArray(verdict.matches) || !Array.isArray(verdict.deadlines) || verdict.deadlines.length !== row.expected.length) throw new Error(`${row.id}: 모든 정답의 판정이 필요해요.`);
-    const expected = new Set<number>(), actual = new Set<number>();
+    const expected = new Set<number>(), actual = new Set<number>(), matches = new Map<number, number>();
     for (const pair of verdict.matches) {
       if (!pair || !indexIn(pair.expected, row.expected.length) || !indexIn(pair.actual, row.actual.length) || expected.has(pair.expected) || actual.has(pair.actual)) throw new Error(`${row.id}: 일대일 작업 연결을 확인해 주세요.`);
-      expected.add(pair.expected); actual.add(pair.actual);
+      expected.add(pair.expected); actual.add(pair.actual); matches.set(pair.expected, pair.actual);
     }
     let deadlineTotal = 0, deadlineCorrect = 0;
     verdict.deadlines.forEach((decision, index) => {
@@ -53,6 +53,12 @@ export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
       if (decision !== 'not_explicit') {
         if (!row.expected[index] || typeof row.expected[index].due_at !== 'string') throw new Error(`${row.id}: 명시 마감 정답이 없어요.`);
         if (decision === 'correct' && !expected.has(index)) throw new Error(`${row.id}: 누락된 작업의 마감은 정답이 아니에요.`);
+        if (decision === 'correct') {
+          const reference = row.expected[index], prediction = row.actual![matches.get(index)!] as Partial<Task> | null;
+          const sameDate = reference.due_precision === 'date' && prediction?.due_at === reference.due_at;
+          const sameInstant = reference.due_precision === 'datetime' && typeof prediction?.due_at === 'string' && Number.isFinite(Date.parse(reference.due_at!)) && Date.parse(prediction.due_at) === Date.parse(reference.due_at!);
+          if (prediction?.due_precision !== reference.due_precision || !(sameDate || sameInstant)) throw new Error(`${row.id}: 정답으로 표시한 마감이 실제 출력과 달라요.`);
+        }
         deadlineTotal++; if (decision === 'correct') deadlineCorrect++;
       }
     });

@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 function fixture() {
   const results = seed.cases.map((sample, index) => ({ id: sample.id, category: sample.category,
     input: { text: sample.text, captured_at: sample.captured_at, message_date: sample.message_date, timezone: seed.timezone },
-    expected: sample.expected, actual: sample.id === 'school-02' ? [{}, {}] : sample.id === 'negative-01' ? [{}] : [], elapsed_ms: sample.id === 'negative-03' ? 99999 : 100 + index, error: null as string | null }));
+    expected: sample.expected, actual: sample.id === 'school-02' ? [{ due_at: '2026-11-16', due_precision: 'date' }, {}] : sample.id === 'negative-01' ? [{}] : [], elapsed_ms: sample.id === 'negative-03' ? 99999 : 100 + index, error: null as string | null }));
   const verdicts = seed.cases.map(sample => ({ id: sample.id,
     matches: sample.id === 'school-02' ? [{ expected: 0, actual: 0 }] : [],
     deadlines: sample.expected.map((_, index) => sample.id === 'school-02' && index === 0 ? 'correct' as const : 'not_explicit' as const) as ('not_explicit' | 'correct' | 'incorrect')[] }));
@@ -40,6 +40,16 @@ test('판정 양식은 모든 판단을 비워 두고 완전한 평가에 대해
   assert.throws(() => scoreEvaluation(report, template as never));
   report.results.pop(); assert.throws(() => createVerdictTemplate(report));
 });
+test('마감 시각은 시간대 표기가 달라도 같은 순간이어야 정답으로 센다', () => {
+  const { report, verdicts } = fixture();
+  const row = report.results.find(item => item.id === 'chat-01')!;
+  const verdict = verdicts.find(item => item.id === 'chat-01')!;
+  row.actual = [{ due_at: '2026-11-20T08:00:00Z', due_precision: 'datetime' }];
+  verdict.matches = [{ expected: 0, actual: 0 }]; verdict.deadlines = ['correct'];
+  assert.equal(scoreEvaluation(report, verdicts).total.deadline_correct, 2);
+  row.actual = [{ due_at: '2026-11-20T09:00:00Z', due_precision: 'datetime' }];
+  assert.throws(() => scoreEvaluation(report, verdicts));
+});
 test('오류·누락·중복 연결과 미검출 작업의 정답 마감 판정을 거부한다', () => {
   const a = fixture(); a.report.completed = false; assert.throws(() => scoreEvaluation(a.report, a.verdicts));
   const b = fixture(); b.verdicts.pop(); assert.throws(() => scoreEvaluation(b.report, b.verdicts));
@@ -49,6 +59,7 @@ test('오류·누락·중복 연결과 미검출 작업의 정답 마감 판정�
   const f = fixture(); f.report.results.pop(); assert.throws(() => scoreEvaluation(f.report, f.verdicts));
   const g = fixture(); g.report.results[0].input.message_date = null; assert.throws(() => scoreEvaluation(g.report, g.verdicts));
   const h = fixture(); h.report.results[0].elapsed_ms = -1; assert.throws(() => scoreEvaluation(h.report, h.verdicts));
+  const i = fixture(); i.report.results.find(row => row.id === 'school-02')!.actual[0] = { due_at: '2026-11-17', due_precision: 'date' }; assert.throws(() => scoreEvaluation(i.report, i.verdicts));
 });
 
 test('집계 명령이 합성 파일을 읽어 결과만 출력하고 잘못된 판정은 실패한다', () => {
