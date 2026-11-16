@@ -10,10 +10,12 @@ import { reconcileReviewDrafts, reviewDraft } from '../domain/reviewDraft';
 import { DeadlineFields } from './DeadlineFields';
 import { discardTemporaryImage } from '../data/temporaryFiles';
 import type { SimilarCapture } from '../domain/duplicate';
+import { createReviewConfirmation } from './reviewConfirmation';
 export function Review({ tasks, repository, analysisId, close, changed, imageUri }: { tasks: ExtractedTask[]; repository: Repository; analysisId: string; close: () => void; changed: () => Promise<void>; imageUri?: string }) {
   const [items, setItems] = useState(() => tasks.map(task => reviewDraft(task)));
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
+  const confirmation = useRef(createReviewConfirmation()).current;
   const [similar, setSimilar] = useState<SimilarCapture[]>([]);
   const [checking, setChecking] = useState(true);
   const [checkError, setCheckError] = useState(false);
@@ -21,6 +23,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
   useEffect(() => {
     let alive = true, generation = 0;
     const refresh = async () => {
+      confirmation.invalidate();
       const request = ++generation;
       setChecking(true); setCheckError(false); setSimilar([]);
       try {
@@ -33,15 +36,16 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
       finally { if (alive && request === generation) setChecking(false); }
     };
     void refresh();
-    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
-    return () => { alive = false; subscription.remove(); };
+    const subscription = AppState.addEventListener('change', state => { confirmation.invalidate(); if (state === 'active') void refresh(); });
+    return () => { alive = false; confirmation.invalidate(); subscription.remove(); };
   }, [repository, analysisId, tasks, checkAttempt]);
   useEffect(() => () => { if (imageUri) discardTemporaryImage(imageUri); }, [imageUri]);
-  const edit = (index: number, values: Partial<typeof items[number]>) => setItems(current => current.map((item, i) => i === index ? { ...item, ...values } : item));
+  const edit = (index: number, values: Partial<typeof items[number]>) => { confirmation.invalidate(); setItems(current => current.map((item, i) => i === index ? { ...item, ...values } : item)); };
   const run = async (operation: () => Promise<void>) => { if (working.current) return; working.current = true; setBusy(true); try { await operation(); await changed(); close(); } catch (e) { setCheckAttempt(n => n + 1); Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
   const selected = items.filter(t => t.selected && t.review_status === 'pending');
   const save = () => {
-    const approve = () => void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } }))));
+    const isCurrent = confirmation.capture();
+    const approve = () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '제안 상태가 바뀌었어요. 내용을 다시 확인한 뒤 저장해 주세요.'); return; } void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } })))); };
     if (similar.length) Alert.alert('이미 있는 할 일인지 확인했나요?', '최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.', [{ text: '다시 확인', style: 'cancel' }, { text: '확인하고 저장', onPress: approve }]);
     else approve();
   };
@@ -51,7 +55,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     {!!similar.length && <View style={ui.card}><Text style={ui.section}>비슷한 분석 기록이 있어요</Text><Text style={ui.small}>최근 7일의 원문 근거와 비교한 참고 안내예요. 서로 다른 일일 수 있으니 기존 항목과 비교해 주세요. 자동으로 합치거나 삭제하지 않아요.</Text>{similar.map(match => <Text key={match.analysis_id} style={ui.subtitle}>{match.saved ? '저장한 항목' : '검토 대기'} · {match.title}</Text>)}</View>}
     {checking && <Text style={ui.small}>최근 분석과 비교하고 있어요…</Text>}
     {checkError && <View style={ui.card}><Text style={ui.small}>최신 제안 상태나 비슷한 분석을 확인하지 못했어요. 유효한 대기 항목의 편집 내용은 유지돼요.</Text><Button secondary title="최신 상태 다시 확인" onPress={() => setCheckAttempt(n => n + 1)} /></View>}
-    <Button secondary title="대기 항목 전체 선택" disabled={busy || checking || checkError} onPress={() => setItems(current => current.map(item => ({ ...item, selected: item.review_status === 'pending' })))} />
+    <Button secondary title="대기 항목 전체 선택" disabled={busy || checking || checkError} onPress={() => { confirmation.invalidate(); setItems(current => current.map(item => ({ ...item, selected: item.review_status === 'pending' }))); }} />
     {items.map((task, index) => <View key={task.id} style={ui.card}>
       <View style={ui.row}><Check disabled={busy || checking || checkError || task.review_status !== 'pending'} checked={task.selected} label={`${task.title} 선택`} onPress={() => task.review_status === 'pending' && edit(index, { selected: !task.selected })} /><View style={ui.grow}><Text style={ui.pill}>{task.review_status === 'saved' ? '저장 완료' : task.review_status === 'ignored' ? '무시함' : task.needs_confirmation ? '확인 필요' : '추가 제안'}</Text><Text style={ui.small}>담당: {task.assignee ?? '확인 필요'}</Text></View></View>
       <TextInput accessibilityLabel={`${index + 1}번째 제안, 할 일 제목`} editable={task.review_status === 'pending' && !busy && !checking && !checkError} style={ui.input} value={task.title} onChangeText={title => edit(index, { title })} multiline maxLength={400} />
