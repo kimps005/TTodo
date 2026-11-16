@@ -2,6 +2,11 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## CI 호스트의 실제 모델 가용성 점검 준비
+- 삭제 UI에서 실제 Foundation Models 가용성 API가 available로 표시된 것을 확인해, PRD의 무료 기기 내 모델 우선 평가를 위한 수동 호스트 점검 workflow를 추가했다. [Apple 공식 시뮬레이터 안내](https://developer.apple.com/videos/play/wwdc2025/259/)는 Apple Intelligence가 준비된 최신 macOS에서 기능 검사가 가능하지만 iPhone 성능과 다르다고 설명한다.
+- 일회성 CI Mac에서 제품 추출/검증 코드를 그대로 컴파일하고 가용하면 합성 한국어 요청 1개만 실제 호출한다. 미가용이면 상태만 기록한다. Apple Intelligence 설정·계정·모델 다운로드·유료 API는 변경하지 않는다. 사용자 DB/이미지/글자를 읽지 않으며 생성 글자와 근거를 로그에 남기지 않는다.
+- workflow 성공은 호스트 점검 성공이며 실제 추론 여부는 report의 inference_attempted/inference_completed로 구분한다. 마감/개수의 단일 샘플 확인은 전체 정확도 측정이 아니다. 실제 iOS/실기기/잠금·AI 정확도 완료로 인정하지 않는다. 로컬 YAML·diff 통과, 실제 SDK 컴파일과 호스트 결과는 CI 확인 전이다.
+
 ## 전체 삭제·동의 초기화의 독립 UI 통과
 - [de82738 data-reset](https://github.com/kimps005/TTodo/actions/runs/43797466173)는 iOS 26.5(23F77) / iPhone 16 Pro 시뮬레이터에서 testDataResetAndConsentWithoutSettingsNavigation 지정 1개 통과·실패/건너뜀 0이다. ZIP SHA-256 676af5f2605fbe7cd1a1f5c1c7be46483f40b03747227f76bf7dfc62ac8f382f·대상 소스·summary/tests/report와 첨부 화면을 대조했다.
 - 실제 UI로 동의 취소/허용, 재실행 후 동의 유지, 삭제 취소 뒤 할 일/온보딩/동의 유지, 전체 삭제 시 초안 제거, 재실행 후 빈 목록/분석함과 AI 동의 해제를 확인했다. 할 일은 직접 입력한 합성 데이터이며 AI 응답·DB 값을 주입하지 않는다.

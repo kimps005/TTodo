@@ -1,0 +1,29 @@
+name: 기기 내 모델 CI 호스트 가용성 점검
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record host and compile production extraction code
+        run: |
+          mkdir -p artifacts/model-host-probe
+          sw_vers > artifacts/model-host-probe/host.txt
+          uname -m >> artifacts/model-host-probe/host.txt
+          xcodebuild -version > artifacts/model-host-probe/xcode.txt
+          xcrun --sdk macosx --show-sdk-version > artifacts/model-host-probe/sdk.txt
+          swiftc -target arm64-apple-macos26.0 modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/OnDeviceExtraction.swift native/tests/ModelAvailabilityProbe.swift -o "$RUNNER_TEMP/ttodo-model-host-probe"
+      - name: Inspect availability and attempt one real synthetic extraction if ready
+        env:
+          TTODO_MODEL_PROBE_OUTPUT: artifacts/model-host-probe/report.json
+        run: '"$RUNNER_TEMP/ttodo-model-host-probe"'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-host-inspection-not-iphone-validation
+          path: artifacts/model-host-probe/**
+          retention-days: 7
