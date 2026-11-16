@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { scoreEvaluation } from '../evaluation/score';
+import { createVerdictTemplate, scoreEvaluation } from '../evaluation/score';
 import seed from '../evaluation/ko-seed.json';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -27,6 +27,15 @@ test('수동 일대일 판정으로 작업·마감·빈 입력과 일반 오탐�
   assert.equal(result.categories['할 일 없음'].blank_negative_false_positive_rate, 0);
   assert.equal(result.categories['할 일 없음'].recall, null);
 });
+
+test('판정 양식은 모든 판단을 비워 두고 완전한 평가에 대해서만 만든다', () => {
+  const { report } = fixture();
+  const template = createVerdictTemplate(report);
+  assert.equal(template.length, seed.cases.length);
+  assert.ok(template.every(row => row.matches === null && row.deadlines.every(value => value === null)));
+  assert.throws(() => scoreEvaluation(report, template as never));
+  report.results.pop(); assert.throws(() => createVerdictTemplate(report));
+});
 test('오류·누락·중복 연결과 미검출 작업의 정답 마감 판정을 거부한다', () => {
   const a = fixture(); a.report.completed = false; assert.throws(() => scoreEvaluation(a.report, a.verdicts));
   const b = fixture(); b.verdicts.pop(); assert.throws(() => scoreEvaluation(b.report, b.verdicts));
@@ -46,6 +55,9 @@ test('집계 명령이 합성 파일을 읽어 결과만 출력하고 잘못된 
     const run = () => spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/score-evaluation.ts', reportPath, verdictPath], { encoding: 'utf8' });
     const good = run(); assert.equal(good.status, 0); assert.equal(JSON.parse(good.stdout).total.tp, 1);
     assert.equal(good.stdout.includes(seed.cases[0].text), false);
+    const prepared = spawnSync(process.execPath, [resolve('node_modules/tsx/dist/cli.mjs'), 'scripts/prepare-evaluation-verdict.ts', reportPath], { encoding: 'utf8' });
+    assert.equal(prepared.status, 0); assert.equal(JSON.parse(prepared.stdout)[0].matches, null);
+    writeFileSync(verdictPath, prepared.stdout); assert.notEqual(run().status, 0);
     verdicts.pop(); writeFileSync(verdictPath, JSON.stringify(verdicts));
     const bad = run(); assert.notEqual(bad.status, 0); assert.equal(bad.stdout, '');
   } finally { rmSync(directory, { recursive: true, force: true }); }

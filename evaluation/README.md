@@ -34,6 +34,8 @@
 
 오류 없이 완료한 형식 2 결과의 각 사례에 대해 다음 형태의 JSON 배열을 작성합니다. 아래는 한 사례의 형식 예시이며 실제 집계에는 결과의 모든 사례가 필요합니다. 인덱스는 각 사례의 `expected`와 `actual` 배열에서 0부터 시작합니다.
 
+먼저 `npx tsx scripts/prepare-evaluation-verdict.ts 결과.json > 판정.json`으로 빈 양식을 만들 수 있습니다. 모든 `matches`와 마감 판정은 `null`로 남으므로, 사람이 확인해 배열이나 판정값으로 바꾸기 전에는 집계되지 않습니다. 연결할 작업이 없다고 확인한 경우 `matches`를 빈 배열로 씁니다.
+
 ```json
 [{"id":"사례 ID","matches":[{"expected":0,"actual":0}],"deadlines":["correct","not_explicit"]}]
 ```

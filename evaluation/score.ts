@@ -63,5 +63,12 @@ export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
   if (seen.size !== byId.size) throw new Error('평가 결과에 없는 판정이 있어요.');
   return { total: summarize(total), categories: Object.fromEntries([...categories].map(([category, counts]) => [category, summarize(counts)])) };
 }
+
+// Leave every judgment unset; the scorer refuses the template until reviewed.
+export function createVerdictTemplate(report: Report) {
+  const validation = seed.cases.map(sample => ({ id: sample.id, matches: [], deadlines: sample.expected.map(() => 'not_explicit' as const) }));
+  scoreEvaluation(report, validation);
+  return seed.cases.map(sample => ({ id: sample.id, matches: null, deadlines: sample.expected.map(() => null) }));
+}
 import seed from './ko-seed.json';
 
