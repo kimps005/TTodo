@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -21,6 +21,7 @@ import { analysisReviewRoute } from './src/notifications/route';
 import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibilityChoices';
 import { isHomeLink } from './src/navigation/route';
 import { shareTemporaryExport } from './src/data/shareTemporaryExport';
+import { createLatestRefresh } from './src/data/latestRefresh';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function requestLockRefresh() {
@@ -47,14 +48,15 @@ function Application() {
   const [homeRequested, setHomeRequested] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState<Notifications.NotificationPermissionsStatus | null>(null);
-  const refresh = useCallback(async (repository: Repository) => {
+  const refresh = useMemo(() => createLatestRefresh(async (repository: Repository) => {
     await repository.pruneEvidence();
-    const [all, captures, privacy, intro, hidden] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content')]);
-    setTodos(sortTodos(all)); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
-    setLocalAIConsent(await repository.getPreference('ai_local_consent') === 'yes');
     // Notification settings must not prevent offline tasks from opening.
-    setPermission(await Notifications.getPermissionsAsync().catch(() => null));
-  }, []);
+    const [all, captures, privacy, intro, hidden, consent, permission] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content'), repository.getPreference('ai_local_consent'), Notifications.getPermissionsAsync().catch(() => null)]);
+    return { all, captures, privacy, intro, hidden, consent, permission };
+  }, ({ all, captures, privacy, intro, hidden, consent, permission }) => {
+    setTodos(sortTodos(all)); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
+    setLocalAIConsent(consent === 'yes'); setPermission(permission);
+  }), []);
   const boot = useCallback(async () => {
     try {
       setError('');
