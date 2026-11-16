@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, existsSync, readFileSync, openSync, closeSync } from 'node:fs';
 import path from 'node:path';
-import selection from './ui-simulator-selection.cjs';
+import selection from './notification-probe-selection.cjs';
 import helpValidation from './ui-diagnostic-help.cjs';
 import configure from './configure-notification-probe.cjs';
 
@@ -22,7 +22,8 @@ try {
   const runtimes = JSON.parse(sim('list', 'runtimes', '--json'));
   const types = JSON.parse(sim('list', 'devicetypes', '--json'));
   writeFileSync(path.join(output, 'runtimes.json'), JSON.stringify(runtimes, null, 2));
-  const { runtime, deviceType } = selection.selectUISimulator(runtimes.runtimes, types.devicetypes, 'iphone-16-pro', process.env.TTODO_PROBE_RUNTIME ?? 'latest');
+  report.requested_runtime = process.env.TTODO_PROBE_RUNTIME ?? 'latest';
+  const { runtime, deviceType } = selection.selectNotificationProbeSimulator(runtimes.runtimes, types.devicetypes, report.requested_runtime);
   report.runtime = { identifier: runtime.identifier, version: runtime.version, build: runtime.buildversion };
   report.device_type = { identifier: deviceType.identifier, name: deviceType.name };
   device = sim('create', 'TTodo native notification probe', deviceType.identifier, runtime.identifier);

@@ -11,7 +11,7 @@ on:
         description: '기존 UI 검사와 비교할 설치된 iOS'
         type: choice
         default: latest
-        options: [latest, oldest-installed]
+        options: [latest, oldest-installed, '26.4.1']
 permissions:
   contents: read
 jobs:
