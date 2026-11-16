@@ -30,7 +30,8 @@ test('재분석 확인 후 제안이 교체되면 새 제안을 보존하고 다
     const analysis = await repo.createAnalysis('reanalysis-confirmation', 'manual', null);
     await repo.finishAnalysis(analysis.id, [task], 'first', analysis.token!);
     const old = await repo.listExtracted(analysis.id);
-    const confirmed = { status: 'review' as const, taskIds: old.map(t => t.id) };
+    const confirmed = await repo.reanalysisSnapshot('reanalysis-confirmation');
+    assert.deepEqual(confirmed, { id: analysis.id, status: 'review', taskIds: old.map(t => t.id) });
     const otherToken = await repo.restartUnstoredAnalysis(analysis.id, false, confirmed);
     await repo.finishAnalysis(analysis.id, [{ ...task, title: '새 제안' }], 'second', otherToken);
     const fresh = await repo.listExtracted(analysis.id);

@@ -122,6 +122,17 @@ export class Repository {
       return { ...task, assignee, needs_confirmation: task.needs_confirmation || !assignee ? 1 : 0 };
     });
   }
+  async reanalysisSnapshot(fingerprint: string): Promise<{ id: string; status: Analysis['status']; taskIds: string[] }> {
+    let snapshot: { id: string; status: Analysis['status']; taskIds: string[] } | undefined;
+    await this.db.withExclusiveTransactionAsync(async tx => {
+      await this.pruneEvidenceInTransaction(tx, this.now());
+      const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE image_fingerprint=?', fingerprint);
+      if (!analysis) throw new Error('분석 기록이 변경되었어요. 다시 확인해 주세요.');
+      const tasks = await tx.getAllAsync<{ id: string }>('SELECT id FROM extracted_tasks WHERE analysis_id=?', analysis.id);
+      snapshot = { id: analysis.id, status: analysis.status, taskIds: tasks.map(task => task.id) };
+    });
+    return snapshot!;
+  }
   async findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
     const time = this.now(), now = Date.parse(time), matches: SimilarCapture[] = [];
     // Filter before limiting so expired/future records cannot hide valid evidence.

@@ -92,3 +92,30 @@ test('동의 저장 또는 분석이 실패해도 잠금을 해제하고 원래 
     assert.equal(busy, false);
   }
 });
+
+
+test('확인 또는 동의 대기 중 사진이나 입력이 바뀌면 이전 요청은 동의 저장과 분석을 하지 않는다', async () => {
+  let current = true, writes = 0, analyses = 0, prompts = 0;
+  const options = { working: { current: false }, setBusy: (_: boolean) => {},
+    readConsent: async () => 'no', writeConsent: async () => { writes++; },
+    analyze: async () => { analyses++; }, prompt: () => { prompts++; },
+    isCurrent: () => current };
+  await requestCaptureAnalysis(options);
+  assert.equal(prompts, 1);
+  current = false;
+  await requestCaptureAnalysis(options, true);
+  assert.equal(writes, 0);
+  assert.equal(analyses, 0);
+});
+
+
+test('동의 조회가 끝나기 전에 요청이 무효화되면 알림과 분석을 생략한다', async () => {
+  let current = true, prompts = 0, analyses = 0;
+  const pending = Promise.withResolvers<string | null>();
+  const request = requestCaptureAnalysis({ working: { current: false }, setBusy: () => {},
+    readConsent: () => pending.promise, writeConsent: async () => {},
+    analyze: async () => { analyses++; }, prompt: () => { prompts++; }, isCurrent: () => current });
+  current = false; pending.resolve('yes');
+  await request;
+  assert.equal(prompts, 0); assert.equal(analyses, 0);
+});
