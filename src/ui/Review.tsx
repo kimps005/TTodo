@@ -41,7 +41,8 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
   }, [repository, analysisId, tasks, checkAttempt]);
   useEffect(() => () => { if (imageUri) discardTemporaryImage(imageUri); }, [imageUri]);
   const edit = (index: number, values: Partial<typeof items[number]>) => { confirmation.invalidate(); setItems(current => current.map((item, i) => i === index ? { ...item, ...values } : item)); };
-  const run = async (operation: () => Promise<void>) => { if (working.current) return; working.current = true; setBusy(true); try { await operation(); await changed(); close(); } catch (e) { setCheckAttempt(n => n + 1); Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
+  const closeReview = () => { confirmation.invalidate(); close(); };
+  const run = async (operation: () => Promise<void>) => { if (working.current) return; confirmation.invalidate(); working.current = true; setBusy(true); try { await operation(); await changed(); close(); } catch (e) { setCheckAttempt(n => n + 1); Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
   const selected = items.filter(t => t.selected && t.review_status === 'pending');
   const save = () => {
     const isCurrent = confirmation.capture();
@@ -49,7 +50,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     if (similar.length) Alert.alert('이미 있는 할 일인지 확인했나요?', '최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.', [{ text: '다시 확인', style: 'cancel', onPress: () => { isCurrent(); } }, { text: '확인하고 저장', onPress: approve }]);
     else approve();
   };
-  return <Modal animationType="slide" onRequestClose={() => { if (!working.current) close(); }}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
+  return <Modal animationType="slide" onRequestClose={() => { if (!working.current) closeReview(); }}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE REVIEW</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 할 일이 맞나요?</Text><Text style={ui.subtitle}>제목과 날짜, 원문 근거를 확인한 뒤 필요한 항목만 저장하세요.</Text>
     {imageUri && <Image source={{ uri: imageUri }} style={{ height: 220, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="이번 분석에 사용한 이미지 미리보기" />}
     {!!similar.length && <View style={ui.card}><Text style={ui.section}>비슷한 분석 기록이 있어요</Text><Text style={ui.small}>최근 7일의 원문 근거와 비교한 참고 안내예요. 서로 다른 일일 수 있으니 기존 항목과 비교해 주세요. 자동으로 합치거나 삭제하지 않아요.</Text>{similar.map(match => <Text key={match.analysis_id} style={ui.subtitle}>{match.saved ? '저장한 항목' : '검토 대기'} · {match.title}</Text>)}</View>}
@@ -64,6 +65,6 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     </View>)}
     <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || checking || checkError || !selected.length} onPress={save} />
     <Button secondary title="남은 제안 모두 무시" disabled={busy || checking || checkError || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId, items.filter(t => t.review_status === 'pending').map(t => t.id)))} />
-    <Button secondary title="닫기" disabled={busy} onPress={close} />
+    <Button secondary title="닫기" disabled={busy} onPress={closeReview} />
   </ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
 }
