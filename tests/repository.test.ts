@@ -173,7 +173,7 @@ test('잘못된 0년 마감은 추가와 수정에서 거부하고 기존 할 �
     assert.equal(rows[0].due_at, '2026-11-20');
   } finally { native.close(); }
 });
-test('다른 연결에서 삭제한 할 일의 오래된 편집·완료 요청은 성공으로 처리하지 않는다', async () => {
+test('다른 연결에서 삭제한 할 일의 오래된 편집·완료·삭제 요청은 성공으로 처리하지 않는다', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-edit-'));
   const path = join(directory, 'shared.sqlite');
   const { repo, native } = fixture(undefined, path);
@@ -188,6 +188,7 @@ test('다른 연결에서 삭제한 할 일의 오래된 편집·완료 요청�
     await assert.rejects(repo.updateTodo(deleted, { title: '오래된 편집 내용', description: '되살리면 안 되는 메모' }), /삭제.*다시 확인/);
     await assert.rejects(repo.setCompleted(deleted, true), /삭제.*다시 확인/);
     await assert.rejects(repo.setCompleted(deleted, false), /삭제.*다시 확인/);
+    await assert.rejects(repo.removeTodo(deleted), /삭제.*다시 확인/);
     assert.deepEqual(await repo.listTodos(), saved.filter(row => row.id !== deleted));
     await repo.updateTodo(preserved, { title: '정상 수정' });
     await repo.setCompleted(preserved, true);

@@ -94,6 +94,7 @@ export class Repository {
   async removeTodo(id: string) {
     let analyses: string[] = [];
     await this.db.withExclusiveTransactionAsync(async tx => {
+      await this.requireTodo(tx, id);
       analyses = (await tx.getAllAsync<{ analysis_id: string }>('SELECT DISTINCT analysis_id FROM extracted_tasks WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)', id, id)).map(row => row.analysis_id);
       // Keep the saved marker and image fingerprint so a cached approval cannot
       // recreate the task. Remove both original and edited proposal content.
