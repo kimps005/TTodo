@@ -94,16 +94,8 @@ final class TTodoUITests: XCTestCase {
     XCTAssertTrue(app.buttons["기기 내 AI 분석 켜기"].exists)
     screenshot(app, name: "reset-independent-consent-off")
   }
-  @MainActor func testManualTaskLifecycleAndDataReset() throws {
-    continueAfterFailure = false
-    let app = XCUIApplication()
-    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
-    app.launchEnvironment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] = "1"
-    app.launch()
-    let start = app.buttons["이 설정으로 시작하기"]
-    XCTAssertTrue(start.waitForExistence(timeout: 30), "A fresh CI simulator must show onboarding.")
-    screenshot(app, name: "01-onboarding")
-    tap(start, in: app)
+  // Both tests share the same CRUD assertions; the helper never opens Settings.
+  @MainActor private func verifyManualTaskLifecycle(_ app: XCUIApplication) throws {
     let input = app.textFields["새 할 일"]
     XCTAssertTrue(input.waitForExistence(timeout: 15))
     input.tap(); input.typeText("CI manual task")
@@ -162,6 +154,41 @@ final class TTodoUITests: XCTestCase {
     XCTAssertFalse(edited.exists, "Deletion must survive a real process relaunch.")
     assertTaskMissing(app, title: editedTitle)
     screenshot(app, name: "05-deleted-task")
+  }
+
+  @MainActor func testManualTaskLifecycleWithoutSettingsNavigation() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launch()
+    let start = app.buttons["이 설정으로 시작하기"]
+    XCTAssertTrue(start.waitForExistence(timeout: 30))
+    tap(start, in: app)
+    try verifyManualTaskLifecycle(app)
+    // The Add button is covered above; also check Done and persistence.
+    let input = app.textFields["새 할 일"]
+    input.tap(); input.typeText("CI independent keyboard task\n")
+    let saved = row(app, title: "CI independent keyboard task")
+    XCTAssertTrue(saved.waitForExistence(timeout: 15))
+    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CI independent keyboard task, ")).count, 1)
+    app.terminate(); app.launch()
+    XCTAssertTrue(saved.waitForExistence(timeout: 30))
+    XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CI independent keyboard task, ")).count, 1)
+    screenshot(app, name: "crud-independent-keyboard-persisted")
+  }
+
+  @MainActor func testManualTaskLifecycleAndDataReset() throws {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
+    app.launchEnvironment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] = "1"
+    app.launch()
+    let start = app.buttons["이 설정으로 시작하기"]
+    XCTAssertTrue(start.waitForExistence(timeout: 30), "A fresh CI simulator must show onboarding.")
+    screenshot(app, name: "01-onboarding")
+    tap(start, in: app)
+    try verifyManualTaskLifecycle(app)
+    let input = app.textFields["새 할 일"]
     // Exercise keyboard Done as well as the Add button, then the real Settings
     // reset path. Everything belongs to this fresh, synthetic-only simulator.
     let resetTitle = "CI reset task"

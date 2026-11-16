@@ -16,8 +16,8 @@ if (!['large', 'accessibility-extra-extra-extra-large'].includes(textSize)) thro
 const scenario = process.env.TTODO_UI_SCENARIO ?? 'app';
 const model = process.env.TTODO_UI_MODEL ?? 'iphone-16-pro';
 const runtimePolicy = process.env.TTODO_UI_RUNTIME ?? 'latest';
-if (!['app', 'share-extension', 'photo-ocr', 'data-reset'].includes(scenario)) throw new Error('Unsupported UI scenario.');
-const flow = scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
+if (!['app', 'share-extension', 'photo-ocr', 'data-reset', 'task-lifecycle'].includes(scenario)) throw new Error('Unsupported UI scenario.');
+const flow = scenario === 'task-lifecycle' ? 'testManualTaskLifecycleWithoutSettingsNavigation' : scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { requested_model: model, requested_runtime_policy: runtimePolicy, commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
 function collectPhotoImportDiagnostics(device) {
   // Only this fresh synthetic simulator is inspected, before product execution.
@@ -173,6 +173,7 @@ try {
   writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));
   writeFileSync(path.join(output, 'tests.json'), JSON.stringify(tests, null, 2));
   report.tests = resultValidation.validateManualUITestResult(summary, tests, flow);
+  report.task_lifecycle_tested = flow === 'testManualTaskLifecycleAndDataReset' || scenario === 'task-lifecycle';
   report.data_reset_tested = flow === 'testManualTaskLifecycleAndDataReset' || scenario === 'data-reset';
   report.ai_consent_reset_tested = scenario === 'data-reset';
   report.ios_ocr_tested = scenario === 'photo-ocr';

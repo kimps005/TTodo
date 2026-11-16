@@ -12,10 +12,10 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: '앱 조작, 공유·사진 OCR 또는 독립 데이터 삭제'
+        description: '앱 조작, 공유·사진 OCR, 독립 삭제 또는 할 일 수명주기'
         type: choice
         default: app
-        options: [app, share-extension, photo-ocr, data-reset]
+        options: [app, share-extension, photo-ocr, data-reset, task-lifecycle]
       text_size:
         description: '기본 전체 흐름 또는 최대 접근성 글자 흐름'
         type: choice

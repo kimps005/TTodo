@@ -65,3 +65,14 @@ test('독립 데이터 삭제 결과는 알림 전체 흐름과 구분하고 지
   assert.throws(() => validateManualUITestResult(summary, tests, flow));
   assert.throws(() => validateManualUITestResult({ ...summary, skippedTests: 1 }, reset, flow));
 });
+
+test('독립 할 일 수명주기는 알림·전체 삭제 결과와 구분하고 실패·건너뜀을 거부한다', () => {
+  const flow = 'testManualTaskLifecycleWithoutSettingsNavigation';
+  const lifecycle = { testNodes: [{ ...passedCase, nodeIdentifier: `TTodoUITests/${flow}()`, name: `${flow}()` }] };
+  assert.equal(validateManualUITestResult(summary, lifecycle, flow).flow, flow);
+  assert.throws(() => validateManualUITestResult(summary, lifecycle));
+  assert.throws(() => validateManualUITestResult(summary, tests, flow));
+  assert.throws(() => validateManualUITestResult(summary, lifecycle, 'testDataResetAndConsentWithoutSettingsNavigation'));
+  assert.throws(() => validateManualUITestResult({ ...summary, skippedTests: 1 }, lifecycle, flow));
+  assert.throws(() => validateManualUITestResult(summary, { testNodes: [{ ...lifecycle.testNodes[0], result: 'Failed' }] }, flow));
+});
