@@ -76,7 +76,7 @@ export class Repository {
       if (expected) {
         const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
         const fields: (keyof Todo)[] = ['id', 'title', 'description', 'due_at', 'due_precision', 'source_type', 'source_id'];
-        if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 입력 내용을 확인한 뒤 화면을 닫고 할 일 탭을 눌러 최신 내용을 다시 확인해 주세요.');
+        if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 입력 내용을 확인한 뒤 화면을 닫고 최신 목록을 다시 확인해 주세요.');
       }
       await tx.runAsync('UPDATE todos SET title=?,description=?,due_at=?,due_precision=?,updated_at=? WHERE id=?',
         title, input.description?.trim() || null, due, precision, this.now(), id);
