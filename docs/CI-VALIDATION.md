@@ -98,4 +98,6 @@ push/PR과 기본 수동 실행은 전체 검사다. Swift·네이티브 설정 
 
 `flow=deep-link`는 위 공개 URL 비교이고, `flow=settings-list`는 URL을 호출하지 않는 별도 검사다. 후자는 XCTest가 설정 앱을 직접 실행해 권한 요청 전과 실제 거부 후의 기본 목록을 최대 5번 스크롤한다. 화면·트리와 JSON 결과에 알림 항목 가시성을 기록하고, 항목이 있으면 실제 탭 화면도 첨부한다. 목록이 없으면 환경 검사는 실패하며 원래 딥링크 검사의 성공으로 바꾸지 않는다. `iOS SDK 검사 명령 확인`의 리소스 검사는 설치된 런타임의 설정 plist/JSON만 읽고 오류도 보존한다. 이 메타데이터 검사 성공만으로 화면이 제공된다고 판정하지 않는다.
 
+`settings-list`는 먼저 앱/테스트 설치 전 CLI로 설정 앱을 시작하고 실제 launch 완료 로그를 기다린다. 이 단계의 `pretest-settings.log`·PNG와 보고서로 XCTest 없는 실행 맥락을 구분한다. XCTest는 실행 중인 설정 앱을 activate로 이어받는다. 비교 workflow의 `runtime=26.4.1`은 정확히 그 설치 버전만 허용하고 누락/비호환 시 다른 OS로 대체하지 않는다. 앱 기본 UI 검사의 latest/oldest 선택 규칙은 변경하지 않는다.
+
 UI 검사 구성이 바뀌는 push는 서로 독립적인 세 job을 준비한다: primary(iPhone 16 Pro/설치된 최신 iOS/기본 전체 흐름), compact(iPhone SE 3세대/최신 iOS/최대 접근성 글자 흐름), oldest(iPhone 16 Pro/설치된 가장 이전 iOS/기본 전체 흐름). 한 job 실패로 다른 job을 취소하지 않으며 산출물 이름도 구분한다. 수동 실행은 model/runtime/text_size/scenario를 선택한 단일 job이다. 런타임·기종 목록 원문과 실제 선택 버전/빌드/기종을 보고서에 남긴다. 설치 목록에 다른 두 버전이 없으면 oldest는 실패한다. arm64와 해당 기종의 SDK 지원 목록을 확인하며 OS 다운로드나 다른 모델로의 대체는 하지 않는다. 가장 이전 설치 버전은 앱의 최소 지원 iOS 18 검증을 뜻하지 않는다. 새 조합의 실행 결과는 STATUS.md 확인 전이다.

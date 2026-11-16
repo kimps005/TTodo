@@ -2,6 +2,19 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 앱·XCTest 없이도 알림 목적지 숨김 확인 — 환경 의존 미해결
+- [7188db7 직접 목록 검사, attempt 2](https://github.com/kimps005/TTodo/actions/runs/43787784458/attempts/2)는 macOS 26.7.2 ARM / Xcode 26.6(17F113) / SDK 26.5 / iPhone 16 Pro 시뮬레이터 iOS 26.5(23F77)에서 끝까지 실행했다. ZIP SHA-256 315e70ca46307d0c37eea95ca75a30957196e17cbf23958668866661903188d6·커밋·원본 JSON/PNG/접근성 트리와 지정 XCTest 1개 실패·건너뜀 0을 대조했다. 기존 launch 시간 초과·도움말 수집 오류와 구분하며 화면 단언 실패를 성공으로 바꾸지 않는다.
+- **앱 설치 전 분리 결과:** 새 시뮬레이터에서 TTodo·비교 앱·XCTest를 설치하거나 공개 앱 설정 URL을 호출하기 전에 simctl로 설정 앱만 실행했다. 01:47:04.277 UTC에 실제 launch 완료, 그 전후 notifications 숨김 기록(01:47:02.962·01:47:04.381 등)과 초기 화면을 수집했다. `pretest_settings`는 app_installed=false, test_runner_installed=false, app_settings_url_called=false, launch_completed=true, notifications_hidden=true다. 이 숨김 현상은 제품 번들/엔타이틀먼트·Expo 브리지·XCTest 실행 맥락에 의존하지 않는다.
+- **실제 목록 결과:** 권한 요청 전·실제 거부 후 모두 기본 설정 목록의 상단부터 Apps/Developer가 있는 하단까지 각 3개 화면/트리를 남겼다. 두 JSON은 notifications_visible=false이고 같은 18개 고유 버튼 메타데이터를 포함한다. 알림 항목은 없으며 실제 거부 상태도 확인했다. 앱별 하위 화면 전체가 없다고 확대하지 않고, 공개 알림 전용 API가 선택하는 기본 notifications 목적지의 숨김으로 한정한다.
+- **현재 원인 분류와 조치:** 공개 API는 올바른 앱 ID를 전달하지만 OS 설정 앱이 숨긴 notifications 목적지를 선택하지 못해 첫 화면에 남는 환경 문제다. 제품 앱에서 변경할 식별자/호출 오류는 확인되지 않았다. 설치된 26.2·26.4.1·26.5에서 정상 공개 딥링크 경로를 찾지 못했으며 OS의 숨김 상태를 바꾸는 문서화된 앱 API도 확보하지 못했다. 제품 코드·공개 URL·엔타이틀먼트·서명은 유지했다. 사설 URL/OS 파일 수정/임의 지연/가짜 화면/성공 조건 완화로 해결한 것처럼 만들지 않는다.
+- **남은 의존성:** 알림 목적지가 제공되는 OS 환경에서 동일 공개 API의 성공 확인, 이후 제품 UI의 왕복·데이터 보존 검증 및 실제 iPhone 검증. 현재 Windows·설치된 macOS CI 시뮬레이터만으로 직접 이동 성공을 만들 수 없어 해결 완료로 표시하지 않는다. 시뮬레이터의 의도된 지원 제한인지 OS 결함인지와 실기기 재현 여부는 미확정이다. 기존 사용자 선택대로 실기기 설치는 나중에 진행하며 유료 가입·Mac·다른 서명 경로를 요청하지 않는다.
+- [7188db7 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43787777584)의 core/ios 모두 성공했다. 84개 테스트·타입·보안·Hermes, Swift 저장소/캡처·합성 Vision OCR·제품 앱/확장 빌드·선언 수집 통과다. 로컬 84개 테스트·타입·스크립트/YAML/diff 검사도 통과했다. 이 품질 결과는 알림 이동 성공을 뜻하지 않는다. 앞선 72aea15·4ccec96 품질 실행은 후속 소스로 대체되어 취소됐고 성공으로 집계하지 않는다.
+
+## 중간 설치 OS에서도 알림 목적지 숨김 재현
+- [4ccec96 / iOS 26.4.1 비교](https://github.com/kimps005/TTodo/actions/runs/43787379801)는 Xcode 26.6 / SDK 26.5 / iPhone 16 Pro 시뮬레이터 iOS 26.4.1(23E254a)에서 지정 XCTest 1개 실패·건너뜀 0이다. 요청 버전·실제 런타임·ZIP SHA-256 738e452a0e0795118c8285b05808b690698b29006592798181f6a82ea774fae1을 대조했다. 첫 실행·재진입의 PNG·트리는 모두 설정 첫 화면이다.
+- 두 호출 모두 denied/active/opened=true이며 설정 앱은 notifications 숨김과 같은 목적지 선택 불가를 기록했다(01:42:52.327·01:43:54.829 UTC). 기존 26.2·26.5 외에 설치된 중간 버전으로 옮겨도 공개 API의 정상 직접 이동 경로는 확보되지 않았다. 제품 API·서명·엔타이틀먼트 변경 근거로 해석하지 않는다.
+- 7188db7의 직접 목록 실행 43787784458 첫 시도는 SDK 목록 조회 구간에서 xcrun ETIMEDOUT으로 시뮬레이터 생성 전 중단됐다. 제품/UI 결과로 세지 않고 같은 소스의 해당 job만 재실행했다. 이 재실행의 앱 설치 전 설정 상태·실제 목록 결과는 별도 확인한다.
+
 ## 실제 SDK launch 도움말의 stderr 수집과 테스트 없는 비교
 - [a8f5fa1 재검사](https://github.com/kimps005/TTodo/actions/runs/43787065994)는 XCTest 실행 전에 SDK launch 도움말 검사에서 중단됐다. 실제 도움말은 stderr에 출력됐지만 수집 코드가 stdout만 읽어 빈 파일을 만들었다. ZIP SHA-256 3be95b0a3f7482291b8ea8f2ab9dad52ee26a9c456b992d352d4304b89871ae7·작업 로그의 실제 usage를 대조했다. 제품/설정 이동 실패로 집계하지 않는다.
 - stdout/stderr를 함께 보존하는 기존 도움말 검증기로 통일하고 실제 SDK fixture의 stderr 전용·stdout·빈 출력·오류 종료 회귀 검사를 추가했다. 단언/타임아웃은 완화하지 않는다.
