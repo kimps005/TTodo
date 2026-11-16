@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { requestCaptureAnalysis } from '../src/ui/captureAction';
+import { createReviewConfirmation } from '../src/ui/reviewConfirmation';
 
 // Exercise the real consent/analysis entry sequence with controlled async work.
 // These callbacks do not simulate model output or measure AI accuracy.
@@ -135,4 +136,30 @@ test('동의 저장 중 요청이 무효화되면 저장 완료 후 분석을 �
   assert.equal(prompts, 0);
   assert.equal(working.current, false);
   assert.equal(busy, false);
+});
+
+test('새 캡처 확인은 이전 응답과 취소를 무효화하고 동의 저장을 한 번만 시작한다', async () => {
+  const confirmation = createReviewConfirmation();
+  const working = { current: false }, pending = Promise.withResolvers<void>();
+  let writes = 0, analyses = 0;
+  const options = {
+    working, setBusy: (_: boolean) => {}, readConsent: async () => 'no',
+    writeConsent: () => { writes++; return pending.promise; },
+    analyze: async () => { analyses++; }, prompt: () => {},
+  };
+  const previous = confirmation.capture();
+  const current = confirmation.capture();
+  const approve = (take: () => boolean) => take() ? requestCaptureAnalysis(options, true) : Promise.resolve();
+  await approve(previous);
+  assert.equal(previous(), false, '오래된 취소도 새 확인을 무효화하면 안 된다');
+  const accepted = approve(current);
+  await approve(current);
+  assert.equal(writes, 1);
+  assert.equal(analyses, 0);
+  pending.resolve();
+  await accepted;
+  assert.equal(analyses, 1);
+  await approve(current);
+  assert.equal(writes, 1, '완료 후 중복 응답으로 다시 동의를 저장하면 안 된다');
+  assert.equal(analyses, 1);
 });
