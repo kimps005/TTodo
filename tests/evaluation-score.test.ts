@@ -8,13 +8,13 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 function fixture() {
-  const results = seed.cases.map(sample => ({ id: sample.id, category: sample.category,
+  const results = seed.cases.map((sample, index) => ({ id: sample.id, category: sample.category,
     input: { text: sample.text, captured_at: sample.captured_at, message_date: sample.message_date, timezone: seed.timezone },
-    expected: sample.expected, actual: sample.id === 'school-02' ? [{}, {}] : sample.id === 'negative-01' ? [{}] : [], error: null as string | null }));
+    expected: sample.expected, actual: sample.id === 'school-02' ? [{}, {}] : sample.id === 'negative-01' ? [{}] : [], elapsed_ms: sample.id === 'negative-03' ? 99999 : 100 + index, error: null as string | null }));
   const verdicts = seed.cases.map(sample => ({ id: sample.id,
     matches: sample.id === 'school-02' ? [{ expected: 0, actual: 0 }] : [],
     deadlines: sample.expected.map((_, index) => sample.id === 'school-02' && index === 0 ? 'correct' as const : 'not_explicit' as const) as ('not_explicit' | 'correct' | 'incorrect')[] }));
-  return { report: { format_version: 2, dataset_version: seed.version, completed: true, results }, verdicts };
+  return { report: { format_version: 2, dataset_version: seed.version, provider: 'test-only', generated_at: '2026-11-17T00:00:00Z', completed: true, results }, verdicts };
 }
 test('수동 일대일 판정으로 작업·마감·빈 입력과 일반 오탐을 분리해 집계한다', () => {
   const { report, verdicts } = fixture();
@@ -26,6 +26,10 @@ test('수동 일대일 판정으로 작업·마감·빈 입력과 일반 오탐�
   assert.equal(result.categories['할 일 없음'].nonblank_negative_false_positive_rate, 1 / 2);
   assert.equal(result.categories['할 일 없음'].blank_negative_false_positive_rate, 0);
   assert.equal(result.categories['할 일 없음'].recall, null);
+  assert.equal(result.total.nonblank_duration_count, seed.cases.length - 1);
+  assert.equal(result.total.nonblank_duration_p50_ms, 111);
+  assert.equal(result.total.nonblank_duration_p90_ms, 121);
+  assert.equal(result.provider, 'test-only');
 });
 
 test('판정 양식은 모든 판단을 비워 두고 완전한 평가에 대해서만 만든다', () => {
@@ -44,6 +48,7 @@ test('오류·누락·중복 연결과 미검출 작업의 정답 마감 판정�
   const e = fixture(); e.report.results[0].error = 'EXTRACTION_FAILED'; assert.throws(() => scoreEvaluation(e.report, e.verdicts));
   const f = fixture(); f.report.results.pop(); assert.throws(() => scoreEvaluation(f.report, f.verdicts));
   const g = fixture(); g.report.results[0].input.message_date = null; assert.throws(() => scoreEvaluation(g.report, g.verdicts));
+  const h = fixture(); h.report.results[0].elapsed_ms = -1; assert.throws(() => scoreEvaluation(h.report, h.verdicts));
 });
 
 test('집계 명령이 합성 파일을 읽어 결과만 출력하고 잘못된 판정은 실패한다', () => {

@@ -1,6 +1,6 @@
 type Task = { due_at: string | null };
-type Result = { id: string; category: string; input: { text: string; captured_at: string; message_date: string | null; timezone: string }; expected: Task[]; actual: unknown[] | null; error: string | null };
-type Report = { format_version: number; dataset_version: number; completed: boolean; results: Result[] };
+type Result = { id: string; category: string; input: { text: string; captured_at: string; message_date: string | null; timezone: string }; expected: Task[]; actual: unknown[] | null; elapsed_ms: number; error: string | null };
+type Report = { format_version: number; dataset_version: number; provider: string; generated_at: string; operating_system?: string; completed: boolean; results: Result[] };
 type Match = { expected: number; actual: number };
 type Verdict = { id: string; matches: Match[]; deadlines: ('not_explicit' | 'correct' | 'incorrect')[] };
 type Counts = { cases: number; tp: number; fp: number; fn: number; deadline_total: number; deadline_correct: number; negative_cases: number; negative_false_positive: number; blank_negative_cases: number; blank_negative_false_positive: number };
@@ -12,25 +12,31 @@ function indexIn(value: unknown, size: number): value is number {
   return Number.isInteger(value) && (value as number) >= 0 && (value as number) < size;
 }
 function ratio(numerator: number, denominator: number): number | null { return denominator ? numerator / denominator : null; }
-function summarize(counts: Counts) {
+function percentile(values: number[], fraction: number): number | null {
+  if (!values.length) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  return ordered[Math.ceil(ordered.length * fraction) - 1];
+}
+function summarize(counts: Counts, durations: number[]) {
   return { ...counts, precision: ratio(counts.tp, counts.tp + counts.fp), recall: ratio(counts.tp, counts.tp + counts.fn),
     explicit_deadline_accuracy: ratio(counts.deadline_correct, counts.deadline_total),
     nonblank_negative_false_positive_rate: ratio(counts.negative_false_positive, counts.negative_cases),
-    blank_negative_false_positive_rate: ratio(counts.blank_negative_false_positive, counts.blank_negative_cases) };
+    blank_negative_false_positive_rate: ratio(counts.blank_negative_false_positive, counts.blank_negative_cases),
+    nonblank_duration_count: durations.length, nonblank_duration_p50_ms: percentile(durations, .5), nonblank_duration_p90_ms: percentile(durations, .9) };
 }
 
 // These metrics aggregate explicit human judgments; they do not infer semantic matches.
 export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
-  if (report.format_version !== 2 || report.dataset_version !== seed.version || report.completed !== true || !Array.isArray(report.results) || report.results.length !== seed.cases.length || !Array.isArray(verdicts)) throw new Error('오류 없이 완료된 형식 2 평가와 판정이 필요해요.');
+  if (report.format_version !== 2 || report.dataset_version !== seed.version || typeof report.provider !== 'string' || !report.provider || typeof report.generated_at !== 'string' || !Number.isFinite(Date.parse(report.generated_at)) || report.completed !== true || !Array.isArray(report.results) || report.results.length !== seed.cases.length || !Array.isArray(verdicts)) throw new Error('오류 없이 완료된 형식 2 평가와 판정이 필요해요.');
   const seedById = new Map(seed.cases.map(sample => [sample.id, sample]));
   const byId = new Map<string, Verdict>();
   for (const verdict of verdicts) {
     if (!verdict || typeof verdict.id !== 'string' || byId.has(verdict.id)) throw new Error('판정 ID가 없거나 중복되었어요.');
     byId.set(verdict.id, verdict);
   }
-  const seen = new Set<string>(), total = emptyCounts(), categories = new Map<string, Counts>();
+  const seen = new Set<string>(), total = emptyCounts(), categories = new Map<string, Counts>(), durations: number[] = [], categoryDurations = new Map<string, number[]>();
   for (const row of report.results) {
-    if (!row || typeof row.id !== 'string' || seen.has(row.id) || typeof row.category !== 'string' || typeof row.input?.text !== 'string' || row.error !== null || !Array.isArray(row.expected) || !Array.isArray(row.actual)) throw new Error('평가 사례가 중복되었거나 불완전해요.');
+    if (!row || typeof row.id !== 'string' || seen.has(row.id) || typeof row.category !== 'string' || typeof row.input?.text !== 'string' || row.error !== null || !Array.isArray(row.expected) || !Array.isArray(row.actual) || !Number.isFinite(row.elapsed_ms) || row.elapsed_ms < 0) throw new Error('평가 사례가 중복되었거나 불완전해요.');
     const sample = seedById.get(row.id);
     if (!sample || sample.category !== row.category || sample.text !== row.input.text || sample.captured_at !== row.input.captured_at || sample.message_date !== row.input.message_date || seed.timezone !== row.input.timezone || JSON.stringify(sample.expected) !== JSON.stringify(row.expected)) throw new Error('평가 결과가 정답셋과 일치하지 않아요.');
     seen.add(row.id);
@@ -51,6 +57,10 @@ export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
       }
     });
     const counts = categories.get(row.category) ?? emptyCounts(); categories.set(row.category, counts);
+    if (row.input.text.trim()) {
+      const group = categoryDurations.get(row.category) ?? []; categoryDurations.set(row.category, group);
+      durations.push(row.elapsed_ms); group.push(row.elapsed_ms);
+    }
     for (const target of [total, counts]) {
       target.cases++; target.tp += expected.size; target.fp += row.actual.length - actual.size; target.fn += row.expected.length - expected.size;
       target.deadline_total += deadlineTotal; target.deadline_correct += deadlineCorrect;
@@ -61,7 +71,9 @@ export function scoreEvaluation(report: Report, verdicts: Verdict[]) {
     }
   }
   if (seen.size !== byId.size) throw new Error('평가 결과에 없는 판정이 있어요.');
-  return { total: summarize(total), categories: Object.fromEntries([...categories].map(([category, counts]) => [category, summarize(counts)])) };
+  return { provider: report.provider, dataset_version: report.dataset_version, report_generated_at: report.generated_at,
+    operating_system: report.operating_system ?? null, total: summarize(total, durations),
+    categories: Object.fromEntries([...categories].map(([category, counts]) => [category, summarize(counts, categoryDurations.get(category) ?? [])])) };
 }
 
 // Leave every judgment unset; the scorer refuses the template until reviewed.
