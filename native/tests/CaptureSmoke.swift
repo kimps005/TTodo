@@ -3,6 +3,51 @@ import Foundation
 @main
 struct CaptureSmoke {
   static func check(_ condition: Bool) { precondition(condition) }
+  static func checkAtomicWrites(directory: URL, tasks: [NativeSuggestion]) throws {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let store = try SharedStore(directoryOverride: directory)
+    try store.runSQL("INSERT INTO preferences(key,value) VALUES('ai_local_consent','yes')", params: [])
+    func snapshot() throws -> Data {
+      try JSONSerialization.data(withJSONObject: [
+        "analyses": store.querySQL("SELECT * FROM analyses ORDER BY rowid", params: []),
+        "tasks": store.querySQL("SELECT * FROM extracted_tasks ORDER BY rowid", params: []),
+        "todos": store.querySQL("SELECT * FROM todos ORDER BY rowid", params: [])
+      ], options: [.sortedKeys])
+    }
+    for stage in ["proposal", "status"] {
+      let registration = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share")
+      let before = try snapshot()
+      // Fail after an earlier proposal was inserted, or after all proposals were inserted.
+      try store.execSQL(stage == "proposal"
+        ? "CREATE TRIGGER fail_finish BEFORE INSERT ON extracted_tasks WHEN (SELECT COUNT(*) FROM extracted_tasks WHERE analysis_id=NEW.analysis_id)=1 BEGIN SELECT RAISE(ABORT,'test-only-finish-failure'); END;"
+        : "CREATE TRIGGER fail_finish BEFORE UPDATE OF status ON analyses WHEN NEW.status='review' BEGIN SELECT RAISE(ABORT,'test-only-finish-failure'); END;")
+      do {
+        try store.finishCapture(id: registration.id, tasks: tasks + tasks, provider: "failed-write", token: registration.token!)
+        fatalError("Partial capture result was committed")
+      } catch StoreError.database { }
+      check(try snapshot() == before)
+      try store.execSQL("DROP TRIGGER fail_finish")
+      try store.finishCapture(id: registration.id, tasks: tasks + tasks, provider: "retry", token: registration.token!)
+      let proposals = try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid", params: [registration.id])
+      check(proposals.count == 2)
+      let beforeRestart = try snapshot()
+      try store.execSQL("CREATE TRIGGER fail_restart BEFORE UPDATE OF status ON analyses WHEN NEW.status='processing' BEGIN SELECT RAISE(ABORT,'test-only-restart-failure'); END;")
+      do {
+        _ = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true)
+        fatalError("Reanalysis removed proposals before a failed state update")
+      } catch StoreError.database { }
+      check(try snapshot() == beforeRestart)
+      try store.execSQL("DROP TRIGGER fail_restart")
+      let restarted = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true)
+      check(restarted.created && restarted.token != registration.token)
+      check(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [registration.id]).isEmpty)
+      try store.finishCapture(id: restarted.id, tasks: tasks, provider: "replacement", token: restarted.token!)
+      let replacement = try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [registration.id])
+      check(replacement.count == 1 && !proposals.contains { $0["id"] as? String == replacement[0]["id"] as? String })
+      check(try store.querySQL("SELECT id FROM todos", params: []).isEmpty)
+    }
+    print("Capture atomic writes: proposal/state rollback, reanalysis restoration and retry passed")
+  }
   static func main() async throws {
     func reviewItem(_ id: String, evidence: String = "합성 원문", confirmation: Bool = false) -> CaptureReviewItem {
       CaptureReviewItem(id: id, title: "새 제안", description: nil, dueAt: nil, duePrecision: "unknown", evidence: evidence, needsConfirmation: confirmation, dateText: "", timeText: "")
@@ -70,6 +115,7 @@ struct CaptureSmoke {
     let factory = { try SharedStore(directoryOverride: directory) }
     let text = "2026년 11월 20일까지 자료 보내줘."
     let raw = #"[{"is_actionable":true,"title":"자료 전달","description":null,"due_at":"2026-11-20","due_precision":"date","assignee":null,"confidence":0.8,"evidence_text":"2026년 11월 20일까지 자료 보내줘.","needs_confirmation":true}]"#
+    try checkAtomicWrites(directory: directory.appendingPathComponent("atomic-writes"), tasks: ExtractionValidator.validate(raw, sourceText: text, messageDate: nil))
     for assignee in ["", " \n\t", "\u{00A0}", "  사용자  "] {
       var rows = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [[String: Any]]
       rows[0]["assignee"] = assignee; rows[0]["needs_confirmation"] = false

@@ -93,6 +93,54 @@ test('동의 확인 뒤 철회가 먼저 처리되면 새 분석 등록과 기�
     assert.deepEqual(await repo.listTodos(), []);
   } finally { native.close(); }
 });
+test('분석 저장 중 두 번째 제안 또는 최종 상태 쓰기가 실패하면 전체 결과를 되돌리고 재시도한다', async () => {
+  for (const stage of ['proposal', 'status']) {
+    const { repo, native } = fixture(); await repo.initialize();
+    try {
+      await repo.setPreference('ai_local_consent', 'yes');
+      const analysis = await repo.createAnalysis(`finish-rollback-${stage}`, 'manual', null);
+      const before = native.prepare('SELECT * FROM analyses WHERE id=?').get(analysis.id);
+      const second = { ...task, title: '두 번째 제안' };
+      native.exec(stage === 'proposal'
+        ? "CREATE TRIGGER fail_finish BEFORE INSERT ON extracted_tasks WHEN NEW.title='두 번째 제안' BEGIN SELECT RAISE(ABORT,'test-only-finish-failure'); END;"
+        : "CREATE TRIGGER fail_finish BEFORE UPDATE OF status ON analyses WHEN NEW.status='review' BEGIN SELECT RAISE(ABORT,'test-only-finish-failure'); END;");
+      await assert.rejects(repo.finishAnalysis(analysis.id, [task, second], 'failed-write', analysis.token!), /test-only-finish-failure/);
+      assert.deepEqual(native.prepare('SELECT * FROM analyses WHERE id=?').get(analysis.id), before);
+      assert.deepEqual(await repo.listExtracted(analysis.id), []);
+      assert.deepEqual(await repo.listTodos(), []);
+      native.exec('DROP TRIGGER fail_finish');
+      await repo.finishAnalysis(analysis.id, [task, second], 'retry', analysis.token!);
+      assert.deepEqual((await repo.listExtracted(analysis.id)).map(row => row.title), [task.title, second.title]);
+      assert.equal((await repo.listAnalyses())[0].status, 'review');
+      assert.deepEqual(await repo.listTodos(), []);
+    } finally { native.close(); }
+  }
+});
+
+test('재분석 상태 쓰기가 실패하면 삭제한 기존 제안과 처리 정보를 모두 복원한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analysis = await repo.createAnalysis('restart-rollback', 'share', null);
+    await repo.finishAnalysis(analysis.id, [task, { ...task, title: '보존할 다른 제안' }], 'original', analysis.token!);
+    const before = native.prepare('SELECT * FROM analyses WHERE id=?').get(analysis.id);
+    const proposals = await repo.listExtracted(analysis.id);
+    native.exec("CREATE TRIGGER fail_restart BEFORE UPDATE OF status ON analyses WHEN NEW.status='processing' BEGIN SELECT RAISE(ABORT,'test-only-restart-failure'); END;");
+    await assert.rejects(repo.restartUnstoredAnalysis(analysis.id), /test-only-restart-failure/);
+    assert.deepEqual(native.prepare('SELECT * FROM analyses WHERE id=?').get(analysis.id), before);
+    assert.deepEqual(await repo.listExtracted(analysis.id), proposals);
+    native.exec('DROP TRIGGER fail_restart');
+    const token = await repo.restartUnstoredAnalysis(analysis.id);
+    assert.notEqual(token, analysis.token);
+    assert.deepEqual(await repo.listExtracted(analysis.id), []);
+    await repo.finishAnalysis(analysis.id, [task], 'replacement', token);
+    const replacement = await repo.listExtracted(analysis.id);
+    assert.equal(replacement.length, 1);
+    assert.ok(proposals.every(old => old.id !== replacement[0].id));
+    assert.deepEqual(await repo.listTodos(), []);
+  } finally { native.close(); }
+});
+
 test('빈 입력·200자 초과·유효하지 않은 날짜를 거부한다', () => {
   assert.throws(() => normalizeTitle(' \n '));
   assert.throws(() => normalizeTitle('가'.repeat(201)));
