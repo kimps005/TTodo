@@ -31,13 +31,32 @@ try {
   sim('boot', device);
   writeFileSync(path.join(output, 'boot.log'), run('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 600000 }));
   if (flow === 'settings-list') {
-    const help = sim('help', 'launch');
-    writeFileSync(path.join(output, 'simctl-launch-help.txt'), help);
-    if (!help.includes('launch') || !help.includes('app bundle identifier')) throw new Error('SDK simulator app launch help unavailable.');
+    const args = ['simctl', 'help', 'launch'];
+    const help = spawnSync('xcrun', args, { encoding: 'utf8', timeout: 60000 });
+    writeFileSync(path.join(output, 'simctl-launch-help.txt'), (help.stdout ?? '') + (help.stderr ?? ''));
+    if (!helpValidation.supportsDiagnosticHelp('xcrun', args, help, ['launch', '<app bundle identifier>'])) throw new Error('SDK simulator app launch help unavailable.');
     // The first Settings launch in 43786035354 completed only after XCTest's
     // launch handshake timed out. Start that OS app before building the probe;
     // XCTest activates the same instance and still validates actual UI state.
     report.settings_prelaunch = sim('launch', device, 'com.apple.Preferences');
+    // Observe the OS before generating, building or installing any app/test
+    // target. This distinguishes simulator Settings from XCTest/app context.
+    const logArgs = ['simctl', 'spawn', device, 'log', 'help', 'show'];
+    const logHelp = spawnSync('xcrun', logArgs, { encoding: 'utf8', timeout: 60000 });
+    writeFileSync(path.join(output, 'pretest-log-show-help.txt'), (logHelp.stdout ?? '') + (logHelp.stderr ?? ''));
+    if (!helpValidation.supportsDiagnosticHelp('xcrun', logArgs, logHelp, ['--last', '--style', '--info', '--predicate'])) throw new Error('SDK pretest log support unavailable.');
+    const predicate = 'process == "Preferences" AND (category == "Primary List Data Model" OR eventMessage CONTAINS "setLaunchHasCompleted")';
+    let pretestLog = '';
+    const deadline = Date.now() + 120000;
+    do {
+      pretestLog = sim('spawn', device, 'log', 'show', '--last', '3m', '--style', 'compact', '--info', '--predicate', predicate);
+      if (pretestLog.includes('setLaunchHasCompleted')) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } while (Date.now() < deadline);
+    writeFileSync(path.join(output, 'pretest-settings.log'), pretestLog);
+    report.pretest_settings = { app_installed: false, test_runner_installed: false, app_settings_url_called: false, launch_completed: pretestLog.includes('setLaunchHasCompleted'), notifications_hidden: pretestLog.includes('Not including notifications due to being hidden.') };
+    if (!report.pretest_settings.launch_completed) throw new Error('Settings did not report launch completion before the bounded pretest deadline.');
+    sim('io', device, 'screenshot', path.join(output, 'pretest-settings.png'));
   }
   // Preserve the current SDK declaration; use no hardcoded settings URL.
   const sdkPath = run('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path']);

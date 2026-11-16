@@ -40,6 +40,7 @@ jobs:
             artifacts/notification-probe/*.txt
             artifacts/notification-probe/*.json
             artifacts/notification-probe/*.log
+            artifacts/notification-probe/*.png
             artifacts/notification-probe/attachments/**
             artifacts/notification-probe/results.xcresult/**
           retention-days: 7

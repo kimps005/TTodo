@@ -11,6 +11,16 @@ const args = ['simctl', 'spawn', 'C5110912-C621-4C6B-B22F-BC73AB3889D9', 'log', 
 const tokens = ['--last', '--style', '--predicate', '--info'];
 const result = (status: number | null, stdout = help, extra = {}) => ({ status, stdout, stderr: '', signal: null, ...extra });
 
+test('실제 simctl launch 도움말이 stderr에만 나와도 지원을 확인한다', () => {
+  const launchHelp = readFileSync(path.resolve('tests/fixtures/simctl-launch-help-ios-26.5.txt'), 'utf8');
+  const args = ['simctl', 'help', 'launch'];
+  const tokens = ['launch', '<app bundle identifier>'];
+  assert.equal(supportsDiagnosticHelp('xcrun', args, result(0, '', { stderr: launchHelp }), tokens), true);
+  assert.equal(supportsDiagnosticHelp('xcrun', args, result(0, launchHelp), tokens), true);
+  assert.equal(supportsDiagnosticHelp('xcrun', args, result(0, ''), tokens), false);
+  assert.equal(supportsDiagnosticHelp('xcrun', args, result(1, launchHelp), tokens), false);
+});
+
 test('실제 log show 도움말의 EX_USAGE와 양방향 옵션 표기를 제한적으로 인정한다', () => {
   for (const status of [0, 64]) {
     assert.equal(supportsDiagnosticHelp('xcrun', args, result(status), tokens), true);
