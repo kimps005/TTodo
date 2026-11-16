@@ -119,3 +119,20 @@ test('동의 조회가 끝나기 전에 요청이 무효화되면 알림과 분�
   await request;
   assert.equal(prompts, 0); assert.equal(analyses, 0);
 });
+
+test('동의 저장 중 요청이 무효화되면 저장 완료 후 분석을 시작하지 않고 잠금을 푼다', async () => {
+  let current = true, busy = false, analyses = 0, prompts = 0;
+  const working = { current: false }, pending = Promise.withResolvers<void>();
+  const request = requestCaptureAnalysis({ working, setBusy: value => { busy = value; },
+    readConsent: async () => 'no', writeConsent: () => pending.promise,
+    analyze: async () => { analyses++; }, prompt: () => { prompts++; }, isCurrent: () => current }, true);
+  assert.equal(working.current, true);
+  assert.equal(busy, true);
+  current = false;
+  pending.resolve();
+  await request;
+  assert.equal(analyses, 0);
+  assert.equal(prompts, 0);
+  assert.equal(working.current, false);
+  assert.equal(busy, false);
+});
