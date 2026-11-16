@@ -59,7 +59,7 @@ enum ExtractionValidator {
       matches(normalized, "\\b\\d{6}\\s*[-–]\\s*[1-4]\\d{6}\\b") || matches(normalized, "\\b(?:\\d[ -]?){16}\\b")
   }
   static func validDate(_ value: String) -> Bool {
-    guard matches(value, "^\\d{4}-\\d{2}-\\d{2}$") else { return false }
+    guard matches(value, "^\\d{4}-\\d{2}-\\d{2}$"), !value.hasPrefix("0000-") else { return false }
     let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = TimeZone(secondsFromGMT: 0)
     formatter.dateFormat = "yyyy-MM-dd"; formatter.isLenient = false

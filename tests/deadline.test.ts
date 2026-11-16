@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { composeDeadline, deadlineFields } from '../src/domain/deadline';
+import { validateDue } from '../src/domain/todo';
+test('공유 네이티브 저장소와 같은 서기 날짜만 저장한다', () => {
+  for (const due of ['0000-01-01', '0000-01-01T09:00:00+09:00']) {
+    assert.throws(() => validateDue(due, due.includes('T') ? 'datetime' : 'date'));
+  }
+  assert.throws(() => composeDeadline('0000-01-01', ''));
+  assert.doesNotThrow(() => validateDue('0001-01-01', 'date'));
+  assert.doesNotThrow(() => validateDue('2026-11-20T09:00:00+09:00', 'datetime'));
+});
 test('마감 없음과 날짜만 있는 마감을 구분하고 시각을 추정하지 않는다', () => {
   assert.deepEqual(composeDeadline('', ''), { due_at: null, due_precision: 'unknown' });
   assert.deepEqual(composeDeadline('2026-11-20', ''), { due_at: '2026-11-20', due_precision: 'date' });

@@ -172,6 +172,9 @@ struct CaptureSmoke {
     } catch CaptureError.consentRequired { }
     check((try store.querySQL("SELECT COUNT(*) AS count FROM extracted_tasks", params: []))[0]["count"] as? Int64 == 1)
     check(!ExtractionValidator.validDate("2026-02-30"))
+    check(!ExtractionValidator.validDate("0000-01-01"))
+    check(!ExtractionValidator.validDue("0000-01-01T09:00:00+09:00", precision: "datetime"))
+    check(ExtractionValidator.validDate("2026-11-20"))
     check(!ExtractionValidator.validDue("2026-02-30T17:00:00+09:00", precision: "datetime"))
     let relative = raw.replacingOccurrences(of: text, with: "내일 자료 보내줘.")
     let guarded = try ExtractionValidator.validate(relative, sourceText: "내일 자료 보내줘.", messageDate: nil)

@@ -34,6 +34,9 @@ export function validateDue(due: string | null, precision: DuePrecision): void {
   if (!['date', 'datetime', 'unknown'].includes(precision) || due === '') throw new Error('마감 날짜를 확인해 주세요.');
   if (!due && precision !== 'unknown') throw new Error('마감 날짜를 지정해 주세요.');
   if (due && (precision === 'unknown' || !Number.isFinite(Date.parse(due)))) throw new Error('마감 날짜를 확인해 주세요.');
+  // Foundation's Gregorian date input does not represent year zero. Reject it
+  // before a task can be shared with native editors and widgets.
+  if (due && due.startsWith('0000-')) throw new Error('마감 날짜는 1년 이후로 입력해 주세요.');
   if (due && precision === 'date') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(due) || new Date(`${due}T12:00:00Z`).toISOString().slice(0, 10) !== due) {
       throw new Error('날짜는 YYYY-MM-DD 형식으로 입력해 주세요.');

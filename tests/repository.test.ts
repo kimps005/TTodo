@@ -161,6 +161,18 @@ test('수동 중복 입력은 허용하고 완료·수정·삭제를 보존한�
   assert.equal(saved.visibility, 'private');
   await repo.removeTodo(first); assert.equal((await repo.listTodos()).length, 1); native.close();
 });
+test('잘못된 0년 마감은 추가와 수정에서 거부하고 기존 할 일을 보존한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    const id = await repo.addTodo({ title: '기존 할 일', due_at: '2026-11-20', due_precision: 'date' });
+    await assert.rejects(repo.addTodo({ title: '잘못된 할 일', due_at: '0000-01-01', due_precision: 'date' }));
+    await assert.rejects(repo.updateTodo(id, { title: '변경', due_at: '0000-01-01T09:00:00+09:00', due_precision: 'datetime' }));
+    const rows = await repo.listTodos();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].title, '기존 할 일');
+    assert.equal(rows[0].due_at, '2026-11-20');
+  } finally { native.close(); }
+});
 test('다른 연결에서 삭제한 할 일의 오래된 편집·완료 요청은 성공으로 처리하지 않는다', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-edit-'));
   const path = join(directory, 'shared.sqlite');
