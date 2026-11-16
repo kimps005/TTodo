@@ -323,6 +323,35 @@ test('할 일 삭제는 연결된 분석 본문을 지우며 나머지 제안과
   native.close();
 });
 
+test('AI 할 일의 오래된 삭제가 거부되면 연결 원문도 보존하고 최신 삭제 시 해당 원문만 지운다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-stale-ai-delete-'));
+  const path = join(directory, 'shared.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  await repo.initialize();
+  const other = new DatabaseSync(path);
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analysis = await repo.createAnalysis('stale-ai-delete', 'manual', null);
+    await repo.finishAnalysis(analysis.id, [{ ...task, evidence_text: '삭제할 원문' }, { ...task, title: '남길 제안', evidence_text: '남길 원문' }], 'test', analysis.token!);
+    const proposals = await repo.listExtracted(analysis.id);
+    await repo.approve(analysis.id, [{ id: proposals[0].id, input: { title: '확인한 할 일' } }]);
+    const snapshot = (await repo.listTodos())[0];
+    other.prepare('UPDATE todos SET title=? WHERE id=?').run('다른 곳에서 수정한 할 일', snapshot.id);
+    await assert.rejects(repo.removeTodo(snapshot.id, snapshot), /변경.*다시 확인/);
+    assert.equal((await repo.listExtracted(analysis.id))[0].evidence_text, '삭제할 원문');
+    const current = (await repo.listTodos())[0];
+    assert.equal(current.title, '다른 곳에서 수정한 할 일');
+    await repo.removeTodo(current.id, current);
+    const after = await repo.listExtracted(analysis.id);
+    assert.equal(after[0].evidence_text, '');
+    assert.equal(after[0].title, '삭제한 할 일');
+    assert.equal(after[0].review_status, 'saved');
+    assert.equal(after[1].evidence_text, '남길 원문');
+    assert.equal(after[1].review_status, 'pending');
+    assert.equal((await repo.createAnalysis('stale-ai-delete', 'manual', null)).created, false);
+  } finally { other.close(); native.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('삭제가 실패하면 연결된 분석 본문 정리도 롤백하며 과거 삭제 잔여 본문은 다음 접근 때 정리한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   await repo.setPreference('ai_local_consent', 'yes');
