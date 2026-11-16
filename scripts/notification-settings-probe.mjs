@@ -10,7 +10,10 @@ const output = path.resolve('artifacts/notification-probe');
 mkdirSync(output, { recursive: true });
 const run = (command, args, options = {}) => execFileSync(command, args, { encoding: 'utf8', timeout: 60000, maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 const sim = (...args) => run('xcrun', ['simctl', ...args]);
-const report = { commit: process.env.GITHUB_SHA, physical_device: false, product_app_modified: false, completed: false };
+const flow = process.env.TTODO_PROBE_FLOW ?? 'deep-link';
+if (!['deep-link', 'settings-list'].includes(flow)) throw new Error('Unsupported native probe flow.');
+const method = flow === 'settings-list' ? 'testSettingsListBeforeAndAfterDenial' : 'testDeniedNotificationSettingsColdAndWarm';
+const report = { commit: process.env.GITHUB_SHA, flow, physical_device: false, product_app_modified: false, completed: false };
 let device;
 const result = path.join(output, 'results.xcresult');
 try {
@@ -31,7 +34,7 @@ try {
   const header = readFileSync(path.join(sdkPath, 'System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h'), 'utf8');
   writeFileSync(path.join(output, 'sdk-notification-settings-api.txt'), header.split('\n').filter(line => /OpenNotificationSettingsURLString|openURL:.*options:/.test(line)).join('\n'));
   configure.configureNotificationProbe(path.join(output, 'project'));
-  execFileSync('xcodebuild', ['-project', path.join(output, 'project/Probe.xcodeproj'), '-scheme', 'ProbeTests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', path.join(output, 'build'), '-resultBundlePath', result, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 12 * 60000 });
+  execFileSync('xcodebuild', ['-project', path.join(output, 'project/Probe.xcodeproj'), '-scheme', 'ProbeTests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', path.join(output, 'build'), '-resultBundlePath', result, '-only-testing:ProbeTests/NotificationSettingsProbeTests/' + method, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 12 * 60000 });
   const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', result]));
   if (summary.result !== 'Passed' || summary.totalTestCount !== 1 || summary.passedTests !== 1 || summary.failedTests !== 0 || summary.skippedTests !== 0 || summary.expectedFailures !== 0) throw new Error('The native comparison must run exactly one test without skips or failures.');
   report.completed = true;

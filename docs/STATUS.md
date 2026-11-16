@@ -2,6 +2,10 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 설정 앱 자체의 알림 목록 접근 검사 준비
+- [72aea15 SDK 점검](https://github.com/kimps005/TTodo/actions/runs/43785589863)은 성공했다. ZIP SHA-256 5eeefb1cd8d593f53b767c478395e2e6b4d64f6bc62c86301e3ec2d5c455b0fc를 대조했다. 설치된 iOS 26.2·26.4.1·26.5에 NotificationsSettings.bundle 및 NotificationsSettingsExtension.appex 메타데이터가 있어 단순 리소스 누락은 아니다. 수집한 plist/JSON에서 해당 목록의 숨김 결정 조건은 확인하지 못했다. 각 런타임의 eSIM 웹 자격 JSON 구문 오류 1건은 알림 설정 조건과 관련 없는 별도 파싱 제한이다.
+- 기존 제품·독립 앱 로그 모두 `Not including notifications due to being hidden.`를 확인했다. 딥링크를 사용하지 않고 XCTest로 설정 앱을 직접 실행하여 권한 요청 전과 실제 거부 후의 전체 기본 목록을 탐색·캡처하는 독립 검사를 추가했다. 알림 항목이 있으면 실제 탭까지 기록한다. 원래 딥링크 검사는 유지하며 수동 flow로 분리해 이미 확인한 호출을 다시 돌리지 않는다. 실제 SDK 실행 후 목록 자체의 가용성을 판별한다.
+
 ## 알림 목적지 숨김 상태의 SDK 리소스 확인 준비
 - 사용자 요청에 따라 원인 조사를 계속한다. 기존 독립 비교 로그의 설정 앱 Primary List Data Model은 `Not including notifications due to being hidden.`도 반복 기록한다(19:08:58.696 UTC 등). 목적지 선택 불가뿐 아니라 알림 목록 항목 자체가 숨겨진 증거다. 숨김 조건이 무엇인지는 아직 미확정이다.
 - 기존 SDK 점검 workflow에 설치된 런타임의 설정 plist/JSON 가용성 조건을 읽기 전용으로 수집하는 검사를 추가했다. 앱·시뮬레이터 사용자 데이터·실행 바이너리를 읽거나 OS 파일을 수정하지 않는다. 사설 API/URL 호출은 없고 제품 코드도 유지한다. 실제 SDK 리소스와 숨김 조건 대조는 CI 실행 후 판단한다.

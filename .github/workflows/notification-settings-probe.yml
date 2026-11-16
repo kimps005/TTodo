@@ -2,6 +2,11 @@ name: 알림 설정 공개 API 네이티브 비교
 on:
   workflow_dispatch:
     inputs:
+      flow:
+        description: '공개 딥링크 또는 URL 없이 시스템 알림 목록 확인'
+        type: choice
+        default: deep-link
+        options: [deep-link, settings-list]
       runtime:
         description: '기존 UI 검사와 비교할 설치된 iOS'
         type: choice
@@ -15,6 +20,7 @@ jobs:
     timeout-minutes: 20
     env:
       TTODO_PROBE_RUNTIME: ${{ inputs.runtime }}
+      TTODO_PROBE_FLOW: ${{ inputs.flow }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
