@@ -26,7 +26,7 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     try {
       const result = await evaluateProvider(onDeviceProvider, abort.signal, (done, total) => setProgress(`${done} / ${total}개 처리`));
       setReport(JSON.stringify({ ...result, operating_system: nativeBridge?.systemVersion() }, null, 2));
-      setProgress(`${result.results.length}개 처리 · ${result.results.filter(row => row.error).length}개 오류 · ${result.completed ? '평가 실행 완료' : '중단됨'}`);
+      setProgress(`${result.results.length}개 처리 · ${result.results.filter(row => row.error).length}개 오류 · ${result.completed ? '평가 실행 완료' : result.attempted_all ? '오류 사례 재실행 필요' : '중단됨'}`);
     } catch { Alert.alert('평가가 중단되었어요', '기기 내 모델 상태를 확인한 뒤 다시 시도해 주세요.'); }
     finally { controller.current = null; setBusy(false); }
   };
