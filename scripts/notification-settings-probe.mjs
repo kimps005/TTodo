@@ -29,6 +29,15 @@ try {
   if (!/^[0-9a-f-]{36}$/i.test(device)) throw new Error('Invalid simulator UUID.');
   sim('boot', device);
   writeFileSync(path.join(output, 'boot.log'), run('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 600000 }));
+  if (flow === 'settings-list') {
+    const help = sim('help', 'launch');
+    writeFileSync(path.join(output, 'simctl-launch-help.txt'), help);
+    if (!help.includes('launch') || !help.includes('app bundle identifier')) throw new Error('SDK simulator app launch help unavailable.');
+    // The first Settings launch in 43786035354 completed only after XCTest's
+    // launch handshake timed out. Start that OS app before building the probe;
+    // XCTest activates the same instance and still validates actual UI state.
+    report.settings_prelaunch = sim('launch', device, 'com.apple.Preferences');
+  }
   // Preserve the current SDK declaration; use no hardcoded settings URL.
   const sdkPath = run('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path']);
   const header = readFileSync(path.join(sdkPath, 'System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h'), 'utf8');

@@ -2,8 +2,12 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 설정 목록 검사 첫 실행 시간 초과 구분
+- [8e9ac87 직접 목록 검사](https://github.com/kimps005/TTodo/actions/runs/43786035354)는 Settings의 XCTest 첫 launch에서 시간 초과하여 목록 탐색/권한 요청 전 중단됐다. ZIP SHA-256 a9c1ee7f7808d9f2d480c3ec6c5dcd82d2bc6ad7bbac6ea09a93f8de8fa73793·실패 줄·시스템 로그를 대조했다. UI 실패 시각은 01:29:16 UTC, 설정 앱 launch 완료 로그는 01:29:21.820 UTC이며 이후에도 notifications 숨김 기록이 있다. 목록 접근 불가 단언 실패나 제품 오류로 집계하지 않는다.
+- SDK가 문서화한 simctl launch로 해당 격리 시뮬레이터의 설정 앱을 먼저 시작하고 XCTest activate가 기존 인스턴스를 이어받도록 수정했다. Apple 문서상 activate는 실행 중인 앱을 종료하지 않고 사용 가능한 상태로 활성화한다. 권한 주입/OS 변경/임의 시간 지연/화면 단언 완화는 없으며 두 번째 탐색도 같은 설정 프로세스를 사용한다. 실제 목록 결과는 재검사 전이다.
+
 ## 설정 앱 자체의 알림 목록 접근 검사 준비
-- [72aea15 SDK 점검](https://github.com/kimps005/TTodo/actions/runs/43785589863)은 성공했다. ZIP SHA-256 5eeefb1cd8d593f53b767c478395e2e6b4d64f6bc62c86301e3ec2d5c455b0fc를 대조했다. 설치된 iOS 26.2·26.4.1·26.5에 NotificationsSettings.bundle 및 NotificationsSettingsExtension.appex 메타데이터가 있어 단순 리소스 누락은 아니다. 수집한 plist/JSON에서 해당 목록의 숨김 결정 조건은 확인하지 못했다. 각 런타임의 eSIM 웹 자격 JSON 구문 오류 1건은 알림 설정 조건과 관련 없는 별도 파싱 제한이다.
+- [72aea15 SDK 점검](https://github.com/kimps005/TTodo/actions/runs/43785589863)은 성공했다. ZIP SHA-256 5eeefb1cd8d593f53b767c478395e2e6b4d64f6bc62c86301e3ec2d5c455b0fc를 대조했다. 설치된 iOS 26.2·26.4.1·26.5에 NotificationsSettings.bundle 및 NotificationsSettingsExtension.appex 메타데이터가 있어 단순 리소스 누락은 아니다. 수집한 plist/JSON에서 해당 목록의 숨김 결정 조건은 확인하지 못했다. 각 런타임의 eSIM 웹 자격 JSON 구문 오류 1건, 26.4.1·26.5의 ScreenTime 모델 VersionInfo 변환 오류 각 1건은 알림 설정 조건과 관련 없는 별도 파싱 제한이다.
 - 기존 제품·독립 앱 로그 모두 `Not including notifications due to being hidden.`를 확인했다. 딥링크를 사용하지 않고 XCTest로 설정 앱을 직접 실행하여 권한 요청 전과 실제 거부 후의 전체 기본 목록을 탐색·캡처하는 독립 검사를 추가했다. 알림 항목이 있으면 실제 탭까지 기록한다. 원래 딥링크 검사는 유지하며 수동 flow로 분리해 이미 확인한 호출을 다시 돌리지 않는다. 실제 SDK 실행 후 목록 자체의 가용성을 판별한다.
 
 ## 알림 목적지 숨김 상태의 SDK 리소스 확인 준비

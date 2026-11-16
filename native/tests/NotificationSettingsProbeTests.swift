@@ -11,6 +11,11 @@ final class NotificationSettingsProbeTests: XCTestCase {
     continueAfterFailure = false
     let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
     func scan(_ phase: String) throws -> Bool {
+      let list = settings.collectionViews.firstMatch
+      XCTAssertTrue(list.waitForExistence(timeout: 20))
+      // The second scan reuses Settings without resetting its process. Return
+      // its real root list to the top before examining the visible rows.
+      for _ in 0..<3 { list.swipeDown() }
       var previous: [String] = []
       var screens: [[String]] = []
       var found = false
@@ -38,7 +43,7 @@ final class NotificationSettingsProbeTests: XCTestCase {
       return found
     }
     // Launch Settings directly through XCTest, with no app-generated URL.
-    settings.launch()
+    settings.activate()
     XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 30))
     let before = try scan("before-permission")
     let app = XCUIApplication(); app.launch()
@@ -51,7 +56,7 @@ final class NotificationSettingsProbeTests: XCTestCase {
     expectation(for: NSPredicate(format: "label == %@", "authorization=1 opened=unset"), evaluatedWith: app.staticTexts["probe-status"])
     waitForExpectations(timeout: 15)
     capture(app, name: "settings-list-denied-without-url")
-    settings.terminate(); settings.launch()
+    settings.activate()
     XCTAssertTrue(settings.wait(for: .runningForeground, timeout: 30))
     let after = try scan("after-denial")
     XCTAssertTrue(before && after, "The system Notifications entry must be manually reachable before and after denial; absence is an environment failure, not a successful deep link.")
