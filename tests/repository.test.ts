@@ -114,6 +114,30 @@ test('동의 확인 뒤 철회가 먼저 처리되면 새 분석 등록과 기�
     assert.deepEqual(await repo.listTodos(), []);
   } finally { native.close(); }
 });
+test('다른 DB 연결에서 동의를 철회한 뒤 오래된 분석 등록을 거부한다', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-consent-connections-'));
+  const path = join(directory, 'shared.sqlite');
+  const first = fixture(undefined, path), second = fixture(undefined, path);
+  try {
+    await first.repo.initialize();
+    await second.repo.initialize();
+    await first.repo.setPreference('ai_local_consent', 'yes');
+    const existing = await first.repo.createAnalysis('existing-connection', 'manual', null);
+    assert.equal(await first.repo.getPreference('ai_local_consent'), 'yes');
+    await second.repo.revokeLocalAIConsent();
+    const afterRevocation = second.native.prepare('SELECT * FROM analyses WHERE id=?').get(existing.id);
+    await assert.rejects(first.repo.createAnalysis('new-connection', 'manual', null), /동의/);
+    await assert.rejects(first.repo.createAnalysis('existing-connection', 'manual', null), /동의/);
+    assert.deepEqual(first.native.prepare('SELECT * FROM analyses WHERE id=?').get(existing.id), afterRevocation);
+    assert.equal(first.native.prepare('SELECT COUNT(*) AS count FROM analyses').get()!.count, 1);
+    assert.equal(afterRevocation!.processing_token, null);
+    assert.equal(afterRevocation!.error_code, 'CONSENT_REVOKED');
+    assert.deepEqual(await first.repo.listTodos(), []);
+  } finally {
+    first.native.close(); second.native.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 test('분석 저장 중 두 번째 제안 또는 최종 상태 쓰기가 실패하면 전체 결과를 되돌리고 재시도한다', async () => {
   for (const stage of ['proposal', 'status']) {
     const { repo, native } = fixture(); await repo.initialize();
