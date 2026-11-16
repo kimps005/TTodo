@@ -2,6 +2,10 @@
 
 기준일: 2026-11-16 (한국 시간)
 
+## 알림 목적지 숨김 상태의 SDK 리소스 확인 준비
+- 사용자 요청에 따라 원인 조사를 계속한다. 기존 독립 비교 로그의 설정 앱 Primary List Data Model은 `Not including notifications due to being hidden.`도 반복 기록한다(19:08:58.696 UTC 등). 목적지 선택 불가뿐 아니라 알림 목록 항목 자체가 숨겨진 증거다. 숨김 조건이 무엇인지는 아직 미확정이다.
+- 기존 SDK 점검 workflow에 설치된 런타임의 설정 plist/JSON 가용성 조건을 읽기 전용으로 수집하는 검사를 추가했다. 앱·시뮬레이터 사용자 데이터·실행 바이너리를 읽거나 OS 파일을 수정하지 않는다. 사설 API/URL 호출은 없고 제품 코드도 유지한다. 실제 SDK 리소스와 숨김 조건 대조는 CI 실행 후 판단한다.
+
 ## 알림 설정 실패의 네이티브 비교·시스템 로그 대조 완료
 - [0342e2b 독립 비교 재검사](https://github.com/kimps005/TTodo/actions/runs/43750027357)는 macOS 26.7.2 ARM / Xcode 26.6(17F113) / SDK 26.5 / iPhone 16 Pro 시뮬레이터 iOS 26.5(23F77)에서 실행했다. ZIP SHA-256 47f89a5e2f5ac370e0297846f38ef2e5a30890a0f45167ee360d0ce9023b35d2·보고서 커밋·지정 XCTest 1개 실패/건너뜀 0을 대조했다. 24,356,561바이트 시스템 로그와 appinfo가 모두 수집됐고 ENOBUFS는 재발하지 않았다.
 - 독립 앱의 첫 호출(19:08:41 UTC)과 재진입(19:09:33 UTC) 모두 Bundle ID=com.kimps005.ttodo.notificationprobe, denied/active, 공개 API 반환 true다. 설정 앱은 올바른 비교 앱 ID의 알림 목적지로 변환한 다음 각각 19:08:58.056·19:09:34.164 UTC에 제품 앱과 동일한 `selection not possible currently 'notifications'`를 기록했다. PNG·접근성 트리는 두 번 모두 설정 첫 화면이며 앱 복귀 후에도 denied/opened=true다. appinfo는 비교 앱 User 등록 및 빈 App Group을 확인한다.

@@ -11,6 +11,10 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - name: Inspect installed simulator controls and runtimes
         run: |
           set -o pipefail
@@ -22,6 +26,8 @@ jobs:
           xcrun simctl help ui 2>&1 | tee artifacts/sdk-inspection/ui-help.txt
           xcrun simctl list runtimes --json | tee artifacts/sdk-inspection/runtimes.json
           xcrun simctl list devicetypes --json | tee artifacts/sdk-inspection/device-types.json
+      - name: Read Settings availability metadata from installed runtimes
+        run: node scripts/inspect-settings-runtime.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
