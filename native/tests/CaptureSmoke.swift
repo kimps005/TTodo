@@ -137,6 +137,20 @@ struct CaptureSmoke {
     check(first.count == 1 && !first.duplicate && calls == 1)
     check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 0)
     check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [first.id]))[0]["status"] as? String == "review")
+    // A previous UI check cannot authorize registration after another connection revokes consent.
+    let otherConnection = try SharedStore(directoryOverride: directory)
+    check(try otherConnection.hasLocalAIConsent())
+    try store.runSQL("UPDATE preferences SET value='no' WHERE key='ai_local_consent'", params: [])
+    let existingFingerprint = (try store.querySQL("SELECT image_fingerprint FROM analyses WHERE id=?", params: [first.id]))[0]["image_fingerprint"] as! String
+    for fingerprint in ["revoked-before-registration", existingFingerprint] {
+      do {
+        _ = try otherConnection.registerCapture(fingerprint: fingerprint, channel: "share")
+        fatalError("Registration reused or created a capture after consent withdrawal")
+      } catch CaptureError.consentRequired { }
+    }
+    check((try store.querySQL("SELECT COUNT(*) AS count FROM analyses WHERE image_fingerprint=?", params: ["revoked-before-registration"]))[0]["count"] as? Int64 == 0)
+    check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [first.id]))[0]["status"] as? String == "review")
+    try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
     let duplicate = try await CaptureProcessor.analyze(data: Data("first".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, extract: extract)
     check(duplicate.duplicate && calls == 1)
     do {
