@@ -5,6 +5,8 @@
 ## 스크롤 분리·시작 진단의 전체 품질 CI
 - [3fad024 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44048082960)의 core/ios 모두 성공했다. 130개 JS 테스트·타입·보안·Hermes, Swift 저장소·캡처/JSON 계약·합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집을 확인했다. 이 소스의 iPhoneOS 아카이브·실기기 검증은 없다.
 - [세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 oldest는 iOS 26.2 부팅 뒤 `simctl help ui`가 60초에 응답하지 않아 text-size 준비 단계에서 실패했다. ZIP SHA256·커밋·report를 대조했으며 앱 빌드/XCTest에 도달하지 않았다. 제품 성공/회귀로 판단하지 않는다. 다른 두 작업 진행 중에는 GitHub가 동일 실행의 부분 재실행을 거부하여 완료 뒤 해당 작업만 한 차례 재시도할 예정이다. 이전 OS 명령 지연과 이번 지연의 근본 원인은 미확정이다.
+- 첫 실행의 primary(iPhone 16 Pro / iOS 26.5) 수동 수명주기와 compact(iPhone SE 3세대 / iOS 26.5 / 최대 접근성 글자)는 지정 XCTest 각각 1개 통과·실패/건너뜀 0이다. 두 ZIP SHA256·커밋과 SDK summary/tests를 로컬 집계기로 재대조했다. primary 시작 로그는 재실행마다 저장소·로컬 스냅샷·권한·ActivityKit·boot_ready까지 도달했다. 앞선 42cce33 시작 대기는 재현되지 않았으나 원인은 미확정이다.
+- compact는 설정 제목의 즉시 탭 가능, 실제 네이티브 상태 재조회 후 카드 없음/OS 비허용 중 하나인 레이블, 홈 복귀 뒤 정확한 초안 보존을 단언했다. 설정 제목의 맨 위 표시는 첨부 화면에서도 확인했다. 카드 상태 첨부에는 다음 안내문이 보이고 초안 캡처는 말줄임돼 있어 두 전체 문자열을 시각 확인했다고 주장하지 않는다. 카드 생성·실제 잠금화면·VoiceOver는 미검증이다. 실패한 oldest 작업만 재실행 요청이 수락되어 두 번째 시도 진행 중이다.
 
 ## 최신 CI 호스트의 실제 모델 가용성 재확인
 - UI 첨부의 ‘기기 내 AI 사용 가능’ 표시는 생성 성공이 아니므로 [3fad024 호스트 점검](https://github.com/kimps005/TTodo/actions/runs/44048374197)을 실행했다. 보고서 ZIP SHA256과 커밋을 대조했다. macOS 26.7.2 CI 호스트는 `device_not_eligible`이며 inference_attempted/inference_completed/accuracy_measured 모두 false다.
