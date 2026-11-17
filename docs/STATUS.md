@@ -2,6 +2,10 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## 최신 CI 호스트의 실제 모델 가용성 재확인
+- UI 첨부의 ‘기기 내 AI 사용 가능’ 표시는 생성 성공이 아니므로 [3fad024 호스트 점검](https://github.com/kimps005/TTodo/actions/runs/44048374197)을 실행했다. 보고서 ZIP SHA256과 커밋을 대조했다. macOS 26.7.2 CI 호스트는 `device_not_eligible`이며 inference_attempted/inference_completed/accuracy_measured 모두 false다.
+- 점검 작업 성공은 가용성 확인 완료를 뜻하며 실제 모델 생성·iOS 실행·한국어 정확도 성공이 아니다. 이 자료만으로 시뮬레이터 표시의 원인이나 모델 실행 가능성을 확정하지 않는다. 외부 AI나 서명 경로는 추가하지 않았다.
+
 ## 탭 스크롤 분리와 최신 iOS 시작 대기 조사
 - [42cce33 세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44030805430)는 oldest(iPhone 16 Pro / iOS 26.2)에서 수동 수명주기 1개 통과·실패/건너뜀 0이다. ZIP SHA256·커밋·report/summary/tests JSON을 대조했고 완료 목록에 연도를 포함한 마감 표시를 첨부 화면에서도 확인했다. 실제 AI 출처·검토 화면은 이 수동 검사에 포함하지 않는다.
 - compact(iPhone SE 3세대 / iOS 26.5 / 최대 글자)는 설정 제목 탐색에서 실패했다. 실패 직전 화면은 설정의 첫 안내 카드이고 설정 탭이 선택돼 있다. 앱은 전경 실행 중이며 제목의 프레임은 y=-517.5로 화면 위쪽이다. 다른 탭과 같은 ScrollView를 사용해 스크롤 위치를 재사용하는 구조를 수정하여 탭 전환 시 새 화면의 위에서 시작하도록 했다. 초안은 상위 상태에 유지하며 XCTest에 설정 제목의 즉시 탭 가능 단언을 추가했다. 이전의 앱 자식 없는 탭 복귀 실패와 같은 원인이라고 확정하지 않는다.
