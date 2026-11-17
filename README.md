@@ -2,6 +2,7 @@
 
 잠금화면의 빠른 기록과 캡처 기반 할 일 제안을 목표로 하는 iPhone 앱입니다.
 제품 기준은 [PRD](docs/PRD-v1.0.md), 개발 규칙은 [AGENTS.md](AGENTS.md), 실제 진행 상태는 [STATUS](docs/STATUS.md)를 확인하세요.
+기능별 코드 구현·CI 검증·실기기 미검증 구분은 [MVP 구현 현황](docs/MVP-READINESS.md)에 정리했습니다.
 
 ## 현재 상태
 
