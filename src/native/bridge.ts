@@ -7,6 +7,7 @@ interface NativeBridge {
   querySQL(sql: string, params: (string | null)[]): Promise<Record<string, unknown>[]>;
   localAIAvailability(): string;
   systemVersion(): string;
+  activityStatus(): string;
   openNotificationSettings(): Promise<boolean>;
   clearCaptureNotifications(): Promise<void>;
   clearCaptureNotification(analysisId: string): void;

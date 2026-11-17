@@ -29,6 +29,7 @@ public class TTodoNativeModule: Module {
     Name("TTodoNative")
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
     Function("systemVersion") { ProcessInfo.processInfo.operatingSystemVersionString }
+    Function("activityStatus") { TodoActivityManager.status() }
     AsyncFunction("openNotificationSettings") { () async -> Bool in
       await self.openNotificationSettings()
     }

@@ -10,6 +10,13 @@ struct TodoActivityAttributes: ActivityAttributes {
   let name: String
 }
 enum TodoActivityManager {
+  static func status() -> String {
+    guard ActivityAuthorizationInfo().areActivitiesEnabled else { return "disabled" }
+    let activities = Activity<TodoActivityAttributes>.activities
+    if activities.contains(where: { $0.activityState == .active }) { return "active" }
+    if activities.contains(where: { $0.activityState == .stale }) { return "stale" }
+    return "inactive"
+  }
   static func state() throws -> TodoActivityAttributes.ContentState {
     let snapshot = try SharedStore().snapshot()
     return .init(tasks: snapshot.tasks, count: snapshot.count, hideTitles: snapshot.hideTitles, hideContent: snapshot.hideContent)

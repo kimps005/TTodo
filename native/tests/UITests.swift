@@ -301,6 +301,11 @@ final class TTodoUITests: XCTestCase {
     tap(control(app, label: "설정"), in: app)
     reveal(control(app, label: "내 방식으로"), in: app)
     screenshot(app, name: "large-05-settings")
+    tap(app.buttons["큰 목록 카드 상태 다시 확인"], in: app)
+    let cardStatus = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "카드 상태:")).firstMatch
+    reveal(cardStatus, in: app)
+    XCTAssertTrue(cardStatus.label.contains("진행 중인 큰 목록 카드가 없어요") || cardStatus.label.contains("iOS에서 실시간 현황이 허용되지 않았어요"), "A fresh install must report the real ActivityKit state, not an unavailable bridge or a fabricated active card.")
+    screenshot(app, name: "large-05-card-status")
     tap(control(app, label: "할 일"), in: app)
     screenshot(app, name: "large-06-returned-home")
     reveal(input, in: app)

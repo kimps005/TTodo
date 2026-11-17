@@ -25,6 +25,12 @@ import { createLatestRefresh } from './src/data/latestRefresh';
 import { createReviewConfirmation } from './src/ui/reviewConfirmation';
 import { useDayClock } from './src/ui/useDayClock';
 import { TodoMetadata } from './src/ui/TodoMetadata';
+import { activityStatusLabels } from './src/ui/activityStatus';
+
+function readActivityStatus(): string {
+  try { return nativeBridge?.activityStatus() ?? 'missing_native'; }
+  catch { return 'unknown'; }
+}
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function requestLockRefresh() {
@@ -54,14 +60,16 @@ function Application() {
   const [homeRequested, setHomeRequested] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState<Notifications.NotificationPermissionsStatus | null>(null);
+  const [activityStatus, setActivityStatus] = useState('unknown');
   const refresh = useMemo(() => createLatestRefresh(async (repository: Repository) => {
     await repository.pruneEvidence();
     // Notification settings must not prevent offline tasks from opening.
     const [all, captures, privacy, intro, hidden, consent, permission] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content'), repository.getPreference('ai_local_consent'), Notifications.getPermissionsAsync().catch(() => null)]);
-    return { all, captures, privacy, intro, hidden, consent, permission };
-  }, ({ all, captures, privacy, intro, hidden, consent, permission }) => {
+    return { all, captures, privacy, intro, hidden, consent, permission, activityStatus: readActivityStatus() };
+  }, ({ all, captures, privacy, intro, hidden, consent, permission, activityStatus }) => {
     setTodos(all); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
     setLocalAIConsent(consent === 'yes'); setPermission(permission);
+    setActivityStatus(activityStatus);
   }), []);
   const boot = useCallback(async () => {
     try {
@@ -169,7 +177,7 @@ function Application() {
         {tab === 'settings' && <>
           <Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 방식으로</Text><Text style={ui.subtitle}>빠른 기록과 개인정보를 함께 챙겨요.</Text>
           <View style={ui.card}><Text style={ui.section}>잠금화면 빠른 추가</Text><Text style={ui.subtitle}>단축어에서 ‘입력 요청’ 다음에 ‘TTodo에 할 일 추가’를 연결하세요. 잠긴 상태에서 인증 없는 입력은 실제 iPhone 검증이 필요해요.</Text><Text style={ui.small}>설정 안내를 읽은 것만으로 연결 완료로 처리하지 않아요.</Text></View>
-          <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><Text style={ui.small}>기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. iOS 갱신에는 시간이 걸릴 수 있어요.</Text><LockVisibilityChoices value={lockVisibility} disabled={busy} onSelect={chooseVisibility} /><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
+          <View style={ui.card}><Text style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요.</Text><Text style={ui.small}>기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. iOS 갱신에는 시간이 걸릴 수 있어요.</Text><LockVisibilityChoices value={lockVisibility} disabled={busy} onSelect={chooseVisibility} /><Text accessibilityLiveRegion="polite" style={ui.subtitle}>카드 상태: {activityStatusLabels[activityStatus] ?? activityStatusLabels.unknown}</Text><Text style={ui.small}>앱 실행·복귀와 아래 버튼에서 확인한 시스템 상태예요. 실제 잠금화면 표시와 갱신 여부도 확인해 주세요. 작은 위젯은 잠금화면 편집에서 별도로 추가할 수 있어요.</Text><Button secondary title="큰 목록 카드 상태 다시 확인" disabled={busy || !nativeBridge} onPress={() => setActivityStatus(readActivityStatus())} /><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
           <View style={ui.card}><Text style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>단축어의 ‘TTodo에서 캡처 분석’에 이미지를 직접 전달하세요. 스크린샷 자동화가 없는 환경에서는 사진 선택 단축어로 시험할 수 있어요.</Text><Text style={ui.small}>실제 스크린샷 전달·잠금 실행·AI 정확도는 미검증이에요. 최신 사진을 임의로 가져오지 않으며, 설정 화면 방문만으로 연결 완료로 처리하지 않아요.</Text></View>
           <View style={ui.card}><Text style={ui.section}>분석 결과 알림</Text><Text style={ui.subtitle}>권한: {permissionLabel}</Text><Text style={ui.small}>알림을 허용하지 않아도 분석 결과는 분석함에서 확인할 수 있어요. 알림 표시 방식은 기기 설정에서 바꿀 수 있어요.</Text>{permission && !permission.granted && permission.canAskAgain && <Button secondary title="알림 권한 요청" onPress={() => void run(async () => { await Notifications.requestPermissionsAsync(); })} disabled={busy} />}<Button secondary title="알림 설정 열기" onPress={() => void run(async () => { if (nativeBridge) { if (!await nativeBridge.openNotificationSettings()) throw new Error('알림 설정을 열지 못했어요. 기기 설정에서 TTodo 알림을 확인해 주세요.'); } else { await Linking.openSettings(); } })} disabled={busy} /></View>
           <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI</Text><Text style={ui.subtitle}>{availabilityLabels[nativeBridge?.localAIAvailability() ?? 'missing_native'] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>분석 동의: {localAIConsent ? '켜짐' : '꺼짐'}{'\n'}외부 유료 API를 사용하지 않아요. 원문 근거는 동의한 경우에만 저장하며, 7일 지난 내용은 다음 앱 실행·확인 때 삭제해요. 현재 한국어 정확도 검증 전이에요.</Text>{!localAIConsent && <Button title="기기 내 AI 분석 켜기" disabled={busy} onPress={() => { const isCurrent = consentConfirmation.capture(); Alert.alert('기기 내 AI 분석을 켤까요?', '직접 선택하거나 단축어로 전달한 이미지에서만 글자를 분석해요. 외부 AI 서버로 보내지 않아요. 제안 검토를 위한 원문 근거를 저장하며, 7일이 지나면 다음 앱 실행·확인 때 정리해요. 저장 전 내용을 직접 확인해 주세요.', [{ text: '취소', style: 'cancel', onPress: () => { isCurrent(); } }, { text: '동의하고 켜기', onPress: () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '앱 상태가 바뀌었어요. AI 분석 동의 내용을 다시 확인해 주세요.'); return; } void run(() => repo.setPreference('ai_local_consent', 'yes')); } }]); }} />}<Button title="AI 중지 및 원문 근거 삭제" secondary disabled={busy || !localAIConsent} onPress={() => void run(async () => { await repo.revokeLocalAIConsent(); await nativeBridge?.clearCaptureNotifications(); })} /></View>
