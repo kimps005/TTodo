@@ -1045,3 +1045,7 @@ Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별�
 - [같은 커밋 UI 재검사](https://github.com/kimps005/TTodo/actions/runs/44113873773)의 compact 작업은 iPhone SE 3세대 / iOS 26.5 / accessibility-extra-extra-extra-large에서 지정 `testLargeTextInputEditingAndNavigation` 1개 통과·실패/건너뜀 0. 실제 입력 식별자 조회·저장·편집·탭 이동 경로가 통과했다. 새 최대 글자 화면 전체의 시각 검수나 실제 VoiceOver 검사로 대체하지 않는다.
 - primary/oldest 작업은 실행기 배정 전 취소됐다. GitHub 검사 주석의 원인은 `The job was not acquired by Runner of type hosted even after multiple attempts`와 macOS arm64 용량 부족이다. 테스트가 실행되지 않았으므로 통과로 표시하지 않고, 통과한 compact를 유지한 채 미실행 작업만 재시도했다. 재시도 결과는 아직 확인 전이다.
 - 실제 iPhone 설치·AI 생성/정확도 90%·95% 달성·VoiceOver는 계속 미검증이다. 새 도구는 실제 모델을 실행해 측정할 준비와 컴파일 검증을 갖췄으며, 샘플 응답으로 성능을 주장하지 않는다.
+
+## 마감 해제 VoiceOver 안내 정정
+- 마감 날짜 입력의 힌트를 실제 저장 규칙과 맞췄다. 마감을 없애려면 날짜와 시각을 모두 비워야 하며, 날짜만 지우면 시각이 남아 저장 검증에서 거부된다. 제품 데이터/날짜 처리 로직과 네이티브 코드는 바꾸지 않는다.
+- 타입·개발 번들·diff 검사 통과. 이 문구 수정의 JS 품질 CI와 앞서 통과한 0d6c7be의 전체 네이티브 Debug 검증을 구분해 기록한다. 진행 중인 두 UI 재검사는 0d6c7be이며 이번 힌트 문구 수정 이전이다.
