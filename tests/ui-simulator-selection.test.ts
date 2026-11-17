@@ -21,3 +21,12 @@ test('SDK가 선택한 기종·arm64 조합을 지원하지 않거나 iOS가 없
   // Fail rather than silently select the older compatible runtime.
   assert.throws(() => selectUISimulator([runtime('26.2'), runtime('26.5', { supportedDeviceTypes: [se] })], [pro]));
 });
+
+test('Intel UI 검사는 명시한 x86_64 런타임만 선택하며 ARM 결과로 대체하지 않는다', () => {
+  const intel = runtime('26.5', { supportedArchitectures: ['x86_64'] });
+  assert.equal(selectUISimulator([intel], [pro], 'iphone-16-pro', 'latest', 'x86_64').runtime, intel);
+  assert.throws(() => selectUISimulator([intel], [pro]));
+  assert.throws(() => selectUISimulator([runtime('26.5')], [pro], 'iphone-16-pro', 'latest', 'x86_64'));
+  assert.throws(() => selectUISimulator([intel], [pro], 'iphone-16-pro', 'latest', 'unknown'));
+  assert.throws(() => selectUISimulator([intel], [pro], 'iphone-16-pro', 'oldest-installed', 'x86_64'));
+});

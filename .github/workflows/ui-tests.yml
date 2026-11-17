@@ -11,6 +11,11 @@ on:
       - 'scripts/ui-simulator-selection.cjs'
   workflow_dispatch:
     inputs:
+      macos_runner:
+        description: 'ARM 수용량 부족 시 무료 Intel 러너를 명시적으로 선택'
+        type: choice
+        default: macos-26
+        options: [macos-26, macos-26-intel]
       scenario:
         description: '앱 조작, 공유·사진 OCR, 독립 삭제 또는 할 일 수명주기'
         type: choice
@@ -43,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         profile: ${{ fromJSON(github.event_name == 'push' && '["primary", "compact", "oldest"]' || '["manual"]') }}
-    runs-on: macos-26
+    runs-on: ${{ inputs.macos_runner || 'macos-26' }}
     timeout-minutes: 45
     env:
       CI: '1'

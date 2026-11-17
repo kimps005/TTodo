@@ -1064,3 +1064,7 @@ Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별�
 - [0d6c7be UI 회귀 재시도](https://github.com/kimps005/TTodo/actions/runs/44113873773)는 최종 success다. primary(iPhone 16 Pro/iOS 26.5), oldest(iPhone 16 Pro/iOS 26.2)는 `testManualTaskLifecycleWithoutSettingsNavigation` 각각 1개 통과·실패/건너뜀 0이다. 저장·실제 앱 재실행 보존·편집·완료/복원·삭제 흐름을 확인했다. compact의 iPhone SE 3세대/iOS 26.5 최대 접근성 글자 검사 통과도 유지됐다. 실행기 배정 실패였던 두 작업을 실제 실행 성공으로 재확인했다.
 - [fcc7237 문구 수정 JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44119898707)는 148개 테스트·실패 0·타입·보안 취약점 0·일반/개발 번들 성공이다. ios는 의도적으로 skipped이며 동일 Swift 소스의 네이티브 Debug 검증은 [0d6c7be 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44113936125) 성공으로 구분한다. 문구 수정은 위 UI 실행 이후의 별도 변경이며 실제 VoiceOver 음성 검증은 하지 않았다.
 - 코드·정답셋·실행/채점 안내와 CI 검증 기록을 커밋·푸시했다. 실제 모델의 정밀도 90%·명시 마감 정확도 95% 달성 여부, 실제 iPhone VoiceOver/시각 검수와 설치·서명은 미검증으로 남는다. 실제 AI 기능 전체 완료나 접근성 인증으로 표시하지 않는다.
+
+## 2026-11-18 ARM 러너 부족에 대비한 명시적 Intel UI 경로
+
+GitHub가 ARM 수용량 부족을 명시하여 UI workflow에 기존 저장소에서도 사용하는 무료 macos-26-intel 선택지를 추가했다. 기본 push는 기존 ARM을 유지한다. 수동 실행에서 선택하면 호스트 아키텍처와 일치하는 x86_64 설치 런타임·요청 기종·OS 조합만 허용하고 Xcode ARCHS와 report에 명시한다. 미지원 조합은 다른 OS/기종으로 대체하지 않고 실행 전 실패한다. 실제 SDK 지원과 UI 실행은 아직 확인 전이다. Windows JS 152개·타입·Node 구문·diff 검사는 통과했다. 제품 Swift/JS 코드는 cc983e3 품질 통과 소스와 동일하다.

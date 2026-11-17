@@ -151,3 +151,5 @@ UI 검사 구성이 바뀌는 push는 서로 독립적인 세 job을 준비한�
 cc983e3부터 push의 primary/oldest는 app 전체 흐름으로 알림 권한 요청/거부·공개 앱 설정 fallback·복귀 후 초안/저장 항목 보존을 확인한다. compact의 최대 글자 흐름은 유지한다. 시뮬레이터는 OS가 알림 메뉴를 숨기는 기록이 있어 설정 앱 전경 전환과 앱의 명시적 수동 안내를 단언하며, 목적지 트리/알림 스위치 존재는 별도 첨부한다. 이 성공을 알림 화면 도착이나 실제 기기 권한 변경으로 해석하지 않는다. 실제 기기용 XCTest 분기는 TTodo 알림 화면·꺼진 스위치 단언을 유지한다.
 
 NativeSafetySmoke는 공개 URL의 우선/실패/fallback 정책, 한국어·이모지 UTF-8 예산과 문장/바이트 상한, actor 재진입 중 모델 진입 직렬화·실패·대기 요청 취소 후 진행을 실제 Swift로 검사한다. OCRSmoke는 6000×4000 합성 파일의 2400/720px 제한과 한국어 OCR, 파일 스트리밍 지문 일치를 확인한다. 전체 프로세스 RSS 120 MB·실제 Foundation Models 토큰 수·생성·기기 정확도 측정은 아니다. 최신 결과는 STATUS에 기록한다.
+
+UI 수동 실행의 macos_runner=macos-26-intel은 ARM 러너 수용량 부족에 대비한 무료 선택지다. 실제 호스트와 SDK 인벤토리의 x86_64 지원을 먼저 확인하며 report의 host_architecture/simulator_architecture로 기록한다. 기본 자동 검사의 ARM 선택은 유지하고 두 아키텍처 결과를 구분한다. 이 변경의 실제 Intel 실행 결과는 STATUS를 따른다.

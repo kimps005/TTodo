@@ -16,6 +16,8 @@ if (!['large', 'accessibility-extra-extra-extra-large'].includes(textSize)) thro
 const scenario = process.env.TTODO_UI_SCENARIO ?? 'app';
 const model = process.env.TTODO_UI_MODEL ?? 'iphone-16-pro';
 const runtimePolicy = process.env.TTODO_UI_RUNTIME ?? 'latest';
+const architecture = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x86_64' : null;
+if (!architecture) throw new Error('Unsupported CI host architecture.');
 if (!['app', 'share-extension', 'photo-ocr', 'data-reset', 'task-lifecycle'].includes(scenario)) throw new Error('Unsupported UI scenario.');
 const flow = scenario === 'task-lifecycle' ? 'testManualTaskLifecycleWithoutSettingsNavigation' : scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { requested_model: model, requested_runtime_policy: runtimePolicy, commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
@@ -141,7 +143,8 @@ try {
   const deviceInventory = JSON.parse(sim('list', 'devicetypes', '--json'));
   writeFileSync(path.join(output, 'runtimes.json'), JSON.stringify(runtimeInventory, null, 2));
   writeFileSync(path.join(output, 'device-types.json'), JSON.stringify(deviceInventory, null, 2));
-  const { runtime, deviceType } = simulatorSelection.selectUISimulator(runtimeInventory.runtimes, deviceInventory.devicetypes, model, runtimePolicy);
+  const { runtime, deviceType } = simulatorSelection.selectUISimulator(runtimeInventory.runtimes, deviceInventory.devicetypes, model, runtimePolicy, architecture);
+  report.host_architecture = process.arch; report.simulator_architecture = architecture;
   report.runtime = runtime.identifier; report.runtime_version = runtime.version; report.runtime_build = runtime.buildversion;
   report.runtime_policy = runtimePolicy; report.device_type = deviceType.identifier; report.device_name = deviceType.name;
   report.phase = 'text-size-help';
@@ -177,7 +180,7 @@ try {
     report.macos_ocr_fixture_preflight = true;
   }
   report.phase = 'test'; console.log('UI tests: building and running the synthetic manual task flow');
-  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-only-testing:TTodoUITests/TTodoUITests/' + flow, '-parallel-testing-enabled', 'NO', 'ARCHS=arm64', 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
+  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-only-testing:TTodoUITests/TTodoUITests/' + flow, '-parallel-testing-enabled', 'NO', `ARCHS=${architecture}`, 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
   const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', resultPath]));
   const tests = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', resultPath]));
   writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));
