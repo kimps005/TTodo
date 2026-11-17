@@ -1,7 +1,7 @@
 import Foundation
 
 enum CaptureError: LocalizedError {
-  case consentRequired, stateChanged, reviewRequired, alreadyStored, expired
+  case consentRequired, stateChanged, reviewRequired, alreadyStored, expired, duplicate, reminder
   var errorDescription: String? {
     switch self {
     case .consentRequired: return "먼저 TTodo 앱에서 기기 내 AI 분석에 동의해 주세요."
@@ -9,6 +9,8 @@ enum CaptureError: LocalizedError {
     case .reviewRequired: return "이 결과는 앱에서 내용을 확인한 뒤 저장해 주세요."
     case .alreadyStored: return "한 번이라도 할 일을 저장한 캡처는 다시 분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요."
     case .expired: return "보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요."
+    case .duplicate: return "제목과 마감이 같은 할 일이 이미 있어요. 기존 항목을 확인하거나 제목·날짜를 수정해 주세요."
+    case .reminder: return "알림을 켜려면 미래의 날짜와 시각을 함께 지정해 주세요."
     }
   }
 }
@@ -63,12 +65,14 @@ struct CaptureReviewItem: Identifiable {
   var dateText: String
   var timeText: String
   var dateEdited = false
+  var reminder = false
   static func reconciled(current: [CaptureReviewItem], stored: [CaptureReviewItem]) -> [CaptureReviewItem] {
     let drafts = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
     return stored.map { fresh in
       var item = fresh
       guard let draft = drafts[item.id] else { item.selected = false; return item }
       item.title = draft.title; item.description = draft.description; item.selected = draft.selected
+      item.reminder = draft.reminder
       if draft.dateEdited {
         item.dateText = draft.dateText; item.timeText = draft.timeText; item.dateEdited = true
       }
@@ -84,8 +88,27 @@ struct CaptureTaskEdit {
   let description: String?
   let dueAt: String?
   let duePrecision: String
+  var reminder = false
 }
 extension SharedStore {
+  func requireDistinctTodo(title: String, description: String?, assignee: String?, due: String?, precision: String) throws {
+    let exists = try querySQL("SELECT t.title,t.description,t.due_at,t.due_precision,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id", params: []).contains { row in
+      guard let existingTitle = row["title"] as? String else { return false }
+      let previousAssignee = (row["assignee"] as? String).map(ExtractionValidator.clean) ?? ""
+      let newAssignee = assignee.map(ExtractionValidator.clean) ?? ""
+      if !previousAssignee.isEmpty && !newAssignee.isEmpty && previousAssignee != newAssignee { return false }
+      let sameDue = precision == "datetime" ? (row["due_at"] as? String).flatMap(ExtractionValidator.timestamp) == due.flatMap(ExtractionValidator.timestamp) : row["due_at"] as? String == due
+      return ExtractionValidator.clean(existingTitle).lowercased() == ExtractionValidator.clean(title).lowercased() &&
+        ExtractionValidator.clean(row["description"] as? String ?? "") == ExtractionValidator.clean(description ?? "") && row["due_precision"] as? String == precision && sameDue
+    }
+    if exists { throw CaptureError.duplicate }
+  }
+  func reminderPlans(now: Date = Date()) throws -> [(id: String, due: Date)] {
+    try querySQL("SELECT t.id,t.due_at FROM todos t JOIN preferences p ON p.key='todo_reminder.'||t.id AND p.value='yes' WHERE t.status='pending' AND t.due_precision='datetime'", params: []).compactMap { row in
+      guard let id = row["id"] as? String, let raw = row["due_at"] as? String, let due = ExtractionValidator.timestamp(raw), due > now else { return nil }
+      return (id, due)
+    }
+  }
   func captureNotificationIsCurrent(id: String, expectedTaskIds: [String], now: Date = Date()) throws -> Bool {
     try transaction {
       guard !expectedTaskIds.isEmpty, try hasLocalAIConsent(),
@@ -131,7 +154,7 @@ extension SharedStore {
       return CaptureReanalysisSnapshot(id: id, status: status, taskIds: ids)
     }
   }
-  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil, now: Date = Date()) throws -> CaptureRegistration {
+  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil, now: Date = Date(), queued: Bool = false) throws -> CaptureRegistration {
     guard ["manual", "share", "shortcuts"].contains(channel) else { throw CaptureError.stateChanged }
     return try transaction {
       guard try hasLocalAIConsent() else { throw CaptureError.consentRequired }
@@ -144,7 +167,7 @@ extension SharedStore {
       }
       let time = ISO8601DateFormatter().string(from: now)
       let expires = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86400))
-      let token = UUID().uuidString.lowercased()
+      let token = UUID().uuidString.lowercased() + "-" + String(Int64(now.timeIntervalSince1970 * 1000))
       if let existing, let id = existing["id"] as? String {
         let status = existing["status"] as? String ?? ""
         if reanalyzeUnstored || (retryFailed && status == "failed") {
@@ -152,14 +175,21 @@ extension SharedStore {
           guard status != "saved", saved.isEmpty else { throw CaptureError.alreadyStored }
           guard ["failed", "review", "empty", "ignored"].contains(status) else { throw CaptureError.stateChanged }
           try runSQL("DELETE FROM extracted_tasks WHERE analysis_id=?", params: [id])
-          try runSQL("UPDATE analyses SET status='processing',model_version=NULL,error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", params: [time, expires, token, id])
+          try runSQL("UPDATE analyses SET status=?,model_version=NULL,error_code=NULL,received_at=?,expires_at=?,processing_token=? WHERE id=?", params: [queued ? "queued" : "processing", time, expires, token, id])
           return CaptureRegistration(id: id, created: true, token: token)
         }
         return CaptureRegistration(id: id, created: false, token: nil)
       }
       let id = UUID().uuidString.lowercased()
-      try runSQL("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at,processing_token) VALUES(?,?,NULL,?,'processing',?,?,?)", params: [id, fingerprint, time, channel, expires, token])
+      try runSQL("INSERT INTO analyses(id,image_fingerprint,captured_at,received_at,status,source_channel,expires_at,processing_token) VALUES(?,?,NULL,?,?,?,?,?)", params: [id, fingerprint, time, queued ? "queued" : "processing", channel, expires, token])
       return CaptureRegistration(id: id, created: true, token: token)
+    }
+  }
+  func startQueuedCapture(id: String, token: String) throws {
+    try transaction {
+      guard try hasLocalAIConsent(), let row = try querySQL("SELECT status,processing_token FROM analyses WHERE id=?", params: [id]).first,
+        row["status"] as? String == "queued", row["processing_token"] as? String == token else { throw CaptureError.stateChanged }
+      try runSQL("UPDATE analyses SET status='processing' WHERE id=? AND processing_token=?", params: [id, token])
     }
   }
   func finishCapture(id: String, tasks: [NativeSuggestion], provider: String, token: String, now: Date = Date()) throws {
@@ -176,7 +206,7 @@ extension SharedStore {
     }
   }
   func failCapture(id: String, code: String, token: String) throws {
-    try runSQL("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND status='processing' AND processing_token=?", params: [code, id, token])
+    try transaction { try runSQL("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND status IN ('processing','queued') AND processing_token=?", params: [code, id, token]) }
   }
   func approveSingleCapture(id: String, expectedTaskId: String, now: Date = Date()) throws -> Bool {
     try transaction {
@@ -197,6 +227,7 @@ extension SharedStore {
       let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [taskId]).first?["id"] as? String
       let todoId = existing ?? UUID().uuidString.lowercased()
       if existing == nil {
+        try requireDistinctTodo(title: title, description: task["description"] as? String, assignee: task["assignee"] as? String, due: task["due_at"] as? String, precision: precision)
         let time = ISO8601DateFormatter().string(from: now)
         try runSQL("INSERT INTO todos(id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [todoId, title, task["description"] as? String, task["due_at"] as? String, precision, time, time, analysis["source_channel"] as? String == "share" ? "share" : "screenshot", taskId, String(now.timeIntervalSince1970 * 1000)])
       }
@@ -230,7 +261,7 @@ extension SharedStore {
           let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
         let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
         let assignee = (row["assignee"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0 || assignee == nil || assignee?.isEmpty == true, dateText: fields.day, timeText: fields.time)
+        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0 || assignee == nil || assignee?.isEmpty == true, selected: (row["confidence"] as? Double ?? 0) > 0, dateText: fields.day, timeText: fields.time)
       }
     }
   }
@@ -249,15 +280,20 @@ extension SharedStore {
         let title = edit.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, title.unicodeScalars.count <= 200,
           ExtractionValidator.validDue(edit.dueAt, precision: edit.duePrecision),
-          let task = try querySQL("SELECT review_status FROM extracted_tasks WHERE id=? AND analysis_id=?", params: [edit.id, id]).first else { throw CaptureError.reviewRequired }
+          let task = try querySQL("SELECT review_status,assignee FROM extracted_tasks WHERE id=? AND analysis_id=?", params: [edit.id, id]).first else { throw CaptureError.reviewRequired }
         if task["review_status"] as? String == "ignored" { throw CaptureError.reviewRequired }
         if task["review_status"] as? String == "saved" { continue }
         guard task["review_status"] as? String == "pending" else { throw CaptureError.reviewRequired }
         let existing = try querySQL("SELECT id FROM todos WHERE source_id=?", params: [edit.id]).first?["id"] as? String
         let todoId = existing ?? UUID().uuidString.lowercased()
         if existing == nil {
+          try requireDistinctTodo(title: title, description: edit.description, assignee: task["assignee"] as? String, due: edit.dueAt, precision: edit.duePrecision)
+          if edit.reminder {
+            guard edit.duePrecision == "datetime", let due = edit.dueAt.flatMap(ExtractionValidator.timestamp), due > now else { throw CaptureError.reminder }
+          }
           try runSQL("INSERT INTO todos(id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES(?,?,?,?,?,?,?,?,?,?)", params: [todoId, title, edit.description, edit.dueAt, edit.duePrecision, time, time, analysis["source_channel"] as? String == "share" ? "share" : "screenshot", edit.id, String(now.timeIntervalSince1970 * 1000)])
           count += 1
+          if edit.reminder { try runSQL("INSERT INTO preferences(key,value) VALUES(?,?)", params: ["todo_reminder.\(todoId)", "yes"]) }
         }
         try runSQL("UPDATE extracted_tasks SET review_status='saved',linked_todo_id=?,title=?,description=?,due_at=?,due_precision=? WHERE id=?", params: [todoId, title, edit.description, edit.dueAt, edit.duePrecision, edit.id])
       }

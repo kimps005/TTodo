@@ -38,6 +38,7 @@ private struct CaptureShareView: View {
   @State private var confirmSimilar = false
   @State private var similarConfirmation: [SimilarCapture]?
   @State private var reviewUnavailable = false
+  @State private var semiAutomatic = false
   @discardableResult private func refreshReview() -> Bool {
     guard let analysisId else { return true }
     do {
@@ -90,10 +91,11 @@ private struct CaptureShareView: View {
       do {
         let data = try await readImage(); try Task.checkCancellation()
         preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, extract: OnDeviceExtraction.extract)
+        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, availability: OnDeviceExtraction.availability, extract: OnDeviceExtraction.extract)
         try Task.checkCancellation()
         if reanalyze { CaptureNotifications.clearAnalysis(result.id) }
         let store = try SharedStore()
+        semiAutomatic = try store.querySQL("SELECT model_version FROM analyses WHERE id=?", params: [result.id]).first?["model_version"] as? String == "vision-ocr/manual-v1"
         let proposals = try store.captureReviewItems(id: result.id)
         analysisId = result.id; items = proposals; reviewUnavailable = false
         similar = try store.similarCaptures(id: result.id)
@@ -101,6 +103,7 @@ private struct CaptureShareView: View {
         let status = try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [result.id]).first?["status"] as? String
         if status == "processing" || status == "queued" { message = "이 이미지는 이미 분석 중이에요. 잠시 후 앱 분석함에서 확인해 주세요." }
         else { message = proposals.isEmpty ? (result.duplicate ? "검토할 제안이 없어요. 이미 처리되었거나 보존 기간이 지난 결과는 앱 분석함에서 확인할 수 있어요." : "이 이미지에서 할 일을 찾지 못했어요.") : "제목·날짜·원문 근거를 확인하고 필요한 항목만 저장하세요." }
+        if semiAutomatic { message = "기기 내 AI를 사용할 수 없어 글자만 읽었어요. 원하는 원문을 탭해 제목으로 선택하고 수정한 뒤 저장하세요. AI 제안이 아니에요." }
       } catch {
         guard !Task.isCancelled else { return }
         let detail = (error as? LocalizedError)?.errorDescription ?? "기기 내 분석을 마치지 못했어요. 앱에서 AI 준비 상태를 확인하고 다시 시도해 주세요."
@@ -130,7 +133,7 @@ private struct CaptureShareView: View {
       guard items.contains(where: \.selected) else { throw CaptureError.reviewRequired }
       let edits = try items.filter(\.selected).map { item in
         let deadline = item.dateEdited ? try ExtractionValidator.localDeadline(day: item.dateText, time: item.timeText) : NativeDeadline(dueAt: item.dueAt, precision: item.duePrecision)
-        return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
+        return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision, reminder: item.reminder)
       }
       count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits, expectedSimilar: similar)
     } catch {
@@ -143,6 +146,11 @@ private struct CaptureShareView: View {
     message = "\(count)개를 저장했어요. 앱과 잠금화면 목록에 갱신을 요청해요."
     WidgetCenter.shared.reloadAllTimelines()
     Task { try? await TodoActivityManager.refresh() }
+    Task {
+      do {
+        if !(try await CaptureNotifications.refreshReminders()) { failure = "할 일은 저장했어요. 알림을 받으려면 기기 설정에서 TTodo 알림을 허용해 주세요." }
+      } catch { failure = "할 일은 저장했어요. 알림 예약은 앱 목록 갱신 때 다시 시도해요." }
+    }
     working = false
   }
   var body: some View {
@@ -152,7 +160,7 @@ private struct CaptureShareView: View {
           Text("캡처 속 할 일").font(.largeTitle.bold())
           Text(message).foregroundStyle(.secondary)
           if let preview { Image(uiImage: preview).resizable().scaledToFit().frame(maxHeight: 220).accessibilityLabel("이번 분석 이미지 미리보기") }
-          Text("무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
+          Text(semiAutomatic ? "OCR · 직접 선택" : "무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
           if let failure { Text(failure).foregroundStyle(.red) }
           if reviewUnavailable { Button("최신 상태 다시 확인") { failure = nil; _ = refreshReview() }.disabled(working) }
           if working { ProgressView("처리 중") }
@@ -180,6 +188,7 @@ private struct CaptureShareView: View {
           ForEach($items) { $item in
             VStack(alignment: .leading, spacing: 12) {
               Toggle("이 할 일 선택", isOn: $item.selected)
+              Toggle("마감 시각에 알림 (날짜·시각 필요)", isOn: $item.reminder)
               if item.needsConfirmation { Label("수행 주체나 내용을 확인해 주세요", systemImage: "questionmark.circle").font(.caption) }
               TextField("할 일 제목", text: $item.title, axis: .vertical).textFieldStyle(.roundedBorder).accessibilityLabel("제안 제목")
               Text("제안 마감: \(dueLabel(item))").font(.caption)
@@ -188,6 +197,7 @@ private struct CaptureShareView: View {
               Text("시각을 비우면 날짜만 저장해요. 둘 다 비우면 마감을 해제해요. 시각은 현재 기기 시간대를 사용해요.").font(.caption).foregroundStyle(.secondary)
               Text("원문 근거").font(.caption.bold())
               Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled)
+              if semiAutomatic { Button("이 글자를 제목으로 선택") { item.selected = true }.buttonStyle(.bordered) }
             }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).disabled(working || reviewUnavailable)
           }
           if !items.isEmpty {

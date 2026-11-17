@@ -5,6 +5,6 @@ import { ui } from './theme';
 export function TodoMetadata({ todo }: { todo: Todo }) {
   return <View style={[ui.row, { flexWrap: 'wrap' }]}>
     <Text style={ui.small}>{dueLabel(todo)}</Text>
-    {todo.source_type !== 'manual' && <Text style={ui.pill}>AI 제안</Text>}
+    {todo.source_type !== 'manual' && <Text style={ui.pill}>{todo.capture_provider === 'vision-ocr/manual-v1' ? 'OCR에서 직접 선택' : 'AI 제안'}</Text>}
   </View>;
 }

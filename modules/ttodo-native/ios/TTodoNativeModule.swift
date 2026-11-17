@@ -29,6 +29,10 @@ public class TTodoNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("TTodoNative")
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
+    Function("ocrCandidates") { (text: String) throws -> String in
+      guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
+      return String(decoding: try JSONEncoder().encode(ExtractionValidator.ocrCandidates(text)), as: UTF8.self)
+    }
     Function("systemVersion") { ProcessInfo.processInfo.operatingSystemVersionString }
     Function("activityStatus") { TodoActivityManager.status() }
     Function("recordStartupPhase") { (phase: String) in
@@ -66,7 +70,9 @@ public class TTodoNativeModule: Module {
     Function("reloadWidgets") {
       WidgetCenter.shared.reloadAllTimelines()
       Task { try? await TodoActivityManager.refresh() }
+      Task { _ = try? await CaptureNotifications.refreshReminders() }
     }
+    AsyncFunction("refreshReminders") { () async throws -> Bool in try await CaptureNotifications.refreshReminders() }
     AsyncFunction("clearCaptureNotifications") { () async in await CaptureNotifications.clearAll() }
     Function("clearCaptureNotification") { (id: String) in CaptureNotifications.clearAnalysis(id) }
     AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.start() }

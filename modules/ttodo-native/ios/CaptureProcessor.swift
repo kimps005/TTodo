@@ -1,34 +1,60 @@
 import Foundation
 
-struct CaptureOutcome { let id: String; let count: Int; let duplicate: Bool }
+struct CaptureOutcome { let id: String; let count: Int; let duplicate: Bool; var semiAutomatic = false }
+// Each process serializes expensive OCR/model work. Separate app/extension
+// processes still use independent DB IDs and leases, never a shared image slot.
+private actor CaptureWorkQueue {
+  static let shared = CaptureWorkQueue()
+  private var busy = false
+  private var waiting: [CheckedContinuation<Void, Never>] = []
+  func acquire() async {
+    if !busy { busy = true; return }
+    await withCheckedContinuation { waiting.append($0) }
+  }
+  func release() {
+    if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() }
+  }
+}
 enum CaptureProcessor {
   typealias Extract = (String, String?, String, String?) async throws -> String
   static func analyze(data: Data, messageDate: String?, channel: String = "shortcuts", retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil,
     storeFactory: () throws -> SharedStore = { try SharedStore() },
     recognize: (Data) throws -> String = VisionOCR.recognize,
+    availability: () -> String = { "available" },
     extract: Extract) async throws -> CaptureOutcome {
     try Task.checkCancellation()
     guard !data.isEmpty, data.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
     if let messageDate, !ExtractionValidator.validDate(messageDate) { throw ExtractionValidationError.invalid }
     let store = try storeFactory()
-    let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected)
+    let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected, queued: true)
     if !registration.created { return CaptureOutcome(id: registration.id, count: 0, duplicate: true) }
     guard let token = registration.token else { throw CaptureError.stateChanged }
+    await CaptureWorkQueue.shared.acquire()
     do {
       try Task.checkCancellation()
+      try store.startQueuedCapture(id: registration.id, token: token)
       let text = try recognize(data)
       try Task.checkCancellation()
       guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
       let tasks: [NativeSuggestion]
+      var semiAutomatic = false
       if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { tasks = [] }
+      else if availability() != "available" {
+        semiAutomatic = true; tasks = ExtractionValidator.ocrCandidates(text)
+      }
       else {
-        let json = try await extract(text, nil, TimeZone.current.identifier, messageDate)
-        try Task.checkCancellation()
-        tasks = try ExtractionValidator.validate(json, sourceText: text, messageDate: messageDate)
+        do {
+          let json = try await extract(text, nil, TimeZone.current.identifier, messageDate)
+          try Task.checkCancellation()
+          tasks = try ExtractionValidator.validate(json, sourceText: text, messageDate: messageDate)
+        } catch LocalAIError.unavailable {
+          semiAutomatic = true; tasks = ExtractionValidator.ocrCandidates(text)
+        }
       }
       try Task.checkCancellation()
-      try store.finishCapture(id: registration.id, tasks: tasks, provider: "apple-ondevice/prompt-v1", token: token)
-      return CaptureOutcome(id: registration.id, count: tasks.count, duplicate: false)
+      try store.finishCapture(id: registration.id, tasks: tasks, provider: semiAutomatic ? "vision-ocr/manual-v1" : "apple-ondevice/prompt-v2", token: token)
+      await CaptureWorkQueue.shared.release()
+      return CaptureOutcome(id: registration.id, count: tasks.count, duplicate: false, semiAutomatic: semiAutomatic)
     } catch {
       let code: String
       if error is CancellationError { code = "CANCELLED" }
@@ -37,6 +63,7 @@ enum CaptureProcessor {
       else if error is CaptureError { code = "STATE_CHANGED" }
       else { code = "LOCAL_AI_FAILED" }
       try? store.failCapture(id: registration.id, code: code, token: token)
+      await CaptureWorkQueue.shared.release()
       throw error
     }
   }

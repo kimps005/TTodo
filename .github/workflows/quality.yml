@@ -61,6 +61,10 @@ jobs:
         run: |
           swiftc modules/ttodo-native/ios/VisionOCR.swift native/tests/OCRSmoke.swift -framework AppKit -o "$RUNNER_TEMP/ttodo-ocr-smoke"
           TTODO_OCR_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/artifacts/vision-ocr" "$RUNNER_TEMP/ttodo-ocr-smoke"
+      - name: Test OCR layout, fallback, queue and approval safeguards
+        run: |
+          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/PipelineSmoke.swift -o "$RUNNER_TEMP/ttodo-pipeline-smoke"
+          "$RUNNER_TEMP/ttodo-pipeline-smoke"
       - name: Install pods
         working-directory: ios
         run: pod install

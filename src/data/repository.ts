@@ -45,7 +45,7 @@ export class Repository {
     });
     await this.pruneEvidence();
   }
-  listTodos() { return this.db.getAllAsync<Todo>('SELECT * FROM todos'); }
+  listTodos() { return this.db.getAllAsync<Todo>('SELECT t.*,a.model_version AS capture_provider FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id LEFT JOIN analyses a ON a.id=e.analysis_id'); }
   async getTodoEvidence(id: string): Promise<string | null> {
     let evidence: string | null = null;
     await this.db.withExclusiveTransactionAsync(async tx => {
@@ -115,6 +115,7 @@ export class Repository {
       // recreate the task. Remove both original and edited proposal content.
       await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1,linked_todo_id=NULL WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)", id, id);
       await tx.runAsync('DELETE FROM todos WHERE id=?', id);
+      await tx.runAsync('DELETE FROM preferences WHERE key=?', `todo_reminder.${id}`);
     });
     return analyses;
   }
@@ -165,7 +166,7 @@ export class Repository {
   }
   async createAnalysis(fingerprint: string, source: Analysis['source_channel'], capturedAt: string | null): Promise<{ id: string; created: boolean; token: string | null }> {
     const id = this.uuid();
-    const token = this.uuid();
+    const token = `${this.uuid()}-${Date.parse(this.now())}`;
     let result: { id: string; created: boolean; token: string | null } = { id, created: false, token: null };
     const time = this.now();
     await this.db.withExclusiveTransactionAsync(async tx => {
@@ -187,7 +188,7 @@ export class Repository {
   retryFailedAnalysis(id: string) { return this.restartUnstoredAnalysis(id, true); }
   async restartUnstoredAnalysis(id: string, failedOnly = false, expected?: { status: Analysis['status']; taskIds: string[] }): Promise<string> {
     const time = this.now();
-    const token = this.uuid();
+    const token = `${this.uuid()}-${Date.parse(time)}`;
     await this.db.withExclusiveTransactionAsync(async tx => {
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       const saved = await tx.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=? AND review_status='saved'", id);
@@ -243,8 +244,17 @@ export class Repository {
         const precision = edit.input.due_precision ?? 'unknown';
         validateDue(due, precision);
         const title = normalizeTitle(edit.input.title);
+        if (edit.input.reminder && (precision !== 'datetime' || !due || Date.parse(due) <= Date.parse(time))) throw new Error('알림을 켜려면 미래의 날짜와 시각을 함께 지정해 주세요.');
+        const clean = (value: string | null) => (value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+        const same = (await tx.getAllAsync<Todo & { assignee: string | null }>('SELECT t.*,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id')).some(existing =>
+          existing.title.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase() === title.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase() &&
+          clean(existing.description) === clean(edit.input.description ?? null) &&
+          (!clean(existing.assignee) || !clean(task.assignee) || clean(existing.assignee) === clean(task.assignee)) &&
+          existing.due_precision === precision && (precision === 'datetime' ? Date.parse(existing.due_at!) === Date.parse(due!) : existing.due_at === due));
+        if (same) throw new Error('제목과 마감이 같은 할 일이 이미 있어요. 기존 항목을 확인하거나 제목·날짜를 수정해 주세요.');
         await tx.runAsync('INSERT INTO todos (id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
           todoId, title, edit.input.description?.trim() || null, due, precision, time, time, analysis.source_channel === 'share' ? 'share' : 'screenshot', task.id, Date.parse(time));
+        if (edit.input.reminder) await tx.runAsync('INSERT INTO preferences(key,value) VALUES(?,?)', `todo_reminder.${todoId}`, 'yes');
         await tx.runAsync("UPDATE extracted_tasks SET review_status='saved',linked_todo_id=?,title=?,description=?,due_at=?,due_precision=? WHERE id=?", todoId, title, edit.input.description?.trim() || null, due, precision, task.id);
       }
       const pending = await tx.getFirstAsync<{ count: number }>("SELECT COUNT(*) AS count FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", id);

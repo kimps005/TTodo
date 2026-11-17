@@ -1,5 +1,12 @@
 import Foundation
 
+enum LocalAIError: LocalizedError {
+  case unavailable, inputLimit
+  var errorDescription: String? {
+    self == .unavailable ? "기기 내 AI를 사용할 수 없어 인식한 글자를 직접 선택할 수 있어요." : "기기 내 AI는 3,500자 이하의 글자를 분석할 수 있어요. 필요한 부분만 남겨 주세요."
+  }
+}
+
 struct NativeSuggestion: Codable {
   var is_actionable = true
   var title: String
@@ -51,6 +58,74 @@ enum DeadlineInputError: LocalizedError {
   var errorDescription: String? { "날짜는 2026-11-20, 시각은 17:30처럼 입력해 주세요. 해당 기기 시간대에서 사용할 수 있는 시각인지도 확인해 주세요." }
 }
 enum ExtractionValidator {
+  static func referenceContext(now: Date = Date(), timezone: String, messageDate: String?) -> [String: String] {
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "ko_KR")
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(identifier: timezone) ?? .current
+    formatter.dateFormat = "yyyy-MM-dd EEEE HH:mm"
+    var context = ["current_datetime": formatter.string(from: now)]
+    if let messageDate, validDate(messageDate) {
+      let parser = DateFormatter(); parser.locale = Locale(identifier: "en_US_POSIX")
+      parser.calendar = Calendar(identifier: .gregorian); parser.timeZone = formatter.timeZone
+      parser.dateFormat = "yyyy-MM-dd"
+      if let date = parser.date(from: messageDate) {
+        formatter.dateFormat = "yyyy-MM-dd EEEE"
+        context["message_date_with_weekday"] = formatter.string(from: date)
+      }
+    }
+    return context
+  }
+  // This is a user-driven OCR draft, never an AI claim of actionability.
+  // Both review UIs leave confidence-zero drafts unselected until a text tap.
+  static func ocrCandidates(_ text: String) -> [NativeSuggestion] {
+    text.components(separatedBy: .newlines).compactMap { line in
+      let evidence = line.trimmingCharacters(in: .whitespacesAndNewlines)
+      let title = evidence.replacingOccurrences(of: "^\\[(?:상대방|나)\\]\\s*", with: "", options: .regularExpression)
+      guard !title.isEmpty else { return nil }
+      return NativeSuggestion(title: title.unicodeScalars.prefix(200).map(String.init).joined(), description: nil, due_at: nil, due_precision: "unknown", assignee: nil, confidence: 0, evidence_text: String(evidence.prefix(4000)), needs_confirmation: true)
+    }
+  }
+  static func nonActionEvidence(_ evidence: String) -> Bool {
+    // Deliberately narrow exclusions: semantic precision still requires device evaluation.
+    matches(clean(evidence), "별도\\s*조치[는가]?\\s*필요하지|할\\s*일[이가]?\\s*없|(?:신청|접수)\\s*기간[은이가 ]*종료|이용에\\s*참고\\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\\s*마세요|지금\\s*\\d+%\\s*할인")
+  }
+  static func detectedDates(_ text: String) -> [Date] {
+    guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return [] }
+    return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap(\.date)
+  }
+  static func dateDisagrees(due: String, precision: String, evidence: String, messageDate: String?, timezone: String) -> Bool {
+    let zone = TimeZone(identifier: timezone) ?? .current
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone; calendar.firstWeekday = 2
+    let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = calendar; formatter.timeZone = zone; formatter.dateFormat = "yyyy-MM-dd"
+    let proposed = precision == "date" ? formatter.date(from: due) : timestamp(due)
+    guard let proposed else { return true }
+    let source = clean(evidence)
+    // NSDataDetector chooses its own reference date for relative expressions.
+    // Only full-year absolute detections can act as independent corroboration.
+    let regex = try! NSRegularExpression(pattern: "[0-9]{4}\\s*(?:년\\s*|-|[./])\\s*[0-9]{1,2}\\s*(?:월\\s*|-|[./])\\s*[0-9]{1,2}(?:일)?")
+    let absolute = regex.matches(in: source, range: NSRange(source.startIndex..., in: source)).compactMap { match -> String? in
+      guard let range = Range(match.range, in: source) else { return nil }; return String(source[range])
+    }
+    let dates = absolute.flatMap { detectedDates($0) }
+    if !dates.isEmpty && !dates.contains(where: { calendar.isDate($0, inSameDayAs: proposed) }) { return true }
+    guard let messageDate, validDate(messageDate), let base = formatter.date(from: messageDate) else { return false }
+    let offsets = [("그제", -2), ("어제", -1), ("오늘", 0), ("내일", 1), ("모레", 2), ("글피", 3)]
+    let relative = offsets.filter { source.contains($0.0) }
+    if relative.count == 1, absolute.isEmpty,
+      let expected = calendar.date(byAdding: .day, value: relative[0].1, to: base) {
+      return !calendar.isDate(expected, inSameDayAs: proposed)
+    }
+    let weekdayRegex = try! NSRegularExpression(pattern: "(이번|다음|지난)\\s*주\\s*([월화수목금토일])요일")
+    let weekdays = weekdayRegex.matches(in: source, range: NSRange(source.startIndex..., in: source))
+    if weekdays.count == 1, absolute.isEmpty, let week = Range(weekdays[0].range(at: 1), in: source), let day = Range(weekdays[0].range(at: 2), in: source),
+      let index = ["월", "화", "수", "목", "금", "토", "일"].firstIndex(of: String(source[day])) {
+      let mondayOffset = (calendar.component(.weekday, from: base) + 5) % 7
+      let weekOffset = source[week] == "다음" ? 7 : source[week] == "지난" ? -7 : 0
+      if let expected = calendar.date(byAdding: .day, value: weekOffset + index - mondayOffset, to: base) { return !calendar.isDate(expected, inSameDayAs: proposed) }
+    }
+    return false
+  }
   static func matches(_ value: String, _ pattern: String) -> Bool { value.range(of: pattern, options: .regularExpression) != nil }
   static func clean(_ value: String) -> String { value.precomposedStringWithCompatibilityMapping.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
   static func isSensitive(_ text: String) -> Bool {
@@ -107,7 +182,7 @@ enum ExtractionValidator {
     let iso = ISO8601DateFormatter(); iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return NativeDeadline(dueAt: iso.string(from: date), precision: "datetime")
   }
-  static func validate(_ json: String, sourceText: String, messageDate: String?) throws -> [NativeSuggestion] {
+  static func validate(_ json: String, sourceText: String, messageDate: String?, timezone: String = TimeZone.current.identifier) throws -> [NativeSuggestion] {
     guard !isSensitive(sourceText) else { throw ExtractionValidationError.sensitive }
     guard let data = json.data(using: .utf8), let raw = try? JSONDecoder().decode([RawSuggestion].self, from: data), raw.count <= 30 else { throw ExtractionValidationError.invalid }
     return try raw.compactMap { value in
@@ -120,11 +195,15 @@ enum ExtractionValidator {
       let trimmedAssignee = value.assignee?.trimmingCharacters(in: .whitespacesAndNewlines)
       let assignee = trimmedAssignee?.isEmpty == false ? trimmedAssignee : nil
       var task = NativeSuggestion(title: title, description: value.description.map { String($0.prefix(4000)) }, due_at: value.due_at, due_precision: precision, assignee: assignee, confidence: confidence, evidence_text: evidence, needs_confirmation: confirmation || assignee == nil)
+      if nonActionEvidence(evidence) { return nil }
       if messageDate == nil && task.due_at != nil {
         let normalized = clean(evidence)
         let relative = matches(normalized, "오늘|내일|모레|글피|어제|그제|올해|금년|내년|내후년|작년|재작년|지난해|(?:이번|다음|지난)\\s*(?:주|달|해)|일\\s*뒤|일\\s*후")
         let explicitYear = matches(normalized, "\\b\\d{4}\\s*(?:년|[-./])")
         if relative || !explicitYear { task.due_at = nil; task.due_precision = "unknown"; task.needs_confirmation = true }
+      }
+      if let due = task.due_at, dateDisagrees(due: due, precision: task.due_precision, evidence: evidence, messageDate: messageDate, timezone: timezone) {
+        task.due_at = nil; task.due_precision = "unknown"; task.needs_confirmation = true
       }
       return task
     }

@@ -50,18 +50,29 @@ enum OnDeviceExtraction {
     Only include actions supported by verbatim evidence. Ignore ads, completed/cancelled actions,
     factual notices requiring no action, and other people's personal plans. Do not create tasks for every date.
     Split independent tasks but keep dependent steps of one action together. At most ten tasks.
+    [상대방] and [나] are uncertain left/right layout hints, not verified identities.
+    Do not assign the other speaker's promises to the user. Keep needsConfirmation=true for layout hints.
     The user's identity in conversations is unknown: do not assume a speaker is the user.
     Use assignee=null and needsConfirmation=true when not certain the action belongs to the user.
     For relative dates use only a provided message_date. If it is null, do not resolve 'tomorrow' or 'next week'.
     Never use capture time as proof of message date. Invalid or ambiguous dates become dueAt=null,
     duePrecision=unknown and needsConfirmation=true. For date-only values use YYYY-MM-DD;
     for known times use ISO 8601 including timezone offset. Do not invent a time for date-only deadlines.
-    Confidence is only a review signal. No task is performed or saved by you. Return an empty list when no action exists.
+    Confidence is only a review signal. No task is performed or saved by you. Return tasks=[] when no action exists, including scenery, memes, greetings,
+    advertisements and informational notices. Never invent an action to fill the array.
+    Current_datetime includes the weekday for orientation, not proof of the message date.
+    Use message_date_with_weekday for relative dates only when supplied; weeks start on Monday.
     """)
-    let payload: [String: Any] = ["source_text": text, "captured_at": capturedAt as Any? ?? NSNull(), "timezone": timezone, "message_date": messageDate as Any? ?? NSNull()]
+    var payload: [String: Any] = ["source_text": text, "captured_at": capturedAt as Any? ?? NSNull(), "timezone": timezone, "message_date": messageDate as Any? ?? NSNull()]
+    for (key, value) in ExtractionValidator.referenceContext(timezone: timezone, messageDate: messageDate) { payload[key] = value }
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     let prompt = String(decoding: data, as: UTF8.self)
-    let response = try await session.respond(to: prompt, generating: GeneratedTodos.self)
+    let response: LanguageModelSession.Response<GeneratedTodos>
+    do { response = try await session.respond(to: prompt, generating: GeneratedTodos.self) }
+    catch {
+      if availability() != "available" { throw LocalAIError.unavailable }
+      throw error
+    }
     let values: [[String: Any]] = response.content.tasks.map { task in
       ["is_actionable": task.isActionable, "title": task.title, "description": task.description as Any? ?? NSNull(),
        "due_at": task.dueAt as Any? ?? NSNull(), "due_precision": task.duePrecision,
@@ -69,16 +80,7 @@ enum OnDeviceExtraction {
        "evidence_text": task.evidenceText, "needs_confirmation": task.needsConfirmation]
     }
     let raw = String(decoding: try JSONSerialization.data(withJSONObject: values), as: UTF8.self)
-    let checked = try ExtractionValidator.validate(raw, sourceText: text, messageDate: messageDate)
+    let checked = try ExtractionValidator.validate(raw, sourceText: text, messageDate: messageDate, timezone: timezone)
     return String(decoding: try JSONEncoder().encode(checked), as: UTF8.self)
-  }
-}
-enum LocalAIError: LocalizedError {
-  case unavailable, inputLimit
-  var errorDescription: String? {
-    switch self {
-    case .unavailable: return "기기 내 AI를 사용할 수 없어요. Apple Intelligence와 한국어 모델 준비 상태를 확인해 주세요."
-    case .inputLimit: return "기기 내 AI는 3,500자 이하의 글자를 분석할 수 있어요. 필요한 부분만 남겨 주세요."
-    }
   }
 }

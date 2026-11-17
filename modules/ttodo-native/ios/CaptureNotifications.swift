@@ -2,6 +2,42 @@ import Foundation
 import UserNotifications
 
 enum CaptureNotifications {
+  private static func reminderID(_ id: String, _ due: Date) -> String {
+    "ttodo.reminder.\(id).\(Int64(due.timeIntervalSince1970 * 1000))"
+  }
+  // Called only after approval commits. Content remains private on the lock screen.
+  // Date-specific IDs let a stale process remove its own request without deleting
+  // a newer schedule for the same task.
+  static func refreshReminders() async throws -> Bool {
+    let center = UNUserNotificationCenter.current()
+    let store = try SharedStore()
+    let plans = try store.reminderPlans()
+    let allowed = Set(plans.map { reminderID($0.id, $0.due) })
+    let pending = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix("ttodo.reminder.") }
+    let delivered = await center.deliveredNotifications().map { $0.request.identifier }.filter { $0.hasPrefix("ttodo.reminder.") }
+    center.removePendingNotificationRequests(withIdentifiers: pending.filter { !allowed.contains($0) })
+    center.removeDeliveredNotifications(withIdentifiers: delivered.filter { !allowed.contains($0) })
+    guard !plans.isEmpty else { return true }
+    let settings = await center.notificationSettings()
+    guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else { return false }
+    for plan in plans {
+      let identifier = reminderID(plan.id, plan.due)
+      guard try store.reminderPlans().contains(where: { reminderID($0.id, $0.due) == identifier }) else { continue }
+      let content = UNMutableNotificationContent()
+      content.title = "할 일 마감 알림"; content.body = "앱에서 마감할 할 일을 확인해 주세요."
+      content.sound = .default
+      // Fixed instants avoid changing an approved deadline when the timezone changes.
+      var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+      var components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: plan.due)
+      components.calendar = calendar; components.timeZone = calendar.timeZone
+      let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+      try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger))
+      if !(try store.reminderPlans().contains(where: { reminderID($0.id, $0.due) == identifier })) {
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+      }
+    }
+    return true
+  }
   static let category = "TTODO_CAPTURE_REVIEW"
   static let singleCategory = "TTODO_CAPTURE_SINGLE"
   static let openAction = "TTODO_CAPTURE_OPEN"
@@ -31,7 +67,7 @@ enum CaptureNotifications {
     categories = Set(categories.filter { ![category, singleCategory].contains($0.identifier) }); categories.insert(review); categories.insert(single)
     center.setNotificationCategories(categories)
     let content = UNMutableNotificationContent()
-    content.title = snapshot.hideContent ? "새 분석 결과가 있어요" : "할 일 \(pending.count)개를 발견했어요"
+    content.title = snapshot.hideContent ? "새 분석 결과가 있어요" : outcome.semiAutomatic ? "인식한 글자를 직접 선택해 주세요" : "할 일 \(pending.count)개를 발견했어요"
     content.body = quick ? pending[0]["title"] as? String ?? "분석함에서 내용을 확인하세요." : "분석함에서 내용을 확인하고 필요한 항목만 저장하세요."
     content.categoryIdentifier = quick ? singleCategory : category
     content.userInfo = ["analysis_id": outcome.id, "proposal_ids": pending.compactMap { $0["id"] as? String }]

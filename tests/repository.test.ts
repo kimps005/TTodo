@@ -24,6 +24,49 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
 
+test('OCR 반자동 다중 초안은 명시 승인 전 할 일·알림을 만들지 않고 선택만 원자적으로 저장한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const a = await repo.createAnalysis('semi-A', 'shortcuts', null), b = await repo.createAnalysis('semi-B', 'share', null);
+    assert.notEqual(a.token, b.token); assert.match(a.token!, /^[a-f0-9-]+-\d{13}$/);
+    await repo.finishAnalysis(b.id, [{ ...task, title: 'B 원문', confidence: 0 }], 'vision-ocr/manual-v1', b.token!);
+    await repo.finishAnalysis(a.id, [{ ...task, title: 'A 원문', confidence: 0 }, { ...task, title: 'A 다음 원문', confidence: 0 }], 'vision-ocr/manual-v1', a.token!);
+    assert.equal((await repo.listTodos()).length, 0);
+    assert.equal(native.prepare("SELECT * FROM preferences WHERE key LIKE 'todo_reminder.%'").all().length, 0);
+    const [first, second] = await repo.listExtracted(a.id);
+    const edits = [{ id: first.id, input: { title: '승인한 제목', due_at: '2026-11-20T09:00:00+09:00', due_precision: 'datetime' as const, reminder: true } }];
+    await repo.approve(a.id, edits); await repo.approve(a.id, edits);
+    const todos = await repo.listTodos(); assert.equal(todos.length, 1); assert.equal(todos[0].title, '승인한 제목'); assert.equal(todos[0].capture_provider, 'vision-ocr/manual-v1');
+    assert.equal((await repo.listExtracted(a.id)).find(t=>t.id === second.id)?.review_status, 'pending');
+    assert.equal((await repo.listExtracted(b.id))[0].title, 'B 원문');
+    assert.equal(native.prepare('SELECT value FROM preferences WHERE key=?').get(`todo_reminder.${todos[0].id}`)?.value, 'yes');
+    await assert.rejects(repo.restartUnstoredAnalysis(a.id), /한 번이라도/);
+    await repo.removeTodo(todos[0].id);
+    assert.equal(native.prepare("SELECT * FROM preferences WHERE key LIKE 'todo_reminder.%'").all().length, 0);
+    await assert.rejects(repo.restartUnstoredAnalysis(a.id), /한 번이라도/);
+  } finally { native.close(); }
+});
+
+test('중복 할 일 또는 날짜 없는 알림 설정은 선택 전체와 알림 설정을 롤백한다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    await repo.addTodo({ title: '이미 있는 할 일' });
+    const analysis = await repo.createAnalysis('duplicate', 'share', null);
+    await repo.finishAnalysis(analysis.id, [task, { ...task, title: '다른 제안' }], 'test', analysis.token!);
+    const [a, b] = await repo.listExtracted(analysis.id);
+    const first = { id: a.id, input: { title: '새 제목', due_at: '2026-11-20T09:00:00Z', due_precision: 'datetime' as const, reminder: true } };
+    await assert.rejects(repo.approve(analysis.id, [first, { id: b.id, input: { title: '이미 있는 할 일' } }]), /이미 있어요/);
+    await assert.rejects(repo.approve(analysis.id, [first, { id: b.id, input: { title: '날짜 없는 알림', reminder: true } }]), /날짜와 시각/);
+    assert.equal((await repo.listTodos()).length, 1);
+    assert.ok((await repo.listExtracted(analysis.id)).every(t=>t.review_status === 'pending'));
+    assert.equal(native.prepare("SELECT * FROM preferences WHERE key LIKE 'todo_reminder.%'").all().length, 0);
+    await repo.approve(analysis.id, [first]);
+    assert.equal((await repo.listTodos()).length, 2);
+  } finally { native.close(); }
+});
+
 test('저장 확인 뒤 유사 분석이 생기거나 바뀌면 승인 없이 할 일을 만들지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   try {

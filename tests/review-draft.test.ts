@@ -6,6 +6,19 @@ import { dueLabel } from '../src/domain/todo';
 
 const task: ExtractedTask = { id: 'old', analysis_id: 'capture', title: '원래 제목', description: '설명', due_at: '2026-11-20', due_precision: 'date', assignee: '담당', confidence: .9, evidence_text: '원문 근거', needs_confirmation: 1, review_status: 'pending', linked_todo_id: null };
 
+test('OCR 반자동 항목은 탭 전 선택하지 않고 알림 편집은 같은 대기 항목에만 보존한다', () => {
+  const ocr = { ...task, confidence: 0 };
+  assert.equal(reviewDraft(ocr).selected, false);
+  const draft = { ...reviewDraft(ocr), selected: true, reminder: true };
+  const [same] = reconcileReviewDrafts([draft], [ocr]);
+  assert.equal(same.selected, true); assert.equal(same.reminder, true);
+  assert.equal(reviewInput(same).reminder, true);
+  for (const fresh of [{ ...ocr, id: 'new' }, { ...ocr, review_status: 'saved' as const }]) {
+    const [changed] = reconcileReviewDrafts([draft], [fresh]);
+    assert.equal(changed.selected, false); assert.equal(changed.reminder, false);
+  }
+});
+
 test('마감 편집과 해제는 검토 표시와 승인 입력에 함께 반영한다', () => {
   const edited = { ...reviewDraft(task), day: '2027-01-02', time: '09:30', dateEdited: true };
   const input = reviewInput(edited);

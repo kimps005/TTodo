@@ -6,12 +6,14 @@ interface NativeBridge {
   runSQL(sql: string, params: (string | null)[]): Promise<void>;
   querySQL(sql: string, params: (string | null)[]): Promise<Record<string, unknown>[]>;
   localAIAvailability(): string;
+  ocrCandidates(text: string): string;
   systemVersion(): string;
   activityStatus(): string;
   recordStartupPhase?(phase: string): void;
   openNotificationSettings(): Promise<boolean>;
   clearCaptureNotifications(): Promise<void>;
   clearCaptureNotification(analysisId: string): void;
+  refreshReminders(): Promise<boolean>;
   extractTasks(text: string, capturedAt: string | null, timezone: string, messageDate: string | null): Promise<string>;
   recognizeText(uri: string): Promise<OCRResult>;
   reloadWidgets(): void;

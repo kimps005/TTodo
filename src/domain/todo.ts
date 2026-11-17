@@ -16,12 +16,14 @@ export interface Todo {
   sort_order: number;
   visibility: 'private' | 'shared';
   sync_state: 'local' | 'pending' | 'synced';
+  capture_provider?: string | null;
 }
 export interface TodoInput {
   title: string;
   description?: string | null;
   due_at?: string | null;
   due_precision?: DuePrecision;
+  reminder?: boolean;
 }
 export const TITLE_LIMIT = 200;
 export function normalizeTitle(value: string): string {

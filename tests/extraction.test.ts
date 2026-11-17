@@ -4,6 +4,16 @@ import { containsSensitiveText, enforceDateContext, validateExtraction } from '.
 import sensitiveSeed from '../evaluation/sensitive-seed.json';
 import dateContextSeed from '../evaluation/date-context-seed.json';
 const task = { is_actionable: true, title: '발표자료 보내기', description: null, due_at: null, due_precision: 'unknown', assignee: null, confidence: .8, evidence_text: '발표자료 보내줘', needs_confirmation: true };
+
+test('무행동 안내·취소·광고는 모델이 실행 가능이라고 응답해도 빈 배열로 걸러낸다', () => {
+  for (const evidence_text of ['별도 조치는 필요하지 않습니다', '이용에 참고 바랍니다', '지금 30% 할인', '보고서 요청은 취소됐어요. 제출하지 마세요.']) {
+    assert.deepEqual(validateExtraction([{ ...task, evidence_text }], evidence_text), []);
+    assert.equal(validateExtraction([{ ...task, confidence: 0, evidence_text }], evidence_text, 'ocr').length, 1, '사용자 주도 OCR 제목 선택은 AI 판별과 분리한다');
+  }
+  for (const source of ['', '가을 풍경', '오늘도 버텨보자 ㅋㅋ', '서버 점검 안내']) assert.deepEqual(validateExtraction([], source), []);
+  assert.throws(() => validateExtraction([task], '풍경 사진'));
+  assert.throws(() => validateExtraction({ tasks: [] }, '안내'));
+});
 const textLimits = [
   { text: '가' + '🚀'.repeat(2000), expected: '가' + '🚀'.repeat(1999) },
   { text: '가'.repeat(3999) + '🚀', expected: '가'.repeat(3999) },

@@ -14,8 +14,8 @@ function truncateText(value: string, limit: number): string {
   if (before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF) end -= 1;
   return value.slice(0, end);
 }
-export function validateExtraction(raw: unknown, sourceText: string): TaskSuggestion[] {
-  if (!Array.isArray(raw) || raw.length > 30) throw new Error('INVALID_RESPONSE');
+export function validateExtraction(raw: unknown, sourceText: string, mode: 'ai' | 'ocr' = 'ai'): TaskSuggestion[] {
+  if (!Array.isArray(raw) || (mode === 'ai' && raw.length > 30)) throw new Error('INVALID_RESPONSE');
   return raw.flatMap((item: unknown): TaskSuggestion[] => {
     if (!item || typeof item !== 'object') throw new Error('INVALID_RESPONSE');
     const t = item as Record<string, unknown>;
@@ -34,10 +34,14 @@ export function validateExtraction(raw: unknown, sourceText: string): TaskSugges
     validateDue(due, precision);
     const assignee = (t.assignee as string | null)?.trim() || null;
     const description = t.description as string | null;
+    if (mode === 'ai' && nonActionEvidence(t.evidence_text)) return [];
     return [{ title: normalizeTitle(t.title), description: description === null ? null : truncateText(description, 4000),
       due_at: due, due_precision: precision, assignee, confidence: t.confidence,
       evidence_text: truncateText(t.evidence_text, 4000), needs_confirmation: t.needs_confirmation || !assignee ? 1 : 0 }];
   });
+}
+export function nonActionEvidence(evidence: string): boolean {
+  return /별도\s*조치[는가]?\s*필요하지|할\s*일[이가]?\s*없|(?:신청|접수)\s*기간[은이가 ]*종료|이용에\s*참고\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\s*마세요|지금\s*\d+%\s*할인/.test(clean(evidence));
 }
 export function containsSensitiveText(text: string): boolean {
   const normalized = text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '');
