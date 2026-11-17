@@ -10,7 +10,7 @@ interface NativeBridge {
   systemVersion(): string;
   activityStatus(): string;
   recordStartupPhase?(phase: string): void;
-  openNotificationSettings(): Promise<boolean>;
+  openNotificationSettings(): Promise<'notifications' | 'application' | 'simulator' | 'failed'>;
   clearCaptureNotifications(): Promise<void>;
   clearCaptureNotification(analysisId: string): void;
   refreshReminders(): Promise<boolean>;

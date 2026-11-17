@@ -8,17 +8,27 @@ import OSLog
 public class TTodoNativeModule: Module {
   private let settingsDiagnostics = Logger(subsystem: "app.ttodo.ci", category: "notification-settings")
   private let startupDiagnostics = Logger(subsystem: "app.ttodo.ci", category: "startup")
-  @MainActor private func openNotificationSettings() async -> Bool {
-    guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
+  @MainActor private func openNotificationSettings() async -> String {
     // Only the isolated synthetic UI test opts in. Never record task content.
     let diagnostics = ProcessInfo.processInfo.environment["TTODO_CI_NOTIFICATION_DIAGNOSTICS"] == "1"
     if diagnostics {
       let settings = await UNUserNotificationCenter.current().notificationSettings()
-      settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic before bundle=\(Bundle.main.bundleIdentifier ?? "missing", privacy: .public) authorization=\(settings.authorizationStatus.rawValue) appState=\(UIApplication.shared.applicationState.rawValue) url=\(url.absoluteString, privacy: .public)")
+      settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic before authorization=\(settings.authorizationStatus.rawValue) appState=\(UIApplication.shared.applicationState.rawValue)")
     }
-    let opened = await UIApplication.shared.open(url)
-    if diagnostics { settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic after opened=\(opened, privacy: .public)") }
-    return opened
+    #if targetEnvironment(simulator)
+    let simulator = true
+    #else
+    let simulator = false
+    #endif
+    let destination = await NotificationSettingsRouter.open(simulator: simulator, openNotifications: {
+      guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
+      return await UIApplication.shared.open(url)
+    }, openApplication: {
+      guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
+      return await UIApplication.shared.open(url)
+    })
+    if diagnostics { settingsDiagnostics.notice("TTodoNotificationSettingsDiagnostic destination=\(destination.rawValue, privacy: .public)") }
+    return destination.rawValue
   }
   private let storageQueue = DispatchQueue(label: "app.ttodo.sqlite")
   private var sqlStore: SharedStore?
@@ -40,7 +50,7 @@ public class TTodoNativeModule: Module {
         ["store_opening", "store_ready", "evidence_pruned", "local_snapshot_ready", "permissions_ready", "activity_started", "activity_ready", "boot_ready", "boot_failed"].contains(phase) else { return }
       self.startupDiagnostics.notice("TTodoStartupDiagnostic phase=\(phase, privacy: .public)")
     }
-    AsyncFunction("openNotificationSettings") { () async -> Bool in
+    AsyncFunction("openNotificationSettings") { () async -> String in
       await self.openNotificationSettings()
     }
     AsyncFunction("extractTasks") { (text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String in

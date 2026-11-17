@@ -11,7 +11,7 @@ export const availabilityLabels: Record<string, string> = {
   missing_native: 'iOS 개발 빌드에서 사용할 수 있어요.',
 };
 export const onDeviceProvider: TaskExtractionProvider = {
-  version: 'apple-ondevice/prompt-v2',
+  version: 'apple-ondevice/prompt-v3',
   async extract(context, signal) {
     if (signal.aborted) throw new Error('분석을 취소했어요.');
     if (!context.text.trim()) return [];

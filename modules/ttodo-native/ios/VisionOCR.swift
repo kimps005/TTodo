@@ -45,11 +45,19 @@ enum VisionOCR {
     }.joined(separator: "\n")
   }
   static let maximumBytes = 20 * 1024 * 1024
+  // 2400^2 * 4 is at most ~22 MiB of decoded pixels, rather than a full
+  // high-resolution photo. Device OCR quality and total RSS still need QA.
+  static let maximumOCRDimension = 2400
   static func fingerprint(_ data: Data) -> String {
     SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
   static func recognize(_ data: Data) throws -> String {
-    let image = try thumbnail(data, maximumDimension: 2400)
+    try autoreleasepool { try recognize(image: thumbnail(data, maximumDimension: maximumOCRDimension)) }
+  }
+  static func recognize(fileURL: URL) throws -> String {
+    try autoreleasepool { try recognize(image: thumbnail(fileURL: fileURL, maximumDimension: maximumOCRDimension)) }
+  }
+  private static func recognize(image: CGImage) throws -> String {
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.recognitionLanguages = ["ko-KR", "en-US"]
@@ -61,11 +69,45 @@ enum VisionOCR {
   }
   static func thumbnail(_ data: Data, maximumDimension: Int) throws -> CGImage {
     guard !data.isEmpty, data.count <= maximumBytes else { throw OCRFailure.tooLarge }
-    guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+    guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary) else { throw OCRFailure.invalidImage }
+    return try thumbnail(source: source, maximumDimension: maximumDimension)
+  }
+  static func validateFile(_ url: URL) throws {
+    guard url.isFileURL else { throw OCRFailure.invalidImage }
+    let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+    guard size > 0, size <= maximumBytes else { throw OCRFailure.tooLarge }
+  }
+  static func fingerprint(fileURL: URL) throws -> String {
+    try validateFile(fileURL)
+    let file = try FileHandle(forReadingFrom: fileURL)
+    defer { try? file.close() }
+    var hash = SHA256()
+    var total = 0
+    while true {
+      let hasBytes = try autoreleasepool {
+        let bytes = try file.read(upToCount: 64 * 1024) ?? Data()
+        if bytes.isEmpty { return false }
+        total += bytes.count
+        guard total <= maximumBytes else { throw OCRFailure.tooLarge }
+        hash.update(data: bytes); return true
+      }
+      if !hasBytes { break }
+    }
+    return hash.finalize().map { String(format: "%02x", $0) }.joined()
+  }
+  static func thumbnail(fileURL: URL, maximumDimension: Int) throws -> CGImage {
+    try validateFile(fileURL)
+    guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { throw OCRFailure.invalidImage }
+    return try thumbnail(source: source, maximumDimension: maximumDimension)
+  }
+  private static func thumbnail(source: CGImageSource, maximumDimension: Int) throws -> CGImage {
+    guard maximumDimension > 0, maximumDimension <= maximumOCRDimension,
       let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
         kCGImageSourceCreateThumbnailWithTransform: true,
-        kCGImageSourceThumbnailMaxPixelSize: maximumDimension
+        kCGImageSourceThumbnailMaxPixelSize: maximumDimension,
+        kCGImageSourceShouldAllowFloat: false,
+        kCGImageSourceShouldCacheImmediately: true
       ] as CFDictionary) else { throw OCRFailure.invalidImage }
     return image
   }

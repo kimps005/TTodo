@@ -65,7 +65,6 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     try {
       if (messageDate.trim()) validateDue(messageDate.trim(), 'date');
       if (containsSensitiveText(text)) throw new Error('민감한 정보가 있는 글자는 분석하지 않아요. 필요한 할 일을 직접 입력해 주세요.');
-      if (nativeBridge?.localAIAvailability() === 'available' && Array.from(text).length > 3500) throw new Error('기기 내 AI는 3,500자 이하를 분석해요. 필요한 부분만 남겨 주세요.');
       const result = reanalyze ? { id: reanalyze.id, created: false, token: null } : await repository.createAnalysis(fingerprint, 'manual', null);
       analysisId = result.id;
       token = result.token;

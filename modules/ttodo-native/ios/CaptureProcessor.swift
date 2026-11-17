@@ -33,16 +33,32 @@ enum CaptureProcessor {
     service: any TodoExtractionServiceProtocol) async throws -> CaptureOutcome {
     try Task.checkCancellation()
     guard !data.isEmpty, data.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
+    return try await analyze(fingerprint: VisionOCR.fingerprint(data), messageDate: messageDate, channel: channel,
+      retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected, storeFactory: storeFactory,
+      recognize: { try recognize(data) }, service: service)
+  }
+  static func analyze(fileURL: URL, messageDate: String?, channel: String = "share", retryFailed: Bool = false,
+    reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil,
+    storeFactory: () throws -> SharedStore = { try SharedStore() },
+    service: any TodoExtractionServiceProtocol) async throws -> CaptureOutcome {
+    try Task.checkCancellation()
+    return try await analyze(fingerprint: VisionOCR.fingerprint(fileURL: fileURL), messageDate: messageDate, channel: channel,
+      retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected, storeFactory: storeFactory,
+      recognize: { try VisionOCR.recognize(fileURL: fileURL) }, service: service)
+  }
+  private static func analyze(fingerprint: String, messageDate: String?, channel: String, retryFailed: Bool,
+    reanalyzeUnstored: Bool, expected: CaptureReanalysisSnapshot?, storeFactory: () throws -> SharedStore,
+    recognize: () throws -> String, service: any TodoExtractionServiceProtocol) async throws -> CaptureOutcome {
     if let messageDate, !ExtractionValidator.validDate(messageDate) { throw ExtractionValidationError.invalid }
     let store = try storeFactory()
-    let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected, queued: true)
+    let registration = try store.registerCapture(fingerprint: fingerprint, channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected, queued: true)
     if !registration.created { return CaptureOutcome(id: registration.id, count: 0, duplicate: true) }
     guard let token = registration.token else { throw CaptureError.stateChanged }
     await CaptureWorkQueue.shared.acquire()
     do {
       try Task.checkCancellation()
       try store.startQueuedCapture(id: registration.id, token: token)
-      let text = try recognize(data)
+      let text = try recognize()
       try Task.checkCancellation()
       guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
       let tasks: [NativeSuggestion]
@@ -61,7 +77,7 @@ enum CaptureProcessor {
         }
       }
       try Task.checkCancellation()
-      try store.finishCapture(id: registration.id, tasks: tasks, provider: semiAutomatic ? "vision-ocr/manual-v1" : "apple-ondevice/prompt-v2", token: token)
+      try store.finishCapture(id: registration.id, tasks: tasks, provider: semiAutomatic ? "vision-ocr/manual-v1" : "apple-ondevice/prompt-v3", token: token)
       await CaptureWorkQueue.shared.release()
       return CaptureOutcome(id: registration.id, count: tasks.count, duplicate: false, semiAutomatic: semiAutomatic)
     } catch {

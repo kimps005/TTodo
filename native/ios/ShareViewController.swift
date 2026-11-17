@@ -75,15 +75,25 @@ private struct CaptureShareView: View {
     }
     return "마감 확인 필요"
   }
-  private func readImage() async throws -> Data {
+  private func readImage() async throws -> URL {
     guard providers.count == 1, let provider = providers.first else { throw ShareInputError.singleImage }
     return try await withCheckedThrowingContinuation { continuation in
       provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
         guard let url else { continuation.resume(throwing: ShareInputError.unreadable); return }
         do {
-          let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-          guard size > 0, size <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
-          continuation.resume(returning: try Data(contentsOf: url))
+          try VisionOCR.validateFile(url)
+          // Provider URLs expire when this callback returns. Copy on disk,
+          // never load the original compressed bytes or full bitmap into RAM.
+          let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-share-\(UUID().uuidString)", isDirectory: true)
+          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+          do {
+            let owned = directory.appendingPathComponent("input")
+            try FileManager.default.copyItem(at: url, to: owned)
+            continuation.resume(returning: owned)
+          } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+          }
         } catch { continuation.resume(throwing: error) }
       }
     }
@@ -96,9 +106,11 @@ private struct CaptureShareView: View {
       defer { working = false; operation = nil }
       do {
         guard try SharedStore().hasLocalAIConsent() else { throw CaptureError.consentRequired }
-        let data = try await readImage(); try Task.checkCancellation()
-        preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, service: AppleTodoExtractionService())
+        let file = try await readImage()
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        try Task.checkCancellation()
+        preview = try autoreleasepool { UIImage(cgImage: try VisionOCR.thumbnail(fileURL: file, maximumDimension: 720)) }
+        let result = try await CaptureProcessor.analyze(fileURL: file, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, service: AppleTodoExtractionService())
         try Task.checkCancellation()
         if reanalyze { CaptureNotifications.clearAnalysis(result.id) }
         let store = try SharedStore()

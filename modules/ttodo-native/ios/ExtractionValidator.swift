@@ -1,9 +1,13 @@
 import Foundation
 
 enum LocalAIError: LocalizedError {
-  case unavailable, inputLimit
+  case unavailable, inputLimit, contextLimit
   var errorDescription: String? {
-    self == .unavailable ? "기기 내 AI를 사용할 수 없어 인식한 글자를 직접 선택할 수 있어요." : "기기 내 AI는 3,500자 이하의 글자를 분석할 수 있어요. 필요한 부분만 남겨 주세요."
+    switch self {
+    case .unavailable: return "기기 내 AI를 사용할 수 없어 인식한 글자를 직접 선택할 수 있어요."
+    case .inputLimit: return "안전한 분석 범위를 넘었어요. 긴 문장을 줄이거나 필요한 부분만 남겨 다시 분석해 주세요. 일부 결과는 저장하지 않았어요."
+    case .contextLimit: return "기기 내 AI의 분석 용량을 넘었어요. 필요한 원문만 남겨 다시 분석해 주세요. 일부 결과는 저장하지 않았어요."
+    }
   }
 }
 

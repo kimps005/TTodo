@@ -83,3 +83,11 @@ XCTest는 거부 상태를 확인한 뒤 설정 앱의 첫 실행과 재진입�
 실제 iPhone에서는 미검증이며 서명/설치가 준비될 때까지 해당 출시 검증은 미완료다. Mac 대여·유료 가입·사이드로딩 경로를 제안하거나 변경하지 않는다. 이 조사만으로 제품 문제 해결 또는 실기기 OS 결함 확정으로 처리하지 않는다.
 
 근본 검증에는 해당 목적지를 제공하는 OS 환경이 필요하다. 설치된 세 런타임에서는 정상 경로를 확보하지 못했다. 공인 API로 숨긴 시스템 목적지를 복구하는 방법은 확인되지 않았으며 OS 파일/비공개 설정을 변경하지 않는다. 출시 전에 실제 iPhone에서 공개 API의 화면 도착과 제품 데이터 보존을 확인해야 한다. 현 상태의 분류는 **환경 의존으로 직접 이동 성공 미확인**, **해결 완료 아님**이다.
+
+## 2026-11-18 사용자 요청에 따른 복구 경로 추가
+
+기존 조사 결과는 유지한다. 새로운 요구에 따라 시뮬레이터에서는 공개 일반 앱 설정 URL로 전환하고, 메뉴를 제공하지 않는 환경에 대한 안내를 앱에 유지한다. 실제 기기는 알림 전용 URL이 false를 반환한 경우만 앱 설정으로 전환한다. true 뒤 목적지 선택 실패는 앱에서 감지할 공개 API가 없으므로 항상 수동 경로도 안내한다. 비공개 URL·OS 파일 수정·무조건 재시도는 추가하지 않았다.
+
+UI 회귀의 시뮬레이터 판정은 설정 앱 전경 전환·fallback 안내·앱 복귀 후 거부 상태와 초안/기존 할 일 보존이다. 실제 알림 화면 도착은 별도 기록하며 시뮬레이터 fallback 성공으로 대체하지 않는다. 과거 직접 이동 검사 실패는 변경하지 않는다. 새 실행 결과는 STATUS에 기록한다.
+
+공식 근거: [앱 설정 URL](https://developer.apple.com/documentation/uikit/uiapplication/opensettingsurlstring), [알림 설정 URL](https://developer.apple.com/documentation/uikit/uiapplication/opennotificationsettingsurlstring). 컨텍스트 예산은 [Apple TN3193](https://developer.apple.com/documentation/technotes/tn3193-managing-the-on-device-foundation-model-s-context-window), 이미지 처리는 [Apple Image and Graphics Best Practices](https://devstreaming-cdn.apple.com/videos/wwdc/2018/219mybpx95zm9x/219/219_image_and_graphics_best_practices.pdf)를 참고했다.
