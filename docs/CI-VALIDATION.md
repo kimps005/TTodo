@@ -5,6 +5,8 @@
 
 ## 품질 검사
 
+`42cce33`부터 최대 글자 흐름은 설정에서 ‘큰 목록 카드 상태 다시 확인’을 누르고 새 설치의 실제 ActivityKit 상태가 카드 없음 또는 OS 비허용으로 표시되는지 확인한다. 네이티브 모듈 누락·조회 실패·가짜 활성 표시는 통과하지 않는다. 카드 생성·실제 잠금화면·stale 전환·만료·OS 허용 변경은 이 검사에 포함하지 않으며 [별도 기기 검증표](WIDGET-QA.md)를 따른다. 수동 수명주기는 연도를 포함한 마감이 완료 후 재실행한 목록 레이블에도 유지되는지 확인한다. 실제 AI 제안을 주입하지 않으므로 AI 출처 표시나 검토 날짜 편집의 화면 통합 검증으로 대신하지 않는다.
+
 `quality.yml`은 TypeScript 타입/도메인/SQLite 테스트, 의존성 보안 검사, iOS Hermes 번들, 실제 Swift 저장소와 캡처 처리 로직 실행, iOS 앱·Widget·Share Extension 컴파일을 수행합니다.
 빌드 성공 후 실제 시뮬레이터 앱의 개인정보 선언을 경로별 JSON으로 수집합니다. [PRIVACY-MANIFESTS.md](PRIVACY-MANIFESTS.md)의 제한을 따르며 Release 개인정보 보고서·SDK 서명·네트워크·App Store 신고 완료로 간주하지 않습니다.
 별도 `release-archive.yml`은 계정/프로비저닝 없이 iPhoneOS SDK의 서명 없는 Release 아카이브를 생성하고 앱·위젯·공유 확장 포함, 메타데이터와 선언을 검사합니다. workflow·프로젝트 생성 설정·수집 스크립트 변경 push 또는 수동 실행에 연결합니다. iPhone에 설치하거나 서명 경로·App Store 배포를 변경하지 않습니다. [abbfd32 실행](https://github.com/kimps005/TTodo/actions/runs/43714107156)에서 아카이브/검사가 통과했으며 후속 검증은 STATUS.md에서 구분합니다.
