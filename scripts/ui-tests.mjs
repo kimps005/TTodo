@@ -128,6 +128,14 @@ function collectAppDiagnostics(device) {
   }
 }
 let device;
+function collectStartupDiagnostics(device) {
+  const args = ['simctl', 'spawn', device, 'log', 'help', 'show'];
+  const help = spawnSync('xcrun', args, { encoding: 'utf8', timeout: 60000, maxBuffer: 1024 * 1024 });
+  writeFileSync(path.join(output, 'startup-log-help.txt'), (help.stdout ?? '') + (help.stderr ?? ''));
+  if (!diagnosticHelp.supportsDiagnosticHelp('xcrun', args, help, ['--last', '--style', '--predicate', '--info'])) throw new Error('SDK startup diagnostic log help unavailable.');
+  const predicate = 'subsystem == "app.ttodo.ci" AND category == "startup" AND eventMessage BEGINSWITH "TTodoStartupDiagnostic"';
+  writeFileSync(path.join(output, 'startup-system.log'), run('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--last', '8m', '--style', 'compact', '--info', '--predicate', predicate], { timeout: 60000 }));
+}
 try {
   const runtimeInventory = JSON.parse(sim('list', 'runtimes', '--json'));
   const deviceInventory = JSON.parse(sim('list', 'devicetypes', '--json'));
@@ -195,6 +203,10 @@ try {
   }
   process.exitCode = 1;
 } finally {
+  if (device && /^[0-9a-f-]{36}$/i.test(device) && (scenario === 'task-lifecycle' || flow === 'testLargeTextInputEditingAndNavigation')) {
+    try { collectStartupDiagnostics(device); }
+    catch (error) { report.startup_diagnostic_error = error.message; }
+  }
   if (scenario === 'photo-ocr' && report.phase === 'photo-import' && device && /^[0-9a-f-]{36}$/i.test(device)) {
     try { collectPhotoImportDiagnostics(device); }
     catch (error) { report.photo_import_diagnostic_error = error.message; }

@@ -27,8 +27,11 @@ import { useDayClock } from './src/ui/useDayClock';
 import { TodoMetadata } from './src/ui/TodoMetadata';
 import { activityStatusLabels } from './src/ui/activityStatus';
 
+function startupPhase(phase: string) {
+  try { nativeBridge?.recordStartupPhase?.(phase); } catch { /* CI diagnostics cannot block offline tasks. */ }
+}
 function readActivityStatus(): string {
-  try { return nativeBridge?.activityStatus() ?? 'missing_native'; }
+  try { startupPhase('activity_started'); const status = nativeBridge?.activityStatus() ?? 'missing_native'; startupPhase('activity_ready'); return status; }
   catch { return 'unknown'; }
 }
 
@@ -63,8 +66,12 @@ function Application() {
   const [activityStatus, setActivityStatus] = useState('unknown');
   const refresh = useMemo(() => createLatestRefresh(async (repository: Repository) => {
     await repository.pruneEvidence();
+    startupPhase('evidence_pruned');
     // Notification settings must not prevent offline tasks from opening.
-    const [all, captures, privacy, intro, hidden, consent, permission] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content'), repository.getPreference('ai_local_consent'), Notifications.getPermissionsAsync().catch(() => null)]);
+    const [[all, captures, privacy, intro, hidden, consent], permission] = await Promise.all([
+      Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content'), repository.getPreference('ai_local_consent')]).then(snapshot => { startupPhase('local_snapshot_ready'); return snapshot; }),
+      Notifications.getPermissionsAsync().catch(() => null).then(permission => { startupPhase('permissions_ready'); return permission; }),
+    ]);
     return { all, captures, privacy, intro, hidden, consent, permission, activityStatus: readActivityStatus() };
   }, ({ all, captures, privacy, intro, hidden, consent, permission, activityStatus }) => {
     setTodos(all); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
@@ -76,9 +83,10 @@ function Application() {
       setError('');
       let cleanupFailed = false;
       try { clearTemporaryFiles(); } catch { cleanupFailed = true; }
-      const repository = await openRepository(); await refresh(repository); setRepo(repository); requestLockRefresh();
+      startupPhase('store_opening');
+      const repository = await openRepository(); startupPhase('store_ready'); await refresh(repository); setRepo(repository); startupPhase('boot_ready'); requestLockRefresh();
       if (cleanupFailed) Alert.alert('임시 파일 일부가 남아 있어요', '할 일은 계속 사용할 수 있어요. 남은 임시 이미지·내보내기 파일은 다음 앱 실행 때 다시 정리해요.');
-    } catch (e) { setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); }
+    } catch (e) { startupPhase('boot_failed'); setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); }
   }, [refresh]);
   useEffect(() => { void boot(); }, [boot]);
   useEffect(() => {
@@ -159,7 +167,7 @@ function Application() {
   }); } }]); };
   return <SafeAreaView style={ui.screen} edges={['top', 'left', 'right', 'bottom']}><StatusBar style="dark" />
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
+      <ScrollView key={tab} contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
         <View style={[ui.row, { justifyContent: 'space-between' }, fontScale >= 1.4 && { flexDirection: 'column', alignItems: 'flex-start' }]}><Text dynamicTypeRamp="caption2" style={[ui.eyebrow, { maxWidth: '100%' }]}>TTODO</Text><Text style={[ui.small, { flexShrink: 1, maxWidth: '100%' }]}>생각난 순간, 가볍게.</Text></View>
         {tab === 'today' && <>
           <View style={{ gap: 7 }}><Text style={ui.subtitle}>{today.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>오늘의 할 일</Text><Text style={ui.subtitle}>앞으로 할 일 <Text style={{ color: colors.accent, fontWeight: '700' }}>{pending.length}개</Text></Text></View>

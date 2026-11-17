@@ -8,6 +8,7 @@ interface NativeBridge {
   localAIAvailability(): string;
   systemVersion(): string;
   activityStatus(): string;
+  recordStartupPhase?(phase: string): void;
   openNotificationSettings(): Promise<boolean>;
   clearCaptureNotifications(): Promise<void>;
   clearCaptureNotification(analysisId: string): void;

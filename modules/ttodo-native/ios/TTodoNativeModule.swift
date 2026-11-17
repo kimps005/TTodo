@@ -7,6 +7,7 @@ import OSLog
 
 public class TTodoNativeModule: Module {
   private let settingsDiagnostics = Logger(subsystem: "app.ttodo.ci", category: "notification-settings")
+  private let startupDiagnostics = Logger(subsystem: "app.ttodo.ci", category: "startup")
   @MainActor private func openNotificationSettings() async -> Bool {
     guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return false }
     // Only the isolated synthetic UI test opts in. Never record task content.
@@ -30,6 +31,11 @@ public class TTodoNativeModule: Module {
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
     Function("systemVersion") { ProcessInfo.processInfo.operatingSystemVersionString }
     Function("activityStatus") { TodoActivityManager.status() }
+    Function("recordStartupPhase") { (phase: String) in
+      guard ProcessInfo.processInfo.environment["TTODO_CI_STARTUP_DIAGNOSTICS"] == "1",
+        ["store_opening", "store_ready", "evidence_pruned", "local_snapshot_ready", "permissions_ready", "activity_started", "activity_ready", "boot_ready", "boot_failed"].contains(phase) else { return }
+      self.startupDiagnostics.notice("TTodoStartupDiagnostic phase=\(phase, privacy: .public)")
+    }
     AsyncFunction("openNotificationSettings") { () async -> Bool in
       await self.openNotificationSettings()
     }

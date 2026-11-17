@@ -4,7 +4,7 @@
 
 ## 최신 코드 검증
 
-최신 품질 검사 대상은 `42cce33`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44030805582)에서 130개 JS 테스트·타입·보안 취약점 0·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집이 통과했다. 완료 목록 마감/AI 출처·연도 표시, 검토 마감 수정 요약, 큰 목록 카드의 시스템 상태 조회를 포함한다. 같은 소스의 [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44030964495)도 Xcode 26.6 / iPhoneOS SDK 26.5에서 성공했다. arm64 실행 파일·위젯/공유 확장 포함 검사·Info.plist 검증·개인정보 선언 12개 수집을 확인했다. [최신 세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44030805430)는 진행 중이다. 설치용 서명·실제 iPhone·AI 정확도 검증은 아니다.
+최신 품질 검사 대상은 `42cce33`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44030805582)에서 130개 JS 테스트·타입·보안 취약점 0·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집이 통과했다. 완료 목록 마감/AI 출처·연도 표시, 검토 마감 수정 요약, 큰 목록 카드의 시스템 상태 조회를 포함한다. 같은 소스의 [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44030964495)도 Xcode 26.6 / iPhoneOS SDK 26.5에서 성공했다. arm64 실행 파일·위젯/공유 확장 포함 검사·Info.plist 검증·개인정보 선언 12개 수집을 확인했다. [세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44030805430)는 iOS 26.2 수동 수명주기만 통과했고 최신 iOS 시작 대기·작은 화면 설정 제목 탐색은 실패했다. 탭 스크롤 분리와 시작 단계 진단은 후속 검증 전이며 STATUS 참조. 설치용 서명·실제 iPhone·AI 정확도 검증은 아니다.
 
 ## 기능별 현황
 

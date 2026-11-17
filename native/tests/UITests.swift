@@ -107,7 +107,13 @@ final class TTodoUITests: XCTestCase {
     let original = app.buttons["CI manual task, 마감 없음, 상세 편집"]
     XCTAssertTrue(original.waitForExistence(timeout: 15))
     app.terminate(); app.launch()
-    XCTAssertTrue(original.waitForExistence(timeout: 30), "The task must survive a real process relaunch.")
+    let survived = original.waitForExistence(timeout: 30)
+    if !survived {
+      screenshot(app, name: "relaunch-missing-task-screen")
+      let tree = XCTAttachment(string: "App state: \(app.state.rawValue)\n\(app.debugDescription)")
+      tree.name = "relaunch-missing-task-tree"; tree.lifetime = .keepAlways; add(tree)
+    }
+    XCTAssertTrue(survived, "The task must survive a real process relaunch.")
     tap(original, in: app)
     let title = app.textViews["할 일 제목"]
     XCTAssertTrue(title.waitForExistence(timeout: 15))
@@ -172,6 +178,7 @@ final class TTodoUITests: XCTestCase {
   @MainActor func testManualTaskLifecycleWithoutSettingsNavigation() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
+    app.launchEnvironment["TTODO_CI_STARTUP_DIAGNOSTICS"] = "1"
     app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
     app.launch()
     let start = app.buttons["이 설정으로 시작하기"]
@@ -280,6 +287,7 @@ final class TTodoUITests: XCTestCase {
   @MainActor func testLargeTextInputEditingAndNavigation() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
+    app.launchEnvironment["TTODO_CI_STARTUP_DIAGNOSTICS"] = "1"
     app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
     app.launch()
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
@@ -299,7 +307,9 @@ final class TTodoUITests: XCTestCase {
     tap(input, in: app); input.typeText("CI large unsaved draft")
     screenshot(app, name: "large-04-keyboard-tabs")
     tap(control(app, label: "설정"), in: app)
-    reveal(control(app, label: "내 방식으로"), in: app)
+    let settingsTitle = control(app, label: "내 방식으로")
+    XCTAssertTrue(settingsTitle.waitForExistence(timeout: 15))
+    XCTAssertTrue(settingsTitle.isHittable, "Switching tabs must open the new screen at the top instead of inheriting another tab's scroll position.")
     screenshot(app, name: "large-05-settings")
     tap(app.buttons["큰 목록 카드 상태 다시 확인"], in: app)
     let cardStatus = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "카드 상태:")).firstMatch
