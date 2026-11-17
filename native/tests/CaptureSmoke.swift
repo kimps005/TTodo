@@ -3,6 +3,38 @@ import Foundation
 @main
 struct CaptureSmoke {
   static func check(_ condition: Bool) { precondition(condition) }
+  static func checkSimilarApproval(directory: URL, tasks: [NativeSuggestion]) throws {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let store = try SharedStore(directoryOverride: directory)
+    try store.runSQL("INSERT INTO preferences(key,value) VALUES('ai_local_consent','yes')", params: [])
+    let current = try store.registerCapture(fingerprint: "similar-current", channel: "share")
+    try store.finishCapture(id: current.id, tasks: tasks, provider: "test-only", token: current.token!)
+    let proposal = try store.captureReviewItems(id: current.id)[0]
+    let edit = CaptureTaskEdit(id: proposal.id, title: proposal.title, description: nil, dueAt: nil, duePrecision: "unknown")
+    let before = try store.similarCaptures(id: current.id)
+    check(before.isEmpty)
+    let other = try store.registerCapture(fingerprint: "similar-other", channel: "manual")
+    try store.finishCapture(id: other.id, tasks: tasks, provider: "test-only", token: other.token!)
+    do {
+      _ = try store.approveReviewedCapture(id: current.id, edits: [edit], expectedSimilar: before)
+      fatalError("New similar capture bypassed confirmation")
+    } catch CaptureError.stateChanged { }
+    check(try store.querySQL("SELECT id FROM todos", params: []).isEmpty)
+    check(try store.captureReviewItems(id: current.id).count == 1)
+    let shown = try store.similarCaptures(id: current.id)
+    let otherProposal = try store.captureReviewItems(id: other.id)[0]
+    let otherEdit = CaptureTaskEdit(id: otherProposal.id, title: "다른 경로에서 저장한 제목", description: nil, dueAt: nil, duePrecision: "unknown")
+    check(try store.approveReviewedCapture(id: other.id, edits: [otherEdit]) == 1)
+    do {
+      _ = try store.approveReviewedCapture(id: current.id, edits: [edit], expectedSimilar: shown)
+      fatalError("Changed similar capture bypassed confirmation")
+    } catch CaptureError.stateChanged { }
+    let confirmed = try store.similarCaptures(id: current.id)
+    check(try store.approveReviewedCapture(id: current.id, edits: [edit], expectedSimilar: confirmed) == 1)
+    check(try store.approveReviewedCapture(id: current.id, edits: [edit], expectedSimilar: confirmed) == 0)
+    check(try store.querySQL("SELECT id FROM todos", params: []).count == 2)
+    print("Similar capture approval: new/changed matches blocked, fresh confirmation and duplicate approval passed")
+  }
   static func checkAtomicWrites(directory: URL, tasks: [NativeSuggestion]) throws {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let store = try SharedStore(directoryOverride: directory)
@@ -151,6 +183,7 @@ struct CaptureSmoke {
       check(exact.count == 1 && Array(exact[0].evidence_text.utf8) == Array(source.utf8))
     }
     try checkAtomicWrites(directory: directory.appendingPathComponent("atomic-writes"), tasks: ExtractionValidator.validate(raw, sourceText: text, messageDate: nil))
+    try checkSimilarApproval(directory: directory.appendingPathComponent("similar-approval"), tasks: ExtractionValidator.validate(raw, sourceText: text, messageDate: nil))
     for assignee in ["", " \n\t", "\u{00A0}", "  사용자  "] {
       var rows = try JSONSerialization.jsonObject(with: Data(raw.utf8)) as! [[String: Any]]
       rows[0]["assignee"] = assignee; rows[0]["needs_confirmation"] = false

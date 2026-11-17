@@ -46,7 +46,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
   const selected = items.filter(t => t.selected && t.review_status === 'pending');
   const save = () => {
     const isCurrent = confirmation.capture();
-    const approve = () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '제안 상태가 바뀌었어요. 내용을 다시 확인한 뒤 저장해 주세요.'); return; } void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } })))); };
+    const approve = () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '제안 상태가 바뀌었어요. 내용을 다시 확인한 뒤 저장해 주세요.'); return; } void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } })), similar)); };
     if (similar.length) Alert.alert('이미 있는 할 일인지 확인했나요?', '최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.', [{ text: '다시 확인', style: 'cancel', onPress: () => { isCurrent(); } }, { text: '확인하고 저장', onPress: approve }]);
     else approve();
   };

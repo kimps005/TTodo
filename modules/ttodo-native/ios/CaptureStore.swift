@@ -18,7 +18,7 @@ struct CaptureReanalysisSnapshot {
   let status: String
   let taskIds: [String]
 }
-struct SimilarCapture: Identifiable {
+struct SimilarCapture: Identifiable, Equatable {
   let id: String
   let title: String
   let saved: Bool
@@ -234,12 +234,16 @@ extension SharedStore {
       }
     }
   }
-  func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], now: Date = Date()) throws -> Int {
+  func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], expectedSimilar: [SimilarCapture]? = nil, now: Date = Date()) throws -> Int {
     try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       guard let status = analysis["status"] as? String, ["review", "saved"].contains(status), let expires = analysis["expires_at"] as? String,
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
       let time = ISO8601DateFormatter().string(from: now)
+      if let expectedSimilar {
+        let pending = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=? AND review_status='pending'", params: [id]).compactMap { $0["id"] as? String }
+        if edits.contains(where: { pending.contains($0.id) }), try similarCaptures(id: id, now: now) != expectedSimilar { throw CaptureError.stateChanged }
+      }
       var count = 0
       for edit in edits {
         let title = edit.title.trimmingCharacters(in: .whitespacesAndNewlines)

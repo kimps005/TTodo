@@ -148,10 +148,13 @@ export class Repository {
     });
     return snapshot!;
   }
-  async findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
+  findSimilarAnalyses(id: string, source: string): Promise<SimilarCapture[]> {
+    return this.findSimilarInConnection(this.db, id, source);
+  }
+  private async findSimilarInConnection(connection: SqlConnection, id: string, source: string): Promise<SimilarCapture[]> {
     const time = this.now(), now = Date.parse(time), matches: SimilarCapture[] = [];
     // Filter before limiting so expired/future records cannot hide valid evidence.
-    const rows = await this.db.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' AND julianday(a.received_at) BETWEEN julianday(?) AND julianday(?) AND julianday(a.expires_at)>julianday(?) ORDER BY julianday(a.received_at) DESC,e.rowid DESC LIMIT 200", id, new Date(now - 7 * 86400000).toISOString(), time, time);
+    const rows = await connection.getAllAsync<{ analysis_id: string; title: string; evidence_text: string; review_status: string; received_at: string; expires_at: string }>("SELECT e.analysis_id,e.title,e.evidence_text,e.review_status,a.received_at,a.expires_at FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE a.id<>? AND e.review_status IN ('pending','saved') AND e.evidence_text<>'' AND julianday(a.received_at) BETWEEN julianday(?) AND julianday(?) AND julianday(a.expires_at)>julianday(?) ORDER BY julianday(a.received_at) DESC,e.rowid DESC LIMIT 200", id, new Date(now - 7 * 86400000).toISOString(), time, time);
     for (const row of rows) {
       const age = now - Date.parse(row.received_at);
       if (!(age >= 0 && age <= 7 * 86400000 && Date.parse(row.expires_at) > now) || matches.some(m => m.analysis_id === row.analysis_id)) continue;
@@ -216,11 +219,19 @@ export class Repository {
       await tx.runAsync('UPDATE analyses SET status=?,model_version=?,error_code=NULL,processing_token=NULL WHERE id=?', tasks.length ? 'review' : 'empty', model, id);
     });
   }
-  async approve(id: string, edits: { id: string; input: TodoInput }[]): Promise<void> {
+  async approve(id: string, edits: { id: string; input: TodoInput }[], expectedSimilar?: SimilarCapture[]): Promise<void> {
     await this.db.withExclusiveTransactionAsync(async tx => {
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       if (!analysis || !['review', 'saved'].includes(analysis.status)) throw new Error('저장할 수 없는 분석 결과예요.');
       if (!(Date.parse(analysis.expires_at) > Date.parse(this.now()))) throw new Error('보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요.');
+      if (expectedSimilar !== undefined) {
+        const pendingTasks = await tx.getAllAsync<{ id: string; evidence_text: string }>("SELECT id,evidence_text FROM extracted_tasks WHERE analysis_id=? AND review_status='pending' ORDER BY rowid", id);
+        if (edits.some(edit => pendingTasks.some(task => task.id === edit.id))) {
+          const current = await this.findSimilarInConnection(tx, id, pendingTasks.map(task => task.evidence_text).join('\n'));
+          const signature = (matches: SimilarCapture[]) => JSON.stringify(matches.map(m => [m.analysis_id, m.title, m.received_at, m.saved]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+          if (signature(current) !== signature(expectedSimilar)) throw new Error('비슷한 분석 기록이 변경되었어요. 최신 내용을 확인한 뒤 다시 저장해 주세요.');
+        }
+      }
       for (const edit of edits) {
         const task = await tx.getFirstAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE id=? AND analysis_id=?', edit.id, id);
         if (!task) throw new Error('분석 항목을 찾을 수 없어요.');

@@ -23,6 +23,33 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+
+test('저장 확인 뒤 유사 분석이 생기거나 바뀌면 승인 없이 할 일을 만들지 않는다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const current = await repo.createAnalysis('similar-confirm-current', 'manual', null);
+    await repo.finishAnalysis(current.id, [task], 'test', current.token!);
+    const [proposal] = await repo.listExtracted(current.id);
+    const edits = [{ id: proposal.id, input: { title: proposal.title } }];
+    const before = await repo.findSimilarAnalyses(current.id, task.evidence_text);
+    assert.deepEqual(before, []);
+    const other = await repo.createAnalysis('similar-confirm-other', 'share', null);
+    await repo.finishAnalysis(other.id, [task], 'test', other.token!);
+    await assert.rejects(repo.approve(current.id, edits, before), /비슷한 분석/);
+    assert.equal((await repo.listTodos()).length, 0);
+    assert.equal((await repo.listExtracted(current.id))[0].review_status, 'pending');
+    const shown = await repo.findSimilarAnalyses(current.id, task.evidence_text);
+    const [otherTask] = await repo.listExtracted(other.id);
+    await repo.approve(other.id, [{ id: otherTask.id, input: { title: '다른 경로에서 저장한 제목' } }]);
+    await assert.rejects(repo.approve(current.id, edits, shown), /비슷한 분석/);
+    assert.equal((await repo.listTodos()).length, 1);
+    const confirmed = await repo.findSimilarAnalyses(current.id, task.evidence_text);
+    await repo.approve(current.id, edits, confirmed);
+    await repo.approve(current.id, edits, confirmed);
+    assert.equal((await repo.listTodos()).length, 2);
+  } finally { native.close(); }
+});
 test('재분석 확인 후 제안이 교체되면 새 제안을 보존하고 다시 확인하도록 한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   try {

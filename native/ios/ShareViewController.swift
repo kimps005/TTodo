@@ -36,6 +36,7 @@ private struct CaptureShareView: View {
   @State private var hasSaved = false
   @State private var similar: [SimilarCapture] = []
   @State private var confirmSimilar = false
+  @State private var similarConfirmation: [SimilarCapture]?
   @State private var reviewUnavailable = false
   @discardableResult private func refreshReview() -> Bool {
     guard let analysisId else { return true }
@@ -110,19 +111,28 @@ private struct CaptureShareView: View {
       }
     }
   }
-  private func save(confirmedSimilar: Bool = false) {
+  private func save(expectedSimilar: [SimilarCapture]? = nil) {
     guard !working, let analysisId else { return }
     guard refreshReview() else { return }
     working = true; failure = nil
     let count: Int
     do {
-      if !similar.isEmpty && !confirmedSimilar { working = false; confirmSimilar = true; return }
+      // Re-read before approval. A confirmation for older matches must not
+      // silently acknowledge a newly discovered or changed similar capture.
+      if let expectedSimilar, similar != expectedSimilar {
+        working = false
+        failure = "비슷한 분석 기록이 변경되었어요. 최신 내용을 확인한 뒤 다시 저장해 주세요."
+        return
+      }
+      if !similar.isEmpty && expectedSimilar == nil {
+        similarConfirmation = similar; working = false; confirmSimilar = true; return
+      }
       guard items.contains(where: \.selected) else { throw CaptureError.reviewRequired }
       let edits = try items.filter(\.selected).map { item in
         let deadline = item.dateEdited ? try ExtractionValidator.localDeadline(day: item.dateText, time: item.timeText) : NativeDeadline(dueAt: item.dueAt, precision: item.duePrecision)
         return CaptureTaskEdit(id: item.id, title: item.title, description: item.description, dueAt: deadline.dueAt, duePrecision: deadline.precision)
       }
-      count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits)
+      count = try SharedStore().approveReviewedCapture(id: analysisId, edits: edits, expectedSimilar: similar)
     } catch {
       let detail = (error as? LocalizedError)?.errorDescription ?? "저장하지 못했어요. 다시 시도해 주세요."
       _ = refreshReview(); failure = detail; working = false; return
@@ -183,8 +193,12 @@ private struct CaptureShareView: View {
           if !items.isEmpty {
             Button("선택한 \(items.filter(\.selected).count)개 저장") { save() }.buttonStyle(.borderedProminent).disabled(working || reviewUnavailable || !items.contains(where: \.selected))
               .alert("이미 있는 할 일인지 확인했나요?", isPresented: $confirmSimilar) {
-                Button("다시 확인", role: .cancel) { }
-                Button("확인하고 저장") { save(confirmedSimilar: true) }
+                Button("다시 확인", role: .cancel) { similarConfirmation = nil }
+                Button("확인하고 저장") {
+                  guard let expected = similarConfirmation else { return }
+                  similarConfirmation = nil
+                  save(expectedSimilar: expected)
+                }
               } message: { Text("최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.") }
             Button("남은 제안 모두 무시") {
               guard let analysisId else { return }
