@@ -44,9 +44,34 @@ struct CaptureSmoke {
       try store.finishCapture(id: restarted.id, tasks: tasks, provider: "replacement", token: restarted.token!)
       let replacement = try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [registration.id])
       check(replacement.count == 1 && !proposals.contains { $0["id"] as? String == replacement[0]["id"] as? String })
+      let confirmed = try store.captureReanalysisSnapshot(id: registration.id)
+      let newer = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true, expected: confirmed)
+      try store.finishCapture(id: newer.id, tasks: tasks, provider: "newer-result", token: newer.token!)
+      let beforeStale = try snapshot()
+      // Status has returned to review, but the proposals were replaced while
+      // the original confirmation was open. Preserve the newer body and token.
+      do {
+        _ = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true, expected: confirmed)
+        fatalError("Stale reanalysis confirmation removed newer proposals")
+      } catch CaptureError.stateChanged { }
+      check(try snapshot() == beforeStale)
+      do {
+        _ = try store.registerCapture(fingerprint: "missing-\(stage)", channel: "share", reanalyzeUnstored: true, expected: confirmed)
+        fatalError("Confirmation for another fingerprint registered a new analysis")
+      } catch CaptureError.stateChanged { }
+      check(try snapshot() == beforeStale)
+      let current = try store.captureReanalysisSnapshot(id: registration.id)
+      let restartedAgain = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true, expected: current)
+      let beforeProcessing = try snapshot()
+      do {
+        _ = try store.registerCapture(fingerprint: "atomic-\(stage)", channel: "share", reanalyzeUnstored: true, expected: current)
+        fatalError("Stale confirmation replaced a running analysis")
+      } catch CaptureError.stateChanged { }
+      check(try snapshot() == beforeProcessing)
+      try store.finishCapture(id: restartedAgain.id, tasks: tasks, provider: "fresh-confirmation", token: restartedAgain.token!)
       check(try store.querySQL("SELECT id FROM todos", params: []).isEmpty)
     }
-    print("Capture atomic writes: proposal/state rollback, reanalysis restoration and retry passed")
+    print("Capture atomic writes: rollback, reanalysis restoration and stale confirmation protection passed")
   }
   static func main() async throws {
     func reviewItem(_ id: String, evidence: String = "합성 원문", confirmation: Bool = false) -> CaptureReviewItem {
@@ -347,6 +372,22 @@ struct CaptureSmoke {
       check(row["status"] as? String == "failed" && row["error_code"] as? String == "CANCELLED")
       check(try store.querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [row["id"] as? String]).isEmpty)
     }
+    let confirmedData = Data("confirmed-reanalysis".utf8)
+    let confirmedFingerprint = VisionOCR.fingerprint(confirmedData)
+    let confirmedCapture = try store.registerCapture(fingerprint: confirmedFingerprint, channel: "share")
+    try store.finishCapture(id: confirmedCapture.id, tasks: [firstTask], provider: "test-only", token: confirmedCapture.token!)
+    let oldConfirmation = try store.captureReanalysisSnapshot(id: confirmedCapture.id)
+    let newerCapture = try store.registerCapture(fingerprint: confirmedFingerprint, channel: "share", reanalyzeUnstored: true)
+    try store.finishCapture(id: newerCapture.id, tasks: [secondTask], provider: "newer", token: newerCapture.token!)
+    let newConfirmation = try store.captureReanalysisSnapshot(id: newerCapture.id)
+    do {
+      _ = try await CaptureProcessor.analyze(data: confirmedData, messageDate: nil, channel: "share", reanalyzeUnstored: true, expected: oldConfirmation, storeFactory: factory,
+        recognize: { _ in fatalError("Stale confirmation started OCR") },
+        extract: { _, _, _, _ in fatalError("Stale confirmation started the model") })
+      fatalError("Processor ignored the confirmed proposal snapshot")
+    } catch CaptureError.stateChanged { }
+    check(try store.captureReanalysisSnapshot(id: newerCapture.id).taskIds == newConfirmation.taskIds)
+    check(try store.captureReviewItems(id: newerCapture.id)[0].title == secondTask.title)
     let notification = try store.registerCapture(fingerprint: "notification-current", channel: "shortcuts")
     try store.finishCapture(id: notification.id, tasks: [firstTask], provider: "test-only", token: notification.token!)
     let notificationIds = try store.captureReviewItems(id: notification.id).map(\.id)

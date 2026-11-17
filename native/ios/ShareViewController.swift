@@ -32,6 +32,7 @@ private struct CaptureShareView: View {
   @State private var operation: Task<Void, Never>?
   @State private var preview: UIImage?
   @State private var confirmReanalysis = false
+  @State private var reanalysisSnapshot: CaptureReanalysisSnapshot?
   @State private var hasSaved = false
   @State private var similar: [SimilarCapture] = []
   @State private var confirmSimilar = false
@@ -79,18 +80,18 @@ private struct CaptureShareView: View {
       }
     }
   }
-  private func analyze(reanalyze: Bool = false) {
+  private func analyze(reanalyze: Bool = false, expected: CaptureReanalysisSnapshot? = nil) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
     // Keep the draft disabled while reading the image. If registration never
     // starts, a read failure must not discard edits to still-pending proposals.
-    if reanalyze, let analysisId { CaptureNotifications.clearAnalysis(analysisId) }
     operation = Task {
       defer { working = false; operation = nil }
       do {
         let data = try await readImage(); try Task.checkCancellation()
         preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, extract: OnDeviceExtraction.extract)
+        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, extract: OnDeviceExtraction.extract)
         try Task.checkCancellation()
+        if reanalyze { CaptureNotifications.clearAnalysis(result.id) }
         let store = try SharedStore()
         let proposals = try store.captureReviewItems(id: result.id)
         analysisId = result.id; items = proposals; reviewUnavailable = false
@@ -158,7 +159,13 @@ private struct CaptureShareView: View {
           }
           if analysisId != nil {
             Text(hasSaved ? "저장한 기록이 있는 캡처는 재분석하지 않아요. 저장한 할 일은 앱 목록에서 직접 수정해 주세요." : "저장 전에는 같은 캡처를 다시 분석할 수 있어요. 기존 미저장 제안과 수정 내용은 교체돼요.").font(.caption).foregroundStyle(.secondary)
-            Button("이 사진 다시 분석") { confirmReanalysis = true }.disabled(working || hasSaved || reviewUnavailable)
+            Button("이 사진 다시 분석") {
+              guard let analysisId else { return }
+              do {
+                reanalysisSnapshot = try SharedStore().captureReanalysisSnapshot(id: analysisId)
+                confirmReanalysis = true
+              } catch { failure = "분석 상태를 확인하지 못했어요. 최신 상태를 다시 확인해 주세요." }
+            }.disabled(working || hasSaved || reviewUnavailable)
           }
           ForEach($items) { $item in
             VStack(alignment: .leading, spacing: 12) {
@@ -196,8 +203,12 @@ private struct CaptureShareView: View {
           if !working && analysisId != nil { failure = nil; _ = refreshReview() }
         }
         .alert("다시 분석할까요?", isPresented: $confirmReanalysis) {
-          Button("취소", role: .cancel) { }
-          Button("다시 분석", role: .destructive) { analyze(reanalyze: true) }
+          Button("취소", role: .cancel) { reanalysisSnapshot = nil }
+          Button("다시 분석", role: .destructive) {
+            guard let snapshot = reanalysisSnapshot else { return }
+            reanalysisSnapshot = nil
+            analyze(reanalyze: true, expected: snapshot)
+          }
         } message: { Text("이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.") }
     }
   }

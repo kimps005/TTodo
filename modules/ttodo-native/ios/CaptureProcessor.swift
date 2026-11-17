@@ -3,7 +3,7 @@ import Foundation
 struct CaptureOutcome { let id: String; let count: Int; let duplicate: Bool }
 enum CaptureProcessor {
   typealias Extract = (String, String?, String, String?) async throws -> String
-  static func analyze(data: Data, messageDate: String?, channel: String = "shortcuts", retryFailed: Bool = false, reanalyzeUnstored: Bool = false,
+  static func analyze(data: Data, messageDate: String?, channel: String = "shortcuts", retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil,
     storeFactory: () throws -> SharedStore = { try SharedStore() },
     recognize: (Data) throws -> String = VisionOCR.recognize,
     extract: Extract) async throws -> CaptureOutcome {
@@ -11,7 +11,7 @@ enum CaptureProcessor {
     guard !data.isEmpty, data.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
     if let messageDate, !ExtractionValidator.validDate(messageDate) { throw ExtractionValidationError.invalid }
     let store = try storeFactory()
-    let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored)
+    let registration = try store.registerCapture(fingerprint: VisionOCR.fingerprint(data), channel: channel, retryFailed: retryFailed, reanalyzeUnstored: reanalyzeUnstored, expected: expected)
     if !registration.created { return CaptureOutcome(id: registration.id, count: 0, duplicate: true) }
     guard let token = registration.token else { throw CaptureError.stateChanged }
     do {

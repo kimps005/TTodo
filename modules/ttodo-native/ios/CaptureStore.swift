@@ -13,6 +13,11 @@ enum CaptureError: LocalizedError {
   }
 }
 struct CaptureRegistration { let id: String; let created: Bool; let token: String? }
+struct CaptureReanalysisSnapshot {
+  let id: String
+  let status: String
+  let taskIds: [String]
+}
 struct SimilarCapture: Identifiable {
   let id: String
   let title: String
@@ -118,11 +123,25 @@ extension SharedStore {
   func hasLocalAIConsent() throws -> Bool {
     try querySQL("SELECT value FROM preferences WHERE key='ai_local_consent'", params: []).first?["value"] as? String == "yes"
   }
-  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, reanalyzeUnstored: Bool = false, now: Date = Date()) throws -> CaptureRegistration {
+  func captureReanalysisSnapshot(id: String) throws -> CaptureReanalysisSnapshot {
+    try transaction {
+      guard let analysis = try querySQL("SELECT status FROM analyses WHERE id=?", params: [id]).first,
+        let status = analysis["status"] as? String else { throw CaptureError.stateChanged }
+      let ids = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [id]).compactMap { $0["id"] as? String }
+      return CaptureReanalysisSnapshot(id: id, status: status, taskIds: ids)
+    }
+  }
+  func registerCapture(fingerprint: String, channel: String, retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil, now: Date = Date()) throws -> CaptureRegistration {
     guard ["manual", "share", "shortcuts"].contains(channel) else { throw CaptureError.stateChanged }
     return try transaction {
       guard try hasLocalAIConsent() else { throw CaptureError.consentRequired }
       let existing = try querySQL("SELECT id,status FROM analyses WHERE image_fingerprint=?", params: [fingerprint]).first
+      if let expected {
+        guard reanalyzeUnstored, existing?["id"] as? String == expected.id,
+          existing?["status"] as? String == expected.status else { throw CaptureError.stateChanged }
+        let ids = try querySQL("SELECT id FROM extracted_tasks WHERE analysis_id=?", params: [expected.id]).compactMap { $0["id"] as? String }
+        guard ids.sorted() == expected.taskIds.sorted() else { throw CaptureError.stateChanged }
+      }
       let time = ISO8601DateFormatter().string(from: now)
       let expires = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86400))
       let token = UUID().uuidString.lowercased()
