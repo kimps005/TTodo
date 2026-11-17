@@ -1,9 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ExtractedTask } from '../src/data/repository';
-import { reconcileReviewDrafts, reviewDraft } from '../src/domain/reviewDraft';
+import { reconcileReviewDrafts, reviewDraft, reviewDeadlineLabel, reviewInput } from '../src/domain/reviewDraft';
+import { dueLabel } from '../src/domain/todo';
 
 const task: ExtractedTask = { id: 'old', analysis_id: 'capture', title: '원래 제목', description: '설명', due_at: '2026-11-20', due_precision: 'date', assignee: '담당', confidence: .9, evidence_text: '원문 근거', needs_confirmation: 1, review_status: 'pending', linked_todo_id: null };
+
+test('마감 편집과 해제는 검토 표시와 승인 입력에 함께 반영한다', () => {
+  const edited = { ...reviewDraft(task), day: '2027-01-02', time: '09:30', dateEdited: true };
+  const input = reviewInput(edited);
+  assert.equal(input.due_at, new Date('2027-01-02T09:30:00').toISOString());
+  assert.equal(input.due_precision, 'datetime');
+  assert.equal(reviewDeadlineLabel(edited), dueLabel({ due_at: input.due_at!, due_precision: 'datetime' }));
+  assert.notEqual(reviewDeadlineLabel(edited), reviewDeadlineLabel(reviewDraft(task)));
+  const cleared = { ...edited, day: '', time: '' };
+  assert.equal(reviewInput(cleared).due_at, null);
+  assert.equal(reviewInput(cleared).due_precision, 'unknown');
+  assert.equal(reviewDeadlineLabel(cleared), '마감 없음');
+});
+
+test('미완성·잘못된 마감은 이전 AI 날짜로 표시하지 않고 승인도 거부한다', () => {
+  for (const [day, time] of [['2027-01-', ''], ['2027-02-30', ''], ['', '09:30'], ['2027-01-02', '24:00']]) {
+    const edited = { ...reviewDraft(task), day, time, dateEdited: true };
+    assert.equal(reviewDeadlineLabel(edited), '입력한 날짜·시각을 확인해 주세요.');
+    assert.throws(() => reviewInput(edited));
+  }
+});
+
+test('마감을 편집하지 않으면 원래 시간대·초·밀리초를 승인 입력에 보존한다', () => {
+  const original = { ...task, due_at: '2026-11-20T09:30:25.123+09:00', due_precision: 'datetime' as const };
+  const draft = { ...reviewDraft(original), title: '제목만 수정' };
+  assert.equal(reviewInput(draft).due_at, original.due_at);
+  assert.equal(reviewInput(draft).due_precision, original.due_precision);
+  assert.equal(reviewDeadlineLabel(draft), dueLabel(original));
+});
 
 test('같은 대기 제안의 제목·날짜 편집과 선택은 보존하고 철회한 원문은 되살리지 않는다', () => {
   const edited = { ...reviewDraft(task), title: '수정 제목', day: '2026-11-21', time: '09:30', dateEdited: true, selected: false };

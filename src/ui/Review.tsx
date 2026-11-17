@@ -3,10 +3,8 @@ import { Alert, AppState, Image, Modal, ScrollView, Text, TextInput, View, Keybo
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ExtractedTask, Repository } from '../data/repository';
 import { Button, Check } from './components';
-import { dueLabel } from '../domain/todo';
 import { ui } from './theme';
-import { composeDeadline } from '../domain/deadline';
-import { reconcileReviewDrafts, reviewDraft } from '../domain/reviewDraft';
+import { reconcileReviewDrafts, reviewDraft, reviewDeadlineLabel, reviewInput } from '../domain/reviewDraft';
 import { DeadlineFields } from './DeadlineFields';
 import { discardTemporaryImage } from '../data/temporaryFiles';
 import type { SimilarCapture } from '../domain/duplicate';
@@ -46,7 +44,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
   const selected = items.filter(t => t.selected && t.review_status === 'pending');
   const save = () => {
     const isCurrent = confirmation.capture();
-    const approve = () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '제안 상태가 바뀌었어요. 내용을 다시 확인한 뒤 저장해 주세요.'); return; } void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: { title: t.title, description: t.description, ...(t.dateEdited ? composeDeadline(t.day, t.time) : { due_at: t.due_at, due_precision: t.due_precision }) } })), similar)); };
+    const approve = () => { if (!isCurrent()) { Alert.alert('다시 확인해 주세요', '제안 상태가 바뀌었어요. 내용을 다시 확인한 뒤 저장해 주세요.'); return; } void run(() => repository.approve(analysisId, selected.map(t => ({ id: t.id, input: reviewInput(t) })), similar)); };
     if (similar.length) Alert.alert('이미 있는 할 일인지 확인했나요?', '최근 분석과 비슷한 내용이 있어요. 같은 일이면 선택을 해제하고, 서로 다른 일이라면 저장해 주세요.', [{ text: '다시 확인', style: 'cancel', onPress: () => { isCurrent(); } }, { text: '확인하고 저장', onPress: approve }]);
     else approve();
   };
@@ -60,7 +58,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     {items.map((task, index) => <View key={task.id} style={ui.card}>
       <View style={ui.row}><Check disabled={busy || checking || checkError || task.review_status !== 'pending'} checked={task.selected} label={`${task.title} 선택`} onPress={() => task.review_status === 'pending' && edit(index, { selected: !task.selected })} /><View style={ui.grow}><Text style={ui.pill}>{task.review_status === 'saved' ? '저장 완료' : task.review_status === 'ignored' ? '무시함' : task.needs_confirmation ? '확인 필요' : '추가 제안'}</Text><Text style={ui.small}>담당: {task.assignee ?? '확인 필요'}</Text></View></View>
       <TextInput accessibilityLabel={`${index + 1}번째 제안, 할 일 제목`} editable={task.review_status === 'pending' && !busy && !checking && !checkError} style={ui.input} value={task.title} onChangeText={title => edit(index, { title })} multiline maxLength={400} />
-      <Text style={ui.label}>마감 · {dueLabel(task)}</Text><DeadlineFields accessibilityContext={`${index + 1}번째 제안`} day={task.day} time={task.time} disabled={task.review_status !== 'pending' || busy || checking || checkError} onDay={day => edit(index, { day, dateEdited: true })} onTime={time => edit(index, { time, dateEdited: true })} />
+      <Text style={ui.label}>마감 · {reviewDeadlineLabel(task)}</Text><DeadlineFields accessibilityContext={`${index + 1}번째 제안`} day={task.day} time={task.time} disabled={task.review_status !== 'pending' || busy || checking || checkError} onDay={day => edit(index, { day, dateEdited: true })} onTime={time => edit(index, { time, dateEdited: true })} />
       <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>
     </View>)}
     <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || checking || checkError || !selected.length} onPress={save} />
