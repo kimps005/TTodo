@@ -76,6 +76,6 @@ export function dueLabel(todo: Pick<Todo, 'due_at' | 'due_precision'>): string {
   if (!todo.due_at) return '마감 없음';
   const date = new Date(todo.due_precision === 'date' ? `${todo.due_at}T12:00:00` : todo.due_at);
   return date.toLocaleString('ko-KR', {
-    month: 'long', day: 'numeric', ...(todo.due_precision === 'datetime' ? { hour: 'numeric', minute: '2-digit' } : {}),
+    year: 'numeric', month: 'long', day: 'numeric', ...(todo.due_precision === 'datetime' ? { hour: 'numeric', minute: '2-digit' } : {}),
   });
 }

@@ -1,7 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { composeDeadline, deadlineFields } from '../src/domain/deadline';
-import { dueDay, validateDue } from '../src/domain/todo';
+import { dueDay, dueLabel, validateDue } from '../src/domain/todo';
+
+test('다른 해의 같은 날짜를 마감 표시에서 구별한다', () => {
+  const date = { due_at: '2026-12-01', due_precision: 'date' as const };
+  assert.match(dueLabel(date), /2026/);
+  assert.match(dueLabel({ ...date, due_at: '2027-12-01' }), /2027/);
+  assert.notEqual(dueLabel(date), dueLabel({ ...date, due_at: '2027-12-01' }));
+  assert.equal(dueLabel({ due_at: null, due_precision: 'unknown' }), '마감 없음');
+});
+
+test('시각 마감은 기기 시간대의 연도와 시각을 함께 표시한다', () => {
+  const due = composeDeadline('2027-01-01', '09:30');
+  const label = dueLabel(due);
+  assert.match(label, /2027/);
+  assert.match(label, /9:30/);
+  assert.notEqual(label, dueLabel({ due_at: '2027-01-01', due_precision: 'date' }));
+});
 test('공유 네이티브 저장소와 같은 서기 날짜만 저장한다', () => {
   for (const due of ['0000-01-01', '0000-01-01T09:00:00+09:00']) {
     assert.throws(() => validateDue(due, due.includes('T') ? 'datetime' : 'date'));
