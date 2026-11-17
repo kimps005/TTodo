@@ -84,3 +84,9 @@ enum OnDeviceExtraction {
     return String(decoding: try JSONEncoder().encode(checked), as: UTF8.self)
   }
 }
+struct AppleTodoExtractionService: TodoExtractionServiceProtocol {
+  func availability() -> String { OnDeviceExtraction.availability() }
+  func extract(text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String {
+    try await OnDeviceExtraction.extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
+  }
+}

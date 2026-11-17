@@ -98,7 +98,7 @@ private struct CaptureShareView: View {
         guard try SharedStore().hasLocalAIConsent() else { throw CaptureError.consentRequired }
         let data = try await readImage(); try Task.checkCancellation()
         preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
-        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, availability: OnDeviceExtraction.availability, extract: OnDeviceExtraction.extract)
+        let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, service: AppleTodoExtractionService())
         try Task.checkCancellation()
         if reanalyze { CaptureNotifications.clearAnalysis(result.id) }
         let store = try SharedStore()
@@ -162,7 +162,7 @@ private struct CaptureShareView: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
-          Text("캡처 속 할 일").font(.largeTitle.bold())
+          Text("캡처 속 할 일").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
           Text(message).foregroundStyle(.secondary)
           if let preview { Image(uiImage: preview).resizable().scaledToFit().frame(maxHeight: 220).accessibilityLabel("이번 분석 이미지 미리보기") }
           Text(semiAutomatic ? "OCR · 직접 선택" : "무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
@@ -177,7 +177,7 @@ private struct CaptureShareView: View {
             }
           }
           if analysisId == nil {
-            Button("기기에서 분석") { analyze() }.buttonStyle(.borderedProminent).disabled(working)
+            Button("기기에서 분석") { analyze() }.buttonStyle(.borderedProminent).fixedSize(horizontal: false, vertical: true).disabled(working)
             Text("먼저 TTodo 앱 설정에서 기기 내 AI 분석에 동의해 주세요. 날짜 기준일을 모르는 ‘내일’ 같은 표현은 확정하지 않아요.").font(.caption).foregroundStyle(.secondary)
           }
           if analysisId != nil {
@@ -192,10 +192,10 @@ private struct CaptureShareView: View {
           }
           ForEach($items) { $item in
             VStack(alignment: .leading, spacing: 12) {
-              Toggle("이 할 일 선택", isOn: $item.selected)
+              Toggle("이 할 일 선택", isOn: $item.selected).accessibilityLabel("선택: \(item.title)").accessibilityHint("저장할 제안을 선택하거나 해제해요")
               Toggle("마감 시각에 알림 (날짜·시각 필요)", isOn: $item.reminder)
               if item.needsConfirmation { Label("수행 주체나 내용을 확인해 주세요", systemImage: "questionmark.circle").font(.caption) }
-              TextField("할 일 제목", text: $item.title, axis: .vertical).textFieldStyle(.roundedBorder).accessibilityLabel("제안 제목")
+              TextField("할 일 제목", text: $item.title, axis: .vertical).textFieldStyle(.roundedBorder).accessibilityLabel("제안 제목: \(item.title)").accessibilityHint("선택한 항목 저장 전까지는 할 일을 생성하지 않아요")
               Text("제안 마감: \(dueLabel(item))").font(.caption)
               TextField("날짜 수정 YYYY-MM-DD", text: $item.dateText).textFieldStyle(.roundedBorder).keyboardType(.numbersAndPunctuation).onChange(of: item.dateText) { _, _ in item.dateEdited = true }
               TextField("시각 수정 17:30 (선택)", text: $item.timeText).textFieldStyle(.roundedBorder).keyboardType(.numbersAndPunctuation).onChange(of: item.timeText) { _, _ in item.dateEdited = true }

@@ -195,13 +195,14 @@ struct CaptureSmoke {
     }
     var calls = 0
     let extract: CaptureProcessor.Extract = { _, _, _, _ in calls += 1; return raw }
+    let service: any TodoExtractionServiceProtocol = ClosureTodoExtractionService(status: { "available" }, request: extract)
     do {
-      _ = try await CaptureProcessor.analyze(data: Data("no-consent".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, extract: extract)
+      _ = try await CaptureProcessor.analyze(data: Data("no-consent".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, service: service)
       fatalError("Consent was bypassed")
     } catch CaptureError.consentRequired { }
     check(calls == 0)
     try store.runSQL("INSERT INTO preferences(key,value) VALUES('ai_local_consent','yes')", params: [])
-    let first = try await CaptureProcessor.analyze(data: Data("first".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, extract: extract)
+    let first = try await CaptureProcessor.analyze(data: Data("first".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, service: service)
     check(first.count == 1 && !first.duplicate && calls == 1)
     check((try store.querySQL("SELECT COUNT(*) AS count FROM todos", params: []))[0]["count"] as? Int64 == 0)
     check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [first.id]))[0]["status"] as? String == "review")
@@ -219,7 +220,7 @@ struct CaptureSmoke {
     check((try store.querySQL("SELECT COUNT(*) AS count FROM analyses WHERE image_fingerprint=?", params: ["revoked-before-registration"]))[0]["count"] as? Int64 == 0)
     check((try store.querySQL("SELECT status FROM analyses WHERE id=?", params: [first.id]))[0]["status"] as? String == "review")
     try store.runSQL("UPDATE preferences SET value='yes' WHERE key='ai_local_consent'", params: [])
-    let duplicate = try await CaptureProcessor.analyze(data: Data("first".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, extract: extract)
+    let duplicate = try await CaptureProcessor.analyze(data: Data("first".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in text }, service: service)
     check(duplicate.duplicate && calls == 1)
     do {
       _ = try await CaptureProcessor.analyze(data: Data("invalid".utf8), messageDate: nil, storeFactory: factory, recognize: { _ in "다른 문장" }, extract: extract)

@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { nativeBridge } from '../native/bridge';
-import { evaluateProvider } from '../ai/evaluate';
+import { runFixtureEvaluation, evalFixtures, evaluationConsoleSummary } from '../ai/fixtureEvaluation';
+import { EvaluationReport } from './EvaluationReport';
 import { onDeviceProvider, availabilityLabels } from '../ai/onDeviceProvider';
 import { Button } from '../ui/components';
 import { ui } from '../ui/theme';
@@ -12,6 +13,7 @@ import { shareTemporaryExport } from '../data/shareTemporaryExport';
 
 export function ModelEvaluation({ close }: { close: () => void }) {
   const [progress, setProgress] = useState('아직 평가하지 않았어요.');
+  const [evaluationResult, setEvaluationResult] = useState<Awaited<ReturnType<typeof runFixtureEvaluation>> | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -22,9 +24,11 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     if (controller.current || exporting.current) return;
     const status = nativeBridge?.localAIAvailability() ?? 'missing_native';
     if (status !== 'available') { Alert.alert('평가를 시작할 수 없어요', availabilityLabels[status] ?? availabilityLabels.unavailable); return; }
-    const abort = new AbortController(); controller.current = abort; setBusy(true); setReport(null);
+    const abort = new AbortController(); controller.current = abort; setBusy(true); setReport(null); setEvaluationResult(null);
     try {
-      const result = await evaluateProvider(onDeviceProvider, abort.signal, (done, total) => setProgress(`${done} / ${total}개 처리`));
+      const result = await runFixtureEvaluation(onDeviceProvider, abort.signal, (done, total) => setProgress(`${done} / ${total}개 처리`));
+      setEvaluationResult(result);
+      if (__DEV__) console.info('TTodo Eval', JSON.stringify(evaluationConsoleSummary(result)));
       setReport(JSON.stringify({ ...result, operating_system: nativeBridge?.systemVersion() }, null, 2));
       setProgress(`${result.results.length}개 처리 · ${result.results.filter(row => row.error).length}개 오류 · ${result.completed ? '평가 실행 완료' : result.attempted_all ? '오류 사례 재실행 필요' : '중단됨'}`);
     } catch { Alert.alert('평가가 중단되었어요', '기기 내 모델 상태를 확인한 뒤 다시 시도해 주세요.'); }
@@ -46,9 +50,10 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     finally { exporting.current = false; setSharing(false); }
   };
   return <Modal animationType="slide" onRequestClose={() => { if (!busy && !exporting.current) close(); }}><SafeAreaView style={ui.screen}><ScrollView contentContainerStyle={ui.body}>
-    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>DEVELOPMENT ONLY</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>한국어 AI 평가</Text><Text style={ui.subtitle}>합성 문장 24개만 사용해요. 개인 캡처와 할 일은 읽거나 저장하지 않고, 외부 API도 호출하지 않아요.</Text>
-    <Text style={ui.small}>이 결과는 제목·날짜·담당을 사람이 대조하기 위한 자료예요. 실행 성공을 정확도 달성으로 판단하지 않아요. 글자가 없는 사례는 AI 호출 없이 빈 결과로 처리해요.</Text>
-    <Text style={ui.section}>{progress}</Text><Button title="합성 데이터로 기기 내 AI 평가" disabled={busy || sharing} onPress={() => void run()} />
+    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>DEVELOPMENT ONLY</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>한국어 AI 평가</Text><Text style={ui.subtitle}>합성 문장 {evalFixtures.cases.length}개만 사용해요. 개인 캡처와 할 일은 읽거나 저장하지 않고, 외부 API도 호출하지 않아요.</Text>
+    <Text style={ui.small}>고정 어휘와 원문 범위로 일대일 자동 채점해요. 같은 의미의 다른 표현도 오답일 수 있어 사람이 함께 검토해야 해요. 누락된 할 일의 명시 마감도 날짜 정확도 분모에 포함해요. 글자가 없는 사례는 AI 호출 없이 빈 결과로 처리해요.</Text>
+    <Text accessibilityLiveRegion="polite" style={ui.section}>{progress}</Text>
+    {evaluationResult && <EvaluationReport report={evaluationResult} />}<Button title="합성 데이터로 기기 내 AI 평가" disabled={busy || sharing} onPress={() => void run()} />
     <Button secondary title="현재 분석 종료 후 중단" disabled={!busy} onPress={() => controller.current?.abort()} />
     <Button secondary title="평가 결과 내보내기" disabled={busy || sharing || !report} onPress={() => void exportReport()} />
     <Button secondary title="닫기" disabled={busy || sharing} onPress={close} />

@@ -44,7 +44,7 @@ public class TTodoNativeModule: Module {
       await self.openNotificationSettings()
     }
     AsyncFunction("extractTasks") { (text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String in
-      try await OnDeviceExtraction.extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
+      try await AppleTodoExtractionService().extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
     }
     Function("databaseDirectory") { () throws -> String in
       // Initialize/protect the actual shared DB before expo-sqlite opens its connection.

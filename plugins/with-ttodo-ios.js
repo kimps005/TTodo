@@ -34,7 +34,7 @@ function withTTodo(config) {
     const main = project.getFirstTarget().uuid;
     const generated = 'TTodoGenerated';
     const common = ['SharedStore.swift', 'TodoActivity.swift'];
-    const captureSources = ['VisionOCR.swift', 'ExtractionValidator.swift', 'OnDeviceExtraction.swift', 'CaptureStore.swift', 'CaptureProcessor.swift', 'CaptureNotifications.swift'];
+    const captureSources = ['TodoExtractionService.swift', 'VisionOCR.swift', 'ExtractionValidator.swift', 'OnDeviceExtraction.swift', 'CaptureStore.swift', 'CaptureProcessor.swift', 'CaptureNotifications.swift'];
     const intentSources = ['AddTodoIntent.swift', 'AnalyzeCaptureIntent.swift'];
     const copy = (name, source, targetDir) => {
       fs.mkdirSync(targetDir, { recursive: true });

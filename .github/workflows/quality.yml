@@ -54,7 +54,7 @@ jobs:
           "$RUNNER_TEMP/ttodo-store-smoke"
       - name: Test native capture pipeline without model requests
         run: |
-          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/CaptureSmoke.swift -o "$RUNNER_TEMP/ttodo-capture-smoke"
+          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/TodoExtractionService.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/CaptureSmoke.swift -o "$RUNNER_TEMP/ttodo-capture-smoke"
           TTODO_CONTRACT_OUTPUT="$RUNNER_TEMP/ttodo-native-extraction.json" "$RUNNER_TEMP/ttodo-capture-smoke"
           npx tsx scripts/check-native-extraction.ts "$RUNNER_TEMP/ttodo-native-extraction.json"
       - name: Test actual Vision OCR with generated Korean image
@@ -63,7 +63,7 @@ jobs:
           TTODO_OCR_FIXTURE_OUTPUT="$GITHUB_WORKSPACE/artifacts/vision-ocr" "$RUNNER_TEMP/ttodo-ocr-smoke"
       - name: Test OCR layout, fallback, queue and approval safeguards
         run: |
-          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/PipelineSmoke.swift -o "$RUNNER_TEMP/ttodo-pipeline-smoke"
+          swiftc modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TTodoConfiguration.swift modules/ttodo-native/ios/TodoExtractionService.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/VisionOCR.swift modules/ttodo-native/ios/CaptureStore.swift modules/ttodo-native/ios/CaptureProcessor.swift native/tests/PipelineSmoke.swift -o "$RUNNER_TEMP/ttodo-pipeline-smoke"
           "$RUNNER_TEMP/ttodo-pipeline-smoke"
       - name: Install pods
         working-directory: ios

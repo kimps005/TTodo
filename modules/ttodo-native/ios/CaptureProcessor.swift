@@ -20,8 +20,17 @@ enum CaptureProcessor {
   static func analyze(data: Data, messageDate: String?, channel: String = "shortcuts", retryFailed: Bool = false, reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil,
     storeFactory: () throws -> SharedStore = { try SharedStore() },
     recognize: (Data) throws -> String = VisionOCR.recognize,
-    availability: () -> String = { "available" },
-    extract: Extract) async throws -> CaptureOutcome {
+    availability: @escaping () -> String = { "available" },
+    extract: @escaping Extract) async throws -> CaptureOutcome {
+    try await analyze(data: data, messageDate: messageDate, channel: channel, retryFailed: retryFailed,
+      reanalyzeUnstored: reanalyzeUnstored, expected: expected, storeFactory: storeFactory, recognize: recognize,
+      service: ClosureTodoExtractionService(status: availability, request: extract))
+  }
+  static func analyze(data: Data, messageDate: String?, channel: String = "shortcuts", retryFailed: Bool = false,
+    reanalyzeUnstored: Bool = false, expected: CaptureReanalysisSnapshot? = nil,
+    storeFactory: () throws -> SharedStore = { try SharedStore() },
+    recognize: (Data) throws -> String = VisionOCR.recognize,
+    service: any TodoExtractionServiceProtocol) async throws -> CaptureOutcome {
     try Task.checkCancellation()
     guard !data.isEmpty, data.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
     if let messageDate, !ExtractionValidator.validDate(messageDate) { throw ExtractionValidationError.invalid }
@@ -39,12 +48,12 @@ enum CaptureProcessor {
       let tasks: [NativeSuggestion]
       var semiAutomatic = false
       if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { tasks = [] }
-      else if availability() != "available" {
+      else if service.availability() != "available" {
         semiAutomatic = true; tasks = ExtractionValidator.ocrCandidates(text)
       }
       else {
         do {
-          let json = try await extract(text, nil, TimeZone.current.identifier, messageDate)
+          let json = try await service.extract(text: text, capturedAt: nil, timezone: TimeZone.current.identifier, messageDate: messageDate)
           try Task.checkCancellation()
           tasks = try ExtractionValidator.validate(json, sourceText: text, messageDate: messageDate)
         } catch LocalAIError.unavailable {

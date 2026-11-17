@@ -16,7 +16,7 @@ jobs:
           uname -m >> artifacts/model-host-probe/host.txt
           xcodebuild -version > artifacts/model-host-probe/xcode.txt
           xcrun --sdk macosx --show-sdk-version > artifacts/model-host-probe/sdk.txt
-          swiftc -target arm64-apple-macos26.0 modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/OnDeviceExtraction.swift native/tests/ModelAvailabilityProbe.swift -o "$RUNNER_TEMP/ttodo-model-host-probe"
+          swiftc -target arm64-apple-macos26.0 modules/ttodo-native/ios/TodoExtractionService.swift modules/ttodo-native/ios/ExtractionValidator.swift modules/ttodo-native/ios/OnDeviceExtraction.swift native/tests/ModelAvailabilityProbe.swift -o "$RUNNER_TEMP/ttodo-model-host-probe"
       - name: Inspect availability and attempt one real synthetic extraction if ready
         env:
           TTODO_MODEL_PROBE_OUTPUT: artifacts/model-host-probe/report.json

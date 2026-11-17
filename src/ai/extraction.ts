@@ -55,7 +55,7 @@ export function enforceDateContext(tasks: TaskSuggestion[], context: ExtractionC
   return tasks.map(task => {
     if (!task.due_at) return task;
     const evidence = clean(task.evidence_text);
-    const relative = /오늘|내일|모레|글피|어제|그제|올해|금년|내년|내후년|작년|재작년|지난해|(?:이번|다음|지난)\s*(?:주|달|해)|일\s*뒤|일\s*후/.test(evidence);
+    const relative = /월말|오늘|내일|모레|글피|어제|그제|올해|금년|내년|내후년|작년|재작년|지난해|(?:이번|다음|지난)\s*(?:주|달|해)|일\s*뒤|일\s*후/.test(evidence);
     const explicitYear = /\b\d{4}\s*(?:년|[-./])/.test(evidence);
     return relative || !explicitYear ? { ...task, due_at: null, due_precision: 'unknown', needs_confirmation: 1 } : task;
   });

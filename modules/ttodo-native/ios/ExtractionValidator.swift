@@ -122,6 +122,14 @@ enum ExtractionValidator {
       let expected = calendar.date(byAdding: .day, value: relative[0].1, to: base) {
       return !calendar.isDate(expected, inSameDayAs: proposed)
     }
+    if source.contains("월말"), absolute.isEmpty {
+      let offset = matches(source, "다음\\s*달") ? 1 : matches(source, "지난\\s*달") ? -1 : 0
+      if let month = calendar.date(byAdding: .month, value: offset, to: base),
+        let interval = calendar.dateInterval(of: .month, for: month),
+        let expected = calendar.date(byAdding: .day, value: -1, to: interval.end) {
+        return !calendar.isDate(expected, inSameDayAs: proposed)
+      }
+    }
     let weekdayRegex = try! NSRegularExpression(pattern: "(이번|다음|지난)\\s*주\\s*([월화수목금토일])요일")
     let weekdays = weekdayRegex.matches(in: source, range: NSRange(source.startIndex..., in: source))
     if weekdays.count == 1, absolute.isEmpty, let week = Range(weekdays[0].range(at: 1), in: source), let day = Range(weekdays[0].range(at: 2), in: source),
@@ -205,7 +213,7 @@ enum ExtractionValidator {
       if nonActionEvidence(evidence) { return nil }
       if messageDate == nil && task.due_at != nil {
         let normalized = clean(evidence)
-        let relative = matches(normalized, "오늘|내일|모레|글피|어제|그제|올해|금년|내년|내후년|작년|재작년|지난해|(?:이번|다음|지난)\\s*(?:주|달|해)|일\\s*뒤|일\\s*후")
+        let relative = matches(normalized, "월말|오늘|내일|모레|글피|어제|그제|올해|금년|내년|내후년|작년|재작년|지난해|(?:이번|다음|지난)\\s*(?:주|달|해)|일\\s*뒤|일\\s*후")
         let explicitYear = matches(normalized, "\\b\\d{4}\\s*(?:년|[-./])")
         if relative || !explicitYear { task.due_at = nil; task.due_precision = "unknown"; task.needs_confirmation = true }
       }

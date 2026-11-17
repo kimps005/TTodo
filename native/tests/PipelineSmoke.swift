@@ -31,6 +31,10 @@ struct PipelineSmoke {
     check(!ExtractionValidator.dateDisagrees(due: "2026-11-17", precision: "date", evidence: "다음 주 화요일까지 자료 보내줘", messageDate: "2026-11-13", timezone: "Asia/Seoul"))
     check(ExtractionValidator.dateDisagrees(due: "2026-11-19T00:30:00Z", precision: "datetime", evidence: "내일 오전 자료 보내줘", messageDate: "2026-11-17", timezone: "Asia/Seoul"))
     check(!ExtractionValidator.dateDisagrees(due: "2026-11-17T15:30:00Z", precision: "datetime", evidence: "내일 오전 자료 보내줘", messageDate: "2026-11-17", timezone: "Asia/Seoul"))
+    for (reference, expected) in [("2026-11-17", "2026-11-30"), ("2028-02-10", "2028-02-29"), ("2026-02-10", "2026-02-28")] {
+      check(!ExtractionValidator.dateDisagrees(due: expected, precision: "date", evidence: "월말까지 정산서 제출", messageDate: reference, timezone: "Asia/Seoul"))
+      check(ExtractionValidator.dateDisagrees(due: reference, precision: "date", evidence: "월말까지 정산서 제출", messageDate: reference, timezone: "Asia/Seoul"))
+    }
     check(try ExtractionValidator.validate("[]", sourceText: "풍경과 밈, 단순한 안내", messageDate: nil).isEmpty)
     check(!ExtractionValidator.nonActionEvidence("지난 요청은 취소되었지만 수정된 자료를 보내 주세요."))
     for evidence in ["별도 조치는 필요하지 않습니다", "이용에 참고 바랍니다", "지금 30% 할인", "보고서 요청은 취소됐어요. 제출하지 마세요."] {
