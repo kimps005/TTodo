@@ -2,6 +2,10 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## 수정 순서로 이전 iOS 앱 UI 재검증 착수
+- [ceb4804 수동 수명주기 검사](https://github.com/kimps005/TTodo/actions/runs/44057175849)를 iPhone 16 Pro / oldest-installed / large로 실행했다. SDK 준비만 통과한 뒤 남아 있던 실제 앱·XCTest 검증이며, 결과 확인 전이다. 기존 알림 설정 진단과 실기기 서명 경로는 재개하지 않았다.
+- Windows에서 테스트 130개·타입·UI runner Node 구문·diff 검사를 통과했다. 준비 순서와 최신 검증 범위를 CI-VALIDATION/MVP-READINESS에도 반영했다. 기존 DEVICE-QA.md 수정은 보존하고 커밋에서 제외한다.
+
 ## 수정된 SDK 준비 순서의 iOS 26.2 검증 통과
 - [d9639e5 준비 검증](https://github.com/kimps005/TTodo/actions/runs/44055891320)은 과거 두 실패와 같은 러너 이미지 20261112.0504.1, iPhone 16 Pro / iOS 26.2 (23C54)에서 성공했다. 원본 ZIP의 SHA-256과 커밋을 대조했다. SDK 도움말은 기기 생성 전 0.320초, 종료 0, 신호 없음이었다. stderr 1,776바이트가 비교 진단의 성공 9건과 바이트 단위로 일치했다.
 - 부팅 완료 대기 144.819초 후 실제 `content_size large` 설정은 76.807초, 재조회는 2.171초였고 원문은 `large`였다. 일회성 기기 삭제까지 모든 명령이 종료 0, 실패·생략 0이다. 기존 도움말 제한 60초와 기기 설정·조회 제한 240초를 각각 유지했다. 부팅 직후 첫 기기 명령에는 여전히 시간이 걸린다.
