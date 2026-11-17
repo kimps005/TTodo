@@ -32,6 +32,7 @@ struct PipelineSmoke {
     check(ExtractionValidator.dateDisagrees(due: "2026-11-19T00:30:00Z", precision: "datetime", evidence: "내일 오전 자료 보내줘", messageDate: "2026-11-17", timezone: "Asia/Seoul"))
     check(!ExtractionValidator.dateDisagrees(due: "2026-11-17T15:30:00Z", precision: "datetime", evidence: "내일 오전 자료 보내줘", messageDate: "2026-11-17", timezone: "Asia/Seoul"))
     check(try ExtractionValidator.validate("[]", sourceText: "풍경과 밈, 단순한 안내", messageDate: nil).isEmpty)
+    check(!ExtractionValidator.nonActionEvidence("지난 요청은 취소되었지만 수정된 자료를 보내 주세요."))
     for evidence in ["별도 조치는 필요하지 않습니다", "이용에 참고 바랍니다", "지금 30% 할인", "보고서 요청은 취소됐어요. 제출하지 마세요."] {
       let raw = try JSONSerialization.data(withJSONObject: [["is_actionable": true, "title": "모델의 억지 생성", "evidence_text": evidence, "due_at": NSNull(), "due_precision": "unknown", "confidence": 0.9, "needs_confirmation": true]])
       check(try ExtractionValidator.validate(String(decoding: raw, as: UTF8.self), sourceText: evidence, messageDate: nil).isEmpty)
@@ -78,6 +79,10 @@ struct PipelineSmoke {
       fatalError("Duplicate was approved")
     } catch CaptureError.duplicate { }
     check(try store.querySQL("SELECT id FROM todos", params: []).count == 1)
+    try store.requireDistinctTodo(title: "승인한 제목", description: "다른 금액 10000원", assignee: nil, due: due, precision: "datetime")
+    try store.transaction { try store.runSQL("UPDATE todos SET status=? WHERE source_id=?", params: ["completed", aItems[0].id]) }
+    try store.requireDistinctTodo(title: "승인한 제목", description: nil, assignee: nil, due: due, precision: "datetime")
+    check(try store.reminderPlans().isEmpty)
     let lease = try store.registerCapture(fingerprint: "stale-lease", channel: "share", queued: true)
     check(lease.token!.split(separator: "-").last.flatMap { Int64($0) } != nil)
     try store.failCapture(id: lease.id, code: "CANCELLED", token: lease.token!)

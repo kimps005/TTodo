@@ -19,6 +19,11 @@ test('좌우 화자 힌트가 있어도 모델의 담당자 추정을 확정하�
   const [result] = validateExtraction([{ ...task, assignee: '나', needs_confirmation: false }], `[상대방] ${task.evidence_text}\n[나] 알겠어`);
   assert.equal(result.needs_confirmation, 1);
 });
+
+test('취소 안내와 새 요청이 함께 있는 원문은 새 행동을 버리지 않는다', () => {
+  const evidence_text = '지난 요청은 취소되었지만 수정된 자료를 보내 주세요.';
+  assert.equal(validateExtraction([{ ...task, evidence_text }], evidence_text).length, 1);
+});
 const textLimits = [
   { text: '가' + '🚀'.repeat(2000), expected: '가' + '🚀'.repeat(1999) },
   { text: '가'.repeat(3999) + '🚀', expected: '가'.repeat(3999) },

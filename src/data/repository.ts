@@ -246,7 +246,7 @@ export class Repository {
         const title = normalizeTitle(edit.input.title);
         if (edit.input.reminder && (precision !== 'datetime' || !due || Date.parse(due) <= Date.parse(time))) throw new Error('알림을 켜려면 미래의 날짜와 시각을 함께 지정해 주세요.');
         const clean = (value: string | null) => (value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
-        const same = (await tx.getAllAsync<Todo & { assignee: string | null }>('SELECT t.*,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id')).some(existing =>
+        const same = (await tx.getAllAsync<Todo & { assignee: string | null }>("SELECT t.*,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id WHERE t.status='pending'")).some(existing =>
           existing.title.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase() === title.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase() &&
           clean(existing.description) === clean(edit.input.description ?? null) &&
           (!clean(existing.assignee) || !clean(task.assignee) || clean(existing.assignee) === clean(task.assignee)) &&

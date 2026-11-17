@@ -67,6 +67,22 @@ test('중복 할 일 또는 날짜 없는 알림 설정은 선택 전체와 알�
   } finally { native.close(); }
 });
 
+test('완료한 과거 작업과 설명·담당이 다른 별개 요청을 중복으로 막지 않는다', async () => {
+  const { repo, native } = fixture(); await repo.initialize();
+  try {
+    await repo.setPreference('ai_local_consent', 'yes');
+    const old = await repo.addTodo({ title: '자료 제출' }); await repo.setCompleted(old, true);
+    const cases = [{ description: null, assignee: '담당 A' }, { description: null, assignee: '담당 B' }, { description: '결제 10000원', assignee: '담당 A' }];
+    for (let index = 0; index < cases.length; index++) {
+      const analysis = await repo.createAnalysis(`distinct-${index}`, 'share', null);
+      await repo.finishAnalysis(analysis.id, [{ ...task, ...cases[index] }], 'test', analysis.token!);
+      const [proposal] = await repo.listExtracted(analysis.id);
+      await repo.approve(analysis.id, [{ id: proposal.id, input: { title: '자료 제출', description: cases[index].description } }]);
+    }
+    assert.equal((await repo.listTodos()).length, 4);
+  } finally { native.close(); }
+});
+
 test('저장 확인 뒤 유사 분석이 생기거나 바뀌면 승인 없이 할 일을 만들지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
   try {

@@ -92,7 +92,7 @@ struct CaptureTaskEdit {
 }
 extension SharedStore {
   func requireDistinctTodo(title: String, description: String?, assignee: String?, due: String?, precision: String) throws {
-    let exists = try querySQL("SELECT t.title,t.description,t.due_at,t.due_precision,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id", params: []).contains { row in
+    let exists = try querySQL("SELECT t.title,t.description,t.due_at,t.due_precision,e.assignee FROM todos t LEFT JOIN extracted_tasks e ON e.id=t.source_id WHERE t.status='pending'", params: []).contains { row in
       guard let existingTitle = row["title"] as? String else { return false }
       let previousAssignee = (row["assignee"] as? String).map(ExtractionValidator.clean) ?? ""
       let newAssignee = assignee.map(ExtractionValidator.clean) ?? ""

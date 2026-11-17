@@ -87,7 +87,9 @@ enum ExtractionValidator {
   }
   static func nonActionEvidence(_ evidence: String) -> Bool {
     // Deliberately narrow exclusions: semantic precision still requires device evaluation.
-    matches(clean(evidence), "별도\\s*조치[는가]?\\s*필요하지|할\\s*일[이가]?\\s*없|(?:신청|접수)\\s*기간[은이가 ]*종료|이용에\\s*참고\\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\\s*마세요|지금\\s*\\d+%\\s*할인")
+    let source = clean(evidence)
+    let affirmative = matches(source, "해\\s*(?:주세요|줘)|하세요|보내\\s*(?:주세요|줘)|회신\\s*부탁|제출\\s*부탁")
+    return !affirmative && matches(source, "별도\\s*조치[는가]?\\s*필요하지|할\\s*일[이가]?\\s*없|(?:신청|접수)\\s*기간[은이가 ]*종료|이용에\\s*참고\\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\\s*마세요|지금\\s*\\d+%\\s*할인")
   }
   static func detectedDates(_ text: String) -> [Date] {
     guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return [] }

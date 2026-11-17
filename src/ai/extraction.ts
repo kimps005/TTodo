@@ -41,7 +41,9 @@ export function validateExtraction(raw: unknown, sourceText: string, mode: 'ai' 
   });
 }
 export function nonActionEvidence(evidence: string): boolean {
-  return /별도\s*조치[는가]?\s*필요하지|할\s*일[이가]?\s*없|(?:신청|접수)\s*기간[은이가 ]*종료|이용에\s*참고\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\s*마세요|지금\s*\d+%\s*할인/.test(clean(evidence));
+  const source = clean(evidence);
+  const affirmative = /해\s*(?:주세요|줘)|하세요|보내\s*(?:주세요|줘)|회신\s*부탁|제출\s*부탁/.test(source);
+  return !affirmative && /별도\s*조치[는가]?\s*필요하지|할\s*일[이가]?\s*없|(?:신청|접수)\s*기간[은이가 ]*종료|이용에\s*참고\s*바랍니다|(?:요청[은이가 ]*)?취소[됐되]|제출하지\s*마세요|지금\s*\d+%\s*할인/.test(source);
 }
 export function containsSensitiveText(text: string): boolean {
   const normalized = text.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF]/g, '');
