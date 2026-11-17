@@ -145,3 +145,9 @@ UI 검사 구성이 바뀌는 push는 서로 독립적인 세 job을 준비한�
 수동 model-host-probe.yml은 일회성 macOS 실행기의 제품 OnDeviceExtraction/ExtractionValidator를 그대로 컴파일합니다. 가용하면 합성 한국어 요청 1개만 실제 추출하며, 미가용이면 상태를 기록하고 종료합니다. Apple Intelligence 설정·로그인·다운로드·유료 API를 활성화하지 않습니다. 사용자 저장소·이미지를 읽지 않으며 생성 내용과 원문 근거는 로그/보고서에 출력하지 않습니다.
 
 [Apple 공식 안내](https://developer.apple.com/videos/play/wwdc2025/259/)는 준비된 macOS의 시뮬레이터에서 모델 기능을 시험할 수 있지만 실제 기기의 성능과 다르다고 설명합니다. 이 검사는 호스트 CLI이므로 iOS 실행 검사조차 대신하지 않습니다. 보고서의 platform, availability, inference_attempted, inference_completed, accuracy_measured를 확인해야 합니다. workflow가 녹색이어도 미가용이면 추론은 실행되지 않은 것입니다. 한 요청의 개수·명시 날짜 확인과 호스트 시간은 PRD 정확도/P90 목표 달성으로 인정하지 않습니다. 결과와 실기기 제약은 STATUS.md에 기록합니다.
+
+## 2026-11-18 알림 복구와 입력 안전장치
+
+cc983e3부터 push의 primary/oldest는 app 전체 흐름으로 알림 권한 요청/거부·공개 앱 설정 fallback·복귀 후 초안/저장 항목 보존을 확인한다. compact의 최대 글자 흐름은 유지한다. 시뮬레이터는 OS가 알림 메뉴를 숨기는 기록이 있어 설정 앱 전경 전환과 앱의 명시적 수동 안내를 단언하며, 목적지 트리/알림 스위치 존재는 별도 첨부한다. 이 성공을 알림 화면 도착이나 실제 기기 권한 변경으로 해석하지 않는다. 실제 기기용 XCTest 분기는 TTodo 알림 화면·꺼진 스위치 단언을 유지한다.
+
+NativeSafetySmoke는 공개 URL의 우선/실패/fallback 정책, 한국어·이모지 UTF-8 예산과 문장/바이트 상한, actor 재진입 중 모델 진입 직렬화·실패·대기 요청 취소 후 진행을 실제 Swift로 검사한다. OCRSmoke는 6000×4000 합성 파일의 2400/720px 제한과 한국어 OCR, 파일 스트리밍 지문 일치를 확인한다. 전체 프로세스 RSS 120 MB·실제 Foundation Models 토큰 수·생성·기기 정확도 측정은 아니다. 최신 결과는 STATUS에 기록한다.
