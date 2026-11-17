@@ -33,6 +33,8 @@ jobs:
       - run: npm test
       - run: npm audit --audit-level=moderate
       - run: npx expo export --platform ios
+      - name: Bundle Debug-only evaluation screen and fixtures
+        run: npx expo export --platform ios --dev --output-dir artifacts/debug-bundle
   ios:
     if: ${{ !inputs.core_only }}
     runs-on: ${{ inputs.macos_runner || 'macos-26' }}
