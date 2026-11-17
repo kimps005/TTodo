@@ -47,6 +47,7 @@ export function TodoEditor({ todo, save, remove, close, loadEvidence }: { todo: 
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) closeEditor(); }}><SafeAreaView style={ui.screen}>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
       <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>TASK DETAILS</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>할 일 다듬기</Text>
+      <Text style={ui.pill} accessibilityLabel={`할 일 상태: ${todo.status === 'completed' ? '완료' : '미완료'}`}>{todo.status === 'completed' ? '완료한 할 일' : '아직 하지 않은 할 일'}</Text>
       <Text style={ui.label}>할 일</Text><TextInput accessibilityLabel="할 일 제목" editable={!busy} style={ui.input} value={title} onChangeText={value => { deleteConfirmation.invalidate(); setTitle(value); }} multiline maxLength={400} />
       <Text style={ui.label}>메모</Text><TextInput accessibilityLabel="할 일 메모" editable={!busy} style={[ui.input, { minHeight: 110 }]} value={description} onChangeText={value => { deleteConfirmation.invalidate(); setDescription(value); }} multiline maxLength={4000} />
       <Text style={ui.label}>마감 날짜</Text>

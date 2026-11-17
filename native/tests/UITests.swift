@@ -126,11 +126,16 @@ final class TTodoUITests: XCTestCase {
     app.terminate(); app.launch()
     reveal(restore, in: app)
     screenshot(app, name: "04-completed-task")
+    tap(edited, in: app)
+    XCTAssertTrue(control(app, label: "할 일 상태: 완료").waitForExistence(timeout: 15))
+    screenshot(app, name: "04-completed-task-detail")
+    tap(app.buttons["닫기"], in: app)
     tap(restore, in: app)
     XCTAssertTrue(edited.waitForExistence(timeout: 15))
     app.terminate(); app.launch()
     XCTAssertTrue(edited.waitForExistence(timeout: 30))
     tap(edited, in: app)
+    XCTAssertTrue(control(app, label: "할 일 상태: 미완료").waitForExistence(timeout: 15))
     XCTAssertEqual(app.textFields["마감 날짜 YYYY-MM-DD"].value as? String, "2026-12-01")
     let clock = app.textFields["마감 시각 시와 분"]
     let clockValue = clock.value as? String ?? ""
