@@ -76,7 +76,7 @@ enum ExtractionValidator {
     return context
   }
   // This is a user-driven OCR draft, never an AI claim of actionability.
-  // Both review UIs leave confidence-zero drafts unselected until a text tap.
+  // Both review UIs use the explicit OCR provider to leave drafts unselected.
   static func ocrCandidates(_ text: String) -> [NativeSuggestion] {
     text.components(separatedBy: .newlines).compactMap { line in
       let evidence = line.trimmingCharacters(in: .whitespacesAndNewlines)

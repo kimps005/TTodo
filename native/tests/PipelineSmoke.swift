@@ -88,6 +88,9 @@ struct PipelineSmoke {
     try store.failCapture(id: lease.id, code: "CANCELLED", token: lease.token!)
     do { try store.startQueuedCapture(id: lease.id, token: lease.token!); fatalError("Stale queue lease started") }
     catch CaptureError.stateChanged { }
+    let generated = try store.registerCapture(fingerprint: "generated-zero-confidence", channel: "share")
+    try store.finishCapture(id: generated.id, tasks: [candidates[0]], provider: "apple-ondevice/prompt-v2", token: generated.token!)
+    check(try store.captureReviewItems(id: generated.id)[0].selected)
     print("OCR layout, weekday/date safeguards, empty output, unavailable fallback, queue isolation, approval, duplicates and reminders passed (synthetic; real AI accuracy unmeasured)")
   }
 }

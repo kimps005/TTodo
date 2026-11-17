@@ -248,7 +248,9 @@ extension SharedStore {
   }
   func captureReviewItems(id: String) throws -> [CaptureReviewItem] {
     try transaction {
-      if let analysis = try querySQL("SELECT expires_at FROM analyses WHERE id=?", params: [id]).first {
+      var semiAutomatic = false
+      if let analysis = try querySQL("SELECT expires_at,model_version FROM analyses WHERE id=?", params: [id]).first {
+        semiAutomatic = analysis["model_version"] as? String == "vision-ocr/manual-v1"
         guard let raw = analysis["expires_at"] as? String, let expiry = ExtractionValidator.timestamp(raw) else { throw CaptureError.stateChanged }
         if expiry <= Date() {
           try runSQL("UPDATE extracted_tasks SET review_status='ignored',title='보존 기간이 지난 제안',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,confidence=0 WHERE analysis_id=? AND review_status='pending'", params: [id])
@@ -261,7 +263,7 @@ extension SharedStore {
           let precision = row["due_precision"] as? String else { throw CaptureError.stateChanged }
         let fields = ExtractionValidator.deadlineFields(due: row["due_at"] as? String, precision: precision)
         let assignee = (row["assignee"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0 || assignee == nil || assignee?.isEmpty == true, selected: (row["confidence"] as? Double ?? 0) > 0, dateText: fields.day, timeText: fields.time)
+        return CaptureReviewItem(id: taskId, title: title, description: row["description"] as? String, dueAt: row["due_at"] as? String, duePrecision: precision, evidence: row["evidence_text"] as? String ?? "", needsConfirmation: row["needs_confirmation"] as? Int64 != 0 || assignee == nil || assignee?.isEmpty == true, selected: !semiAutomatic, dateText: fields.day, timeText: fields.time)
       }
     }
   }

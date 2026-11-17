@@ -24,6 +24,7 @@ export interface ExtractedTask {
   due_at: string | null; due_precision: Todo['due_precision']; assignee: string | null;
   confidence: number; evidence_text: string; needs_confirmation: number;
   review_status: 'pending' | 'saved' | 'ignored'; linked_todo_id: string | null;
+  capture_provider?: string | null;
 }
 export class Repository {
   constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString()) {}
@@ -131,7 +132,7 @@ export class Repository {
     let rows: ExtractedTask[] = [];
     await this.db.withExclusiveTransactionAsync(async tx => {
       await this.pruneEvidenceInTransaction(tx, this.now());
-      rows = await tx.getAllAsync<ExtractedTask>('SELECT * FROM extracted_tasks WHERE analysis_id=? ORDER BY rowid', id);
+      rows = await tx.getAllAsync<ExtractedTask>('SELECT e.*,a.model_version AS capture_provider FROM extracted_tasks e JOIN analyses a ON a.id=e.analysis_id WHERE e.analysis_id=? ORDER BY e.rowid', id);
     });
     return rows.map(task => {
       const assignee = task.assignee?.trim() || null;

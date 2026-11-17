@@ -4,7 +4,7 @@ import { dueLabel, type TodoInput } from './todo';
 
 export type ReviewDraft = ExtractedTask & { selected: boolean; dateEdited: boolean; day: string; time: string; reminder: boolean };
 
-export function reviewDraft(task: ExtractedTask, selected = task.review_status === 'pending' && task.confidence > 0): ReviewDraft {
+export function reviewDraft(task: ExtractedTask, selected = task.review_status === 'pending' && task.capture_provider !== 'vision-ocr/manual-v1'): ReviewDraft {
   return { ...task, ...deadlineFields(task), selected, dateEdited: false, reminder: false };
 }
 

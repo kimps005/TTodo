@@ -7,8 +7,9 @@ import { dueLabel } from '../src/domain/todo';
 const task: ExtractedTask = { id: 'old', analysis_id: 'capture', title: '원래 제목', description: '설명', due_at: '2026-11-20', due_precision: 'date', assignee: '담당', confidence: .9, evidence_text: '원문 근거', needs_confirmation: 1, review_status: 'pending', linked_todo_id: null };
 
 test('OCR 반자동 항목은 탭 전 선택하지 않고 알림 편집은 같은 대기 항목에만 보존한다', () => {
-  const ocr = { ...task, confidence: 0 };
+  const ocr = { ...task, confidence: 0, capture_provider: 'vision-ocr/manual-v1' };
   assert.equal(reviewDraft(ocr).selected, false);
+  assert.equal(reviewDraft({ ...ocr, capture_provider: 'apple-ondevice/prompt-v2' }).selected, true, '모델 신뢰도 0을 OCR 처리 유형으로 오인하지 않는다');
   const draft = { ...reviewDraft(ocr), selected: true, reminder: true };
   const [same] = reconcileReviewDrafts([draft], [ocr]);
   assert.equal(same.selected, true); assert.equal(same.reminder, true);
