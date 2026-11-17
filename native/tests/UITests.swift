@@ -16,6 +16,10 @@ final class TTodoUITests: XCTestCase {
         else { scroll.swipeUp() }
       }
     }
+    let screen = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    screen.name = "unreachable-control-screen"; screen.lifetime = .keepAlways; add(screen)
+    let tree = XCTAttachment(string: "App state: \(app.state.rawValue)\nTarget: \(element.debugDescription)\n\(app.debugDescription)")
+    tree.name = "unreachable-control-tree"; tree.lifetime = .keepAlways; add(tree)
     XCTAssertTrue(element.exists)
     XCTAssertTrue(element.isHittable)
   }
@@ -294,6 +298,7 @@ final class TTodoUITests: XCTestCase {
     reveal(control(app, label: "내 방식으로"), in: app)
     screenshot(app, name: "large-05-settings")
     tap(control(app, label: "할 일"), in: app)
+    screenshot(app, name: "large-06-returned-home")
     reveal(input, in: app)
     XCTAssertEqual(input.value as? String, "CI large unsaved draft")
     screenshot(app, name: "large-06-preserved-draft")

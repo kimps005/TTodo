@@ -4,7 +4,7 @@
 
 ## 최신 코드 검증
 
-검사 대상은 `06863bc`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43999171606)에서 121개 JS 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드가 통과했다. [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/43999247359)도 Xcode 26.6 / iPhoneOS SDK 26.5에서 성공했고 arm64 실행 파일·두 확장 포함·개인정보 선언 12개 수집을 확인했다. 기기 설치용 서명이나 실제 모델 생성 결과는 없다.
+최신 품질 검사 대상은 `52155a0`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44002198565)에서 125개 JS 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드가 통과했다. 홈 날짜·정렬의 자정/시간대 갱신과 상세 완료 상태 표시를 포함하며 실제 iPhone의 시계 변경·VoiceOver 검증은 아니다. [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/43999247359)는 이전 `06863bc` 소스로 Xcode 26.6 / iPhoneOS SDK 26.5에서 성공했고 arm64 실행 파일·두 확장 포함·개인정보 선언 12개 수집을 확인했다. 후속 코드의 iPhoneOS 아카이브·기기 설치용 서명이나 실제 모델 생성 결과는 없다.
 
 ## 기능별 현황
 
