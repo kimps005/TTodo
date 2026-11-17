@@ -1049,3 +1049,8 @@ Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별�
 ## 마감 해제 VoiceOver 안내 정정
 - 마감 날짜 입력의 힌트를 실제 저장 규칙과 맞췄다. 마감을 없애려면 날짜와 시각을 모두 비워야 하며, 날짜만 지우면 시각이 남아 저장 검증에서 거부된다. 제품 데이터/날짜 처리 로직과 네이티브 코드는 바꾸지 않는다.
 - 타입·개발 번들·diff 검사 통과. 이 문구 수정의 JS 품질 CI와 앞서 통과한 0d6c7be의 전체 네이티브 Debug 검증을 구분해 기록한다. 진행 중인 두 UI 재검사는 0d6c7be이며 이번 힌트 문구 수정 이전이다.
+
+## UI 회귀 전체 통과와 검증 마무리
+- [0d6c7be UI 회귀 재시도](https://github.com/kimps005/TTodo/actions/runs/44113873773)는 최종 success다. primary(iPhone 16 Pro/iOS 26.5), oldest(iPhone 16 Pro/iOS 26.2)는 `testManualTaskLifecycleWithoutSettingsNavigation` 각각 1개 통과·실패/건너뜀 0이다. 저장·실제 앱 재실행 보존·편집·완료/복원·삭제 흐름을 확인했다. compact의 iPhone SE 3세대/iOS 26.5 최대 접근성 글자 검사 통과도 유지됐다. 실행기 배정 실패였던 두 작업을 실제 실행 성공으로 재확인했다.
+- [fcc7237 문구 수정 JS 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44119898707)는 148개 테스트·실패 0·타입·보안 취약점 0·일반/개발 번들 성공이다. ios는 의도적으로 skipped이며 동일 Swift 소스의 네이티브 Debug 검증은 [0d6c7be 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44113936125) 성공으로 구분한다. 문구 수정은 위 UI 실행 이후의 별도 변경이며 실제 VoiceOver 음성 검증은 하지 않았다.
+- 코드·정답셋·실행/채점 안내와 CI 검증 기록을 커밋·푸시했다. 실제 모델의 정밀도 90%·명시 마감 정확도 95% 달성 여부, 실제 iPhone VoiceOver/시각 검수와 설치·서명은 미검증으로 남는다. 실제 AI 기능 전체 완료나 접근성 인증으로 표시하지 않는다.
