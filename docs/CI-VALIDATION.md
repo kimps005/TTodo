@@ -93,6 +93,8 @@ SDK 글자 크기 도움말은 `d9639e5`부터 일회성 기기 생성·부팅 �
 
 ## 확인된 실행 결과
 
+[ceb4804 이전 iOS 수동 수명주기](https://github.com/kimps005/TTodo/actions/runs/44057175849): SDK 도움말을 기기 생성 전에 확인하는 순서로 iPhone 16 Pro / iOS 26.2 (23C54) / large에서 Release 시뮬레이터 빌드와 지정 수동 수명주기 XCTest 1개 통과·실패/건너뜀 0이다. 원본 ZIP SHA-256·커밋·report/summary/tests를 대조하고 완료 목록의 연도 포함 마감과 키보드 저장 첨부 화면을 확인했다. 전체 삭제·알림·AI·실기기 검증은 포함하지 않는다.
+
 [b2d7636 전체 CI](https://github.com/kimps005/TTodo/actions/runs/43715163208)와 [iPhoneOS 아카이브](https://github.com/kimps005/TTodo/actions/runs/43715163336): 74개 테스트·타입·보안·Hermes·Swift/합성 Vision OCR·앱/확장 시뮬레이터 빌드·실제 iPhoneOS Release 아카이브/선언 수집 통과. SDK 로그에서 두 한국어 단축어 문구와 앱 이름을 ko로 학습한 것을 확인했고 실제 보고서도 기본 ko/지원 [ko]다. 한국어 Siri·잠금 실행·VoiceOver 실기기는 미검증이며 후속 알림 거부 UI 보강은 이 실행 이후다.
 
 [c76df77 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/43709090533): core/ios 모두 성공. 69개 테스트·타입·보안 취약점 0·실제 Hermes, Swift 저장소/캡처·계약·합성 한국어 Vision OCR과 앱·위젯·공유 확장 arm64 시뮬레이터 빌드를 통과했다. 초/밀리초/시간대별 만료 정리와 10분 중단 복구 유예 경계는 합성 입력의 실제 SQLite 회귀 검사로 확인했다. 실제 iPhone의 시각 변경·프로세스 수명·기기 내 모델·정확도·잠금 검증은 포함하지 않는다.

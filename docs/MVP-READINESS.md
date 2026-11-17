@@ -4,7 +4,7 @@
 
 ## 최신 코드 검증
 
-최신 품질 검사 대상은 `3fad024`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44048082960)에서 130개 JS 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집이 통과했다. 완료 목록 마감/AI 출처·연도 표시, 검토 마감 수정 요약, 큰 카드 시스템 상태 조회, 탭 스크롤 분리와 합성 CI 시작 진단을 포함한다. [UI 실행](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 최신 iOS 수동 수명주기와 작은 화면·최대 글자 흐름은 각각 1개 통과·실패/건너뜀 0이다. 이전 iOS는 앱 실행 전 SDK 도움말 시간 초과가 두 시도 모두 발생했다. 이후 앱·Pods 빌드 없는 비교 진단으로 부팅 직후 첫 도움말의 지연을 재현했고, 기기 ID가 필요 없는 SDK 도움말을 기기 생성 앞으로 이동했다. [수정 순서 준비 검증](https://github.com/kimps005/TTodo/actions/runs/44055891320)은 iPhone 16 Pro / iOS 26.2에서 성공했다. [수정 후 앱 UI 검사](https://github.com/kimps005/TTodo/actions/runs/44057175849)는 `ceb4804`로 실행 중이며 결과 확인 전이다. 준비 성공을 XCTest 통과로 대신하지 않는다. 앞선 시작 대기 원인은 미확정이다. [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44052256985)는 앱 코드가 같은 `5bcfaee` 소스로 성공했다. Xcode 26.6 / iPhoneOS SDK 26.5에서 arm64 실행 파일·두 확장·Info.plist·개인정보 선언 12개를 확인했으며 스크롤/진단 코드도 포함한다. 실제 iPhone·AI 정확도 검증은 아니다.
+최신 품질 검사 대상은 `3fad024`다. [전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44048082960)에서 130개 JS 테스트·타입·보안·Hermes, 실제 Swift 저장소/캡처와 JSON 계약, 합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집이 통과했다. 완료 목록 마감/AI 출처·연도 표시, 검토 마감 수정 요약, 큰 카드 시스템 상태 조회, 탭 스크롤 분리와 합성 CI 시작 진단을 포함한다. [UI 실행](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 최신 iOS 수동 수명주기와 작은 화면·최대 글자 흐름은 각각 1개 통과·실패/건너뜀 0이다. 이전 iOS는 앱 실행 전 SDK 도움말 시간 초과가 두 시도 모두 발생했다. 이후 앱·Pods 빌드 없는 비교 진단으로 부팅 직후 첫 도움말의 지연을 재현했고, 기기 ID가 필요 없는 SDK 도움말을 기기 생성 앞으로 이동했다. [수정 순서 준비 검증](https://github.com/kimps005/TTodo/actions/runs/44055891320)은 iPhone 16 Pro / iOS 26.2에서 성공했다. [수정 후 앱 UI 검사](https://github.com/kimps005/TTodo/actions/runs/44057175849)는 `ceb4804`의 iPhone 16 Pro / iOS 26.2 (23C54)에서 지정 수동 수명주기 XCTest 1개 통과·실패/건너뜀 0이다. ZIP 해시·커밋·report/summary/tests JSON을 대조했다. 과거 실패나 다른 시나리오의 판정을 변경하지 않는다. 앞선 시작 대기 원인은 미확정이다. [서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44052256985)는 앱 코드가 같은 `5bcfaee` 소스로 성공했다. Xcode 26.6 / iPhoneOS SDK 26.5에서 arm64 실행 파일·두 확장·Info.plist·개인정보 선언 12개를 확인했으며 스크롤/진단 코드도 포함한다. 실제 iPhone·AI 정확도 검증은 아니다.
 
 ## 기능별 현황
 
@@ -12,7 +12,7 @@
 |---|---|---|
 | P0-01 인증 없는 빠른 입력 | 입력 요청 단축어가 전달한 텍스트를 `AddTodoIntent`로 저장 | 실제 SDK 컴파일·Swift 저장소 검사. 잠긴 iPhone의 입력 UI·인증·저장은 미검증 |
 | P0-02 잠금화면 목록 | WidgetKit·Live Activity, 제목/개수/숨김 선택, 우선 마감, 큰 카드 시스템 상태/재조회 | 저장소 스냅샷·개인정보·정렬 검사와 빌드. 실제 위젯 배치·갱신·만료·재부팅은 미검증 |
-| P0-03 할 일 추가·수정·완료·삭제 | 오프라인 SQLite, 오래된 화면의 변경/삭제 보호, 상세 완료 상태·완료 목록 마감/AI 출처·연도 표시 | 로컬 SQLite·Swift 검사와 최신 iOS 26.5 수동 수명주기 UI 통과. 이전 iOS 26.2는 42cce33에서 통과했으나 최신 소스의 두 시도는 앱 실행 전 SDK 도움말 시간 초과로 미검증이다. 홈 자정/시간대 갱신은 가상 시계 검사이며 실제 iPhone은 미검증 |
+| P0-03 할 일 추가·수정·완료·삭제 | 오프라인 SQLite, 오래된 화면의 변경/삭제 보호, 상세 완료 상태·완료 목록 마감/AI 출처·연도 표시 | 로컬 SQLite·Swift 검사와 최신 iOS 26.5 수동 수명주기 UI 통과. 이전 iOS 26.2도 SDK 준비 순서 수정 후 ceb4804에서 지정 수동 수명주기 1개 통과·실패/건너뜀 0이다. 앞선 두 준비 실패는 해당 실행의 실패로 유지한다. 홈 자정/시간대 갱신은 가상 시계 검사이며 실제 iPhone은 미검증 |
 | P0-04 캡처 자동화 | 단축어가 직접 전달한 이미지용 `AnalyzeCaptureIntent`와 설정 안내 | Intent 빌드·처리 로직 검사. 실제 스크린샷 트리거·파일 전달·연속 캡처·잠금/종료 실행은 미검증. 연결 완료로 표시하지 않음 |
 | P0-05 OCR | Apple Vision, 형식/크기 제한, 사용자 OCR 수정 | 합성 한국어 macOS OCR과 이전 사진 선택/iOS OCR UI 통과. 실제 사용자 이미지·기기별 정확도는 미측정 |
 | P0-06 AI 식별·요약·날짜 | Apple 기기 내 모델 후보, 원문 근거·날짜 검증, 평가 실행/집계 도구 | 합성 응답 검증·Swift/JS 계약 검사. 실제 모델 생성·한국어 정밀도/마감 정확도·지연은 미측정. 정식 AI 지원으로 확정하지 않음 |

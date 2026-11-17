@@ -2,6 +2,11 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## SDK 준비 수정 후 iOS 26.2 앱 수명주기 통과
+- [ceb4804 UI 실행](https://github.com/kimps005/TTodo/actions/runs/44057175849)은 iPhone 16 Pro / iOS 26.2 (23C54) / large에서 성공했다. 원본 ZIP SHA-256 `e57ea2161b9bb37b56999e9db058b7c040b6b765460120cc88c3586548289f05`와 커밋·기종·OS·보고서·SDK summary/tests JSON을 대조했다. 지정 `testManualTaskLifecycleWithoutSettingsNavigation` 1개 통과·실패/건너뜀 0, 약 135.8초다.
+- 기존 두 실패의 SDK 준비 단계를 지나 실제 Release 시뮬레이터 앱 빌드/XCTest까지 실행했다. 추가·재실행 후 보존·제목/마감 수정·완료/복원·날짜만 보존·삭제 취소/삭제·삭제 후 재실행·키보드 입력의 단일 저장을 확인했다. 완료 목록의 연도 포함 마감과 키보드로 저장한 할 일은 첨부 화면에서도 확인했다. 시작 로그에는 마지막 재실행의 저장소·로컬 스냅샷·권한·ActivityKit·boot_ready가 기록됐다.
+- 이번 성공은 수정된 SDK 준비 순서와 수동 수명주기의 이전 iOS 검증이다. 과거 실패 실행을 성공으로 바꾸지 않으며 알림 설정·전체 데이터 삭제·실제 AI 생성/정확도·잠금 입력·실제 iPhone·VoiceOver 성공을 뜻하지 않는다. 기존 최신 iOS와 작은 화면·최대 글자 결과는 별도 실행의 성공으로 유지한다. 실제 iPhone 설치 보류와 운영자/지원 정보 미정도 유지한다.
+
 ## 수정 순서로 이전 iOS 앱 UI 재검증 착수
 - [ceb4804 수동 수명주기 검사](https://github.com/kimps005/TTodo/actions/runs/44057175849)를 iPhone 16 Pro / oldest-installed / large로 실행했다. SDK 준비만 통과한 뒤 남아 있던 실제 앱·XCTest 검증이며, 결과 확인 전이다. 기존 알림 설정 진단과 실기기 서명 경로는 재개하지 않았다.
 - Windows에서 테스트 130개·타입·UI runner Node 구문·diff 검사를 통과했다. 준비 순서와 최신 검증 범위를 CI-VALIDATION/MVP-READINESS에도 반영했다. 기존 DEVICE-QA.md 수정은 보존하고 커밋에서 제외한다.
