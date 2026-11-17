@@ -67,7 +67,9 @@ public class TTodoNativeModule: Module {
       let data = try Data(contentsOf: url, options: .mappedIfSafe)
       return ["text": try VisionOCR.recognize(data), "fingerprint": VisionOCR.fingerprint(data)]
     }
-    Function("signalCapturePurge") { CapturePurgeObserver.post() }
+    Function("signalCapturePurge") {
+      CapturePurgeObserver.post()
+    }
     Function("reloadWidgets") {
       TodoActivityManager.publishLockChange()
       Task { _ = try? await CaptureNotifications.refreshReminders() }

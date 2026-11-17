@@ -25,11 +25,21 @@ enum TodoActivityManager {
   }
   static func state() throws -> TodoActivityAttributes.ContentState {
     let snapshot = try SharedStore().snapshot()
-    return .init(tasks: snapshot.tasks, count: snapshot.count, hideTitles: snapshot.hideTitles, hideContent: snapshot.hideContent)
+    var state = TodoActivityAttributes.ContentState(tasks: snapshot.tasks, count: snapshot.count, hideTitles: snapshot.hideTitles, hideContent: snapshot.hideContent)
+    // Five 200-scalar titles can exceed ActivityKit's 4 KB payload limit.
+    // Keep the leading rows and the actual total even with escaped Unicode.
+    while !state.tasks.isEmpty {
+      if try JSONEncoder().encode(state).count <= 3900 { break }
+      state.tasks.removeLast()
+    }
+    return state
   }
   static func refresh() async throws {
-    let content = ActivityContent(state: try state(), staleDate: Date().addingTimeInterval(3600))
-    for activity in Activity<TodoActivityAttributes>.activities { await activity.update(content) }
+    let snapshotTime = Date()
+    let content = ActivityContent(state: try state(), staleDate: snapshotTime.addingTimeInterval(3600))
+    for activity in Activity<TodoActivityAttributes>.activities {
+      await activity.update(content, timestamp: snapshotTime)
+    }
   }
   static func start() async throws {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { throw NSError(domain: "TTodo", code: 1, userInfo: [NSLocalizedDescriptionKey: "iOS 설정에서 실시간 현황을 허용해 주세요."]) }

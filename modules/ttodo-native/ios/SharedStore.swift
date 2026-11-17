@@ -2,21 +2,28 @@ import Foundation
 import SQLite3
 
 #if os(iOS)
-import Darwin
+import CoreFoundation
 
-// No content crosses process boundaries. SQLite remains authoritative if the OS
-// suspends a listener or terminates the app before it can post the notification.
 final class CapturePurgeObserver {
-  private static var name: String { TTodoConfiguration.appGroup + ".capture-purged" }
-  private var token: Int32 = 0
-  private let registered: Bool
-  init(onPurge: @escaping () -> Void) {
-    var registration: Int32 = 0
-    registered = notify_register_dispatch(Self.name, &registration, .main) { _ in onPurge() } == NOTIFY_STATUS_OK
-    token = registration
+  private static var name: CFNotificationName {
+    CFNotificationName(rawValue: (TTodoConfiguration.appGroup + ".capture-purged") as CFString)
   }
-  deinit { if registered { notify_cancel(token) } }
-  static func post() { notify_post(name) }
+  private static let localName = Notification.Name("TTodoCapturePurged")
+  // Register once per process. The C callback never holds a Swift object's address.
+  private static let registration: Void = {
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), nil, { _, _, _, _, _ in
+      DispatchQueue.main.async { NotificationCenter.default.post(name: CapturePurgeObserver.localName, object: nil) }
+    }, name.rawValue, nil, .deliverImmediately)
+  }()
+  private let subscription: NSObjectProtocol
+  init(onPurge: @escaping () -> Void) {
+    _ = Self.registration
+    subscription = NotificationCenter.default.addObserver(forName: Self.localName, object: nil, queue: .main) { _ in onPurge() }
+  }
+  deinit { NotificationCenter.default.removeObserver(subscription) }
+  static func post() {
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), name, nil, nil, true)
+  }
 }
 #endif
 
@@ -74,15 +81,18 @@ final class SharedStore {
   init(directoryOverride: URL? = nil) throws {
     let directory = try directoryOverride ?? Self.directory()
     let path = directory.appendingPathComponent("ttodo.sqlite").path
-    var flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+    let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
     #if os(iOS)
     try Self.prepareProtection(directory: directory, path: path)
-    flags |= SQLITE_OPEN_FILEPROTECTION_C
     #endif
     guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK else {
       sqlite3_close(db); db = nil; throw StoreError.database
     }
     do {
+      #if os(iOS)
+      // Verify the new inode as well as correcting files from older installations.
+      try Self.prepareProtection(directory: directory, path: path)
+      #endif
       sqlite3_busy_timeout(db, 5000)
       let initialVersion = try scalar("PRAGMA user_version")
       if initialVersion > TTodoConfiguration.schemaVersion { throw StoreError.newerSchema }
