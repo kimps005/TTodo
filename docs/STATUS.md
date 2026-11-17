@@ -2,6 +2,11 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## 새 채팅으로 SDK 준비 지연 진단 인계
+- [3fad024 UI 실행](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 oldest 두 번째 시도도 iOS 26.2 / iPhone 16 Pro 부팅 뒤 text-size 단계에서 `simctl ui help failed (status=null, signal=SIGTERM, error=spawnSync xcrun ETIMEDOUT)`로 실패했다. 명령 제한은 60초였고 앱 빌드/XCTest에는 도달하지 않았다. 두 번째 작업 ID는 133931509924, artifact ID는 14315116548이다. 최신 iOS·최대 글자 성공은 유지하지만 전체 UI 실행을 성공으로 표시하지 않는다.
+- 사용자는 앱 빌드 없이 xcrun 경로 탐색과 부팅 전·후 도움말 호출을 나누는 근본 원인 진단을 선택했다. 이후 현재 작업을 마무리하고 새 채팅용 프롬프트를 요청하여 진단 workflow·스크립트 구현과 새 실행은 시작하지 않았다. [인계 문서](SDK-PREP-DIAGNOSTIC-HANDOFF.md)에 범위·자료·주의점을 정리했다.
+- 이 시점에 실행 중인 CI는 없다. 사용자 수정인 DEVICE-QA.md의 한 줄은 보존하고 커밋에 포함하지 않는다. 실기기 설치/서명·실제 모델 정확도·공개 운영자/지원 정보 의존성은 기존 보류 상태다.
+
 ## 스크롤 수정·시작 진단을 포함한 iPhoneOS Release 아카이브
 - [5bcfaee 서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44052256985) 성공. Xcode 26.6 / iPhoneOS SDK 26.5, ARCHIVE SUCCEEDED, arm64 Mach-O 실행 파일·위젯/공유 확장 포함 검사·Info.plist·개인정보 선언 12개 수집을 확인했다.
 - 3fad024와 5bcfaee 사이의 변경은 CI-VALIDATION/MVP-READINESS/STATUS 문서뿐이다. 따라서 이번 아카이브에는 탭 스크롤 분리와 고정 시작 단계 진단도 포함한다. 실제 계정·프로비저닝·iPhone 설치·잠금 입력·AI 정확도 검증은 아니다. 이전 iOS UI의 두 번째 시도는 진행 중이다.
