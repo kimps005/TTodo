@@ -2,6 +2,10 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## 스크롤 수정·시작 진단을 포함한 iPhoneOS Release 아카이브
+- [5bcfaee 서명 없는 Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44052256985) 성공. Xcode 26.6 / iPhoneOS SDK 26.5, ARCHIVE SUCCEEDED, arm64 Mach-O 실행 파일·위젯/공유 확장 포함 검사·Info.plist·개인정보 선언 12개 수집을 확인했다.
+- 3fad024와 5bcfaee 사이의 변경은 CI-VALIDATION/MVP-READINESS/STATUS 문서뿐이다. 따라서 이번 아카이브에는 탭 스크롤 분리와 고정 시작 단계 진단도 포함한다. 실제 계정·프로비저닝·iPhone 설치·잠금 입력·AI 정확도 검증은 아니다. 이전 iOS UI의 두 번째 시도는 진행 중이다.
+
 ## 스크롤 분리·시작 진단의 전체 품질 CI
 - [3fad024 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44048082960)의 core/ios 모두 성공했다. 130개 JS 테스트·타입·보안·Hermes, Swift 저장소·캡처/JSON 계약·합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집을 확인했다. 이 소스의 iPhoneOS 아카이브·실기기 검증은 없다.
 - [세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 oldest는 iOS 26.2 부팅 뒤 `simctl help ui`가 60초에 응답하지 않아 text-size 준비 단계에서 실패했다. ZIP SHA256·커밋·report를 대조했으며 앱 빌드/XCTest에 도달하지 않았다. 제품 성공/회귀로 판단하지 않는다. 다른 두 작업 진행 중에는 GitHub가 동일 실행의 부분 재실행을 거부하여 완료 뒤 해당 작업만 한 차례 재시도할 예정이다. 이전 OS 명령 지연과 이번 지연의 근본 원인은 미확정이다.
