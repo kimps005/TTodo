@@ -2,6 +2,10 @@
 
 기준일: 2026-11-17 (한국 시간)
 
+## 스크롤 분리·시작 진단의 전체 품질 CI
+- [3fad024 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44048082960)의 core/ios 모두 성공했다. 130개 JS 테스트·타입·보안·Hermes, Swift 저장소·캡처/JSON 계약·합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집을 확인했다. 이 소스의 iPhoneOS 아카이브·실기기 검증은 없다.
+- [세 환경 UI](https://github.com/kimps005/TTodo/actions/runs/44048082961)의 oldest는 iOS 26.2 부팅 뒤 `simctl help ui`가 60초에 응답하지 않아 text-size 준비 단계에서 실패했다. ZIP SHA256·커밋·report를 대조했으며 앱 빌드/XCTest에 도달하지 않았다. 제품 성공/회귀로 판단하지 않는다. 다른 두 작업 진행 중에는 GitHub가 동일 실행의 부분 재실행을 거부하여 완료 뒤 해당 작업만 한 차례 재시도할 예정이다. 이전 OS 명령 지연과 이번 지연의 근본 원인은 미확정이다.
+
 ## 최신 CI 호스트의 실제 모델 가용성 재확인
 - UI 첨부의 ‘기기 내 AI 사용 가능’ 표시는 생성 성공이 아니므로 [3fad024 호스트 점검](https://github.com/kimps005/TTodo/actions/runs/44048374197)을 실행했다. 보고서 ZIP SHA256과 커밋을 대조했다. macOS 26.7.2 CI 호스트는 `device_not_eligible`이며 inference_attempted/inference_completed/accuracy_measured 모두 false다.
 - 점검 작업 성공은 가용성 확인 완료를 뜻하며 실제 모델 생성·iOS 실행·한국어 정확도 성공이 아니다. 이 자료만으로 시뮬레이터 표시의 원인이나 모델 실행 가능성을 확정하지 않는다. 외부 AI나 서명 경로는 추가하지 않았다.
