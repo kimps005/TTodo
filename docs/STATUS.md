@@ -5,6 +5,7 @@
 ## 최신 카드 상태·마감 표시 변경의 전체 품질 CI
 - [42cce33 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44030805582)의 core/ios 모두 성공했다. 130개 JS 테스트·타입·취약점 0·Hermes, Swift 저장소·캡처/JSON 계약·합성 Vision OCR, 앱·위젯·공유 확장 시뮬레이터 빌드와 개인정보 선언 12개 수집을 로그에서 확인했다.
 - 완료 목록의 마감/AI 출처와 연도, 검토 중 편집한 마감 요약, ActivityKit 상태 조회까지 포함한다. [세 환경 UI 검사](https://github.com/kimps005/TTodo/actions/runs/44030805430)와 [서명 없는 iPhoneOS Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44030964495)는 진행 중이며 완료로 기록하지 않는다. 앞선 b76d509/ddfbdd9 품질 CI와 b76d509 UI는 최신 실행으로 대체되어 취소됐으므로 통과로 집계하지 않는다.
+- 이후 같은 소스의 [서명 없는 iPhoneOS Release 아카이브](https://github.com/kimps005/TTodo/actions/runs/44030964495)도 성공했다. Xcode 26.6 / iPhoneOS SDK 26.5, ARCHIVE SUCCEEDED, arm64 Mach-O 실행 파일·두 확장 포함 검사·Info.plist 검증·개인정보 선언 12개 수집을 확인했다. 계정·프로비저닝·설치·실기기 검증은 진행하지 않았다. UI 검사는 별도 확인 중이다.
 
 ## 큰 목록 카드의 시스템 상태 확인
 - PRD 5.5에서 빠져 있던 앱 실행·전경 복귀 시 큰 목록 카드 상태 조회를 추가했다. 설정에서 ActivityKit의 활성·갱신 필요·진행 중 카드 없음·실시간 현황 비허용을 안내하고 재조회할 수 있다. 조회 실패는 별도 안내하며 수동 할 일 사용을 막지 않는다. 자동 시작이나 잠금화면 표시 성공을 추정하지 않는다.
