@@ -4,6 +4,8 @@
 
 초기 코드 695eeb7의 CI에서 Swift 저장소·캡처·OCR은 통과했으나 시뮬레이터 SDK가 Darwin notify 함수와 SQLite 보호 플래그를 가져오지 못해 앱 빌드가 실패했다. 공개 Core Foundation 알림과 Foundation 파일 보호 속성으로 수정했다.
 
+수정 커밋 `9b833c6`의 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/44098547964)에서 JS 140개·타입·보안·iOS 번들, 네이티브 저장소·캡처·Vision OCR, iOS 시뮬레이터 앱·확장 빌드와 개인정보 선언 검사가 모두 통과했다. [UI 회귀 CI](https://github.com/kimps005/TTodo/actions/runs/44098547877)에서도 primary·oldest·compact 세 구성이 통과했다.
+
 Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별도 프로세스 강제 종료 후 롤백, 철회 후 DB 파일의 합성 OCR 문자열 제거, 승인 이력 보존, CRUD 커밋 후 갱신 요청을 검사했다. CI의 파일 접근 거부/복구 검사는 실제 iOS 키백과 Face ID 동작을 대체하지 않는다. 앱이 소유한 캐시의 삭제와 확장에 대한 취소 요청까지만 제어할 수 있다. 서명된 기기에서 잠금 입력, OS 표시 지연, 권한 거부 및 정지된 확장 복귀는 미검증이다.
 
 기준일: 2026-11-17 (한국 시간)
