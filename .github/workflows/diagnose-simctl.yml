@@ -1,0 +1,26 @@
+name: 시뮬레이터 SDK 도움말 지연 진단
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: macos-26
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [xcrun-first, direct-first, post-boot-first-help]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Compare installed simctl invocations
+        run: node scripts/diagnose-simctl.mjs "${{ matrix.order }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simctl-${{ matrix.order }}
+          path: artifacts/simctl-diagnostic/
+          if-no-files-found: error
+          retention-days: 7
