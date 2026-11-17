@@ -23,6 +23,7 @@ import { isHomeLink } from './src/navigation/route';
 import { shareTemporaryExport } from './src/data/shareTemporaryExport';
 import { createLatestRefresh } from './src/data/latestRefresh';
 import { createReviewConfirmation } from './src/ui/reviewConfirmation';
+import { useDayClock } from './src/ui/useDayClock';
 
 const statusLabels: Record<Analysis['status'], string> = { queued: '분석 대기', processing: '분석 중', review: '확인 대기', saved: '저장 완료', ignored: '무시함', failed: '분석 실패', empty: '할 일 없음' };
 function requestLockRefresh() {
@@ -30,6 +31,7 @@ function requestLockRefresh() {
   catch { Alert.alert('잠금화면 갱신을 요청하지 못했어요', '앱의 데이터는 유지돼요. 앱으로 돌아오거나 다음 변경 때 갱신을 다시 요청해요.'); }
 }
 function Application() {
+  const today = useDayClock();
   const { fontScale } = useWindowDimensions();
   const [repo, setRepo] = useState<Repository | null>(null);
   const [error, setError] = useState('');
@@ -57,7 +59,7 @@ function Application() {
     const [all, captures, privacy, intro, hidden, consent, permission] = await Promise.all([repository.listTodos(), repository.listAnalyses(), repository.getPreference('private_lock'), repository.getPreference('onboarded'), repository.getPreference('hide_lock_content'), repository.getPreference('ai_local_consent'), Notifications.getPermissionsAsync().catch(() => null)]);
     return { all, captures, privacy, intro, hidden, consent, permission };
   }, ({ all, captures, privacy, intro, hidden, consent, permission }) => {
-    setTodos(sortTodos(all)); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
+    setTodos(all); setAnalyses(captures); setLockVisibility(hidden === 'yes' ? 'hidden' : privacy === 'no' ? 'titles' : 'count'); setOnboarded(intro === 'yes');
     setLocalAIConsent(consent === 'yes'); setPermission(permission);
   }), []);
   const boot = useCallback(async () => {
@@ -118,8 +120,9 @@ function Application() {
   const run = async (action: () => Promise<unknown>) => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); if (mutationInFlight.current) return; mutationInFlight.current = true; setBusy(true); try { await action(); await changed(); } catch (e) { Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '잠시 후 다시 시도해 주세요.'); } finally { mutationInFlight.current = false; setBusy(false); } };
   if (error) return <SafeAreaView style={ui.screen}><View style={ui.body}><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>준비가 필요해요</Text><Text style={ui.subtitle}>{error}</Text><Button title="다시 시도" onPress={() => void boot()} /></View></SafeAreaView>;
   if (!repo) return <SafeAreaView style={[ui.screen, { justifyContent: 'center' }]}><ActivityIndicator size="large" color={colors.accent} accessibilityLabel="할 일 불러오는 중" /></SafeAreaView>;
-  const pending = todos.filter(t => t.status === 'pending');
-  const completed = todos.filter(t => t.status === 'completed');
+  const ordered = sortTodos(todos, today);
+  const pending = ordered.filter(t => t.status === 'pending');
+  const completed = ordered.filter(t => t.status === 'completed');
   const permissionLabel = !permission ? '확인되지 않음' : permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ? '조용한 알림만 허용됨' : permission.ios?.status === Notifications.IosAuthorizationStatus.EPHEMERAL ? '임시 허용됨' : permission.granted ? '허용됨' : permission.status === 'undetermined' ? '아직 요청하지 않음' : '허용되지 않음';
   // Keyboard submission can arrive before the last onChangeText state render.
   // Its native text includes the final character; button presses use the draft.
@@ -150,7 +153,7 @@ function Application() {
       <ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
         <View style={[ui.row, { justifyContent: 'space-between' }, fontScale >= 1.4 && { flexDirection: 'column', alignItems: 'flex-start' }]}><Text dynamicTypeRamp="caption2" style={[ui.eyebrow, { maxWidth: '100%' }]}>TTODO</Text><Text style={[ui.small, { flexShrink: 1, maxWidth: '100%' }]}>생각난 순간, 가볍게.</Text></View>
         {tab === 'today' && <>
-          <View style={{ gap: 7 }}><Text style={ui.subtitle}>{new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>오늘의 할 일</Text><Text style={ui.subtitle}>앞으로 할 일 <Text style={{ color: colors.accent, fontWeight: '700' }}>{pending.length}개</Text></Text></View>
+          <View style={{ gap: 7 }}><Text style={ui.subtitle}>{today.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>오늘의 할 일</Text><Text style={ui.subtitle}>앞으로 할 일 <Text style={{ color: colors.accent, fontWeight: '700' }}>{pending.length}개</Text></Text></View>
           {!onboarded && <View style={ui.card}><Text style={ui.section}>잠금화면에 얼마나 보여줄까요?</Text><Text style={ui.subtitle}>잠금화면은 다른 사람도 볼 수 있어요. 기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. 설정에서 언제든 바꿀 수 있어요.</Text><LockVisibilityChoices value={lockVisibility} disabled={busy} onSelect={chooseVisibility} /><Text style={ui.small}>할 일은 기기에 저장돼요. 잠금화면 기능은 설정에서 따로 준비하며, 이 선택만으로 위젯이나 단축어를 연결하지 않아요.</Text><Button title="이 설정으로 시작하기" disabled={busy} onPress={() => void run(() => repo.setPreference('onboarded', 'yes'))} /></View>}
           <View style={ui.card}><TextInput accessibilityLabel="새 할 일" placeholder="어떤 일을 해야 하나요?" placeholderTextColor={colors.muted} value={draft} onChangeText={setDraft} style={ui.input} returnKeyType="done" onSubmitEditing={event => add(event.nativeEvent.text)} maxLength={400} editable={!busy} /><Button title="할 일 추가" disabled={busy || !draft.trim()} onPress={() => add()} /></View>
           {!pending.length && <View style={[ui.card, { paddingVertical: 36 }]}><Text style={{ fontSize: 30, color: colors.accent }}>✓</Text><Text style={ui.section}>머릿속을 조금 비워 보세요</Text><Text style={ui.subtitle}>할 일을 하나 적어 두면 기억하는 대신 지금 하는 일에 집중할 수 있어요.</Text></View>}
