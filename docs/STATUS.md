@@ -1034,3 +1034,8 @@ Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별�
 - 일반 iOS export와 별도로 `--dev` export를 전체 품질 CI core에 추가했다. 로컬 개발 번들에서 `__DEV__=true`, 평가 러너와 새 정답 ID 포함을 확인했다. 타입·diff 검사도 통과했다.
 - 큰 글자에서 제안 카드의 세로 배치 내부 정보가 flex 높이 분배로 줄어들지 않도록 자동 높이를 유지한다. 실제 최대 글자 카드 화면·VoiceOver는 실기기 검증 전이다.
 - ca4763a의 CI core는 테스트 148개·타입·보안·Hermes 성공이며 macOS는 실행기 대기 상태다. 이 후속 변경을 포함한 최신 전체 CI를 다시 대조한다.
+
+## 전체 Debug 품질 통과와 빠른 입력 UI 조회 수정
+- [ee55d72 전체 품질 CI](https://github.com/kimps005/TTodo/actions/runs/44110120581)는 core/ios 모두 성공했다. 실제 로그에서 테스트 148개·실패 0, 보안 취약점 0, 일반/개발 번들, Swift 저장소·캡처·전처리/상대 날짜·승인/중복 검사, Swift→TS 계약, 합성 Vision OCR, 앱·위젯·공유 확장 arm64 Debug 빌드 성공을 확인했다.
+- ca4763a의 이전 OS UI 회귀는 첫 입력의 TextView 레이블 조회에서 실패했다. 설치된 `RCTUITextView.accessibilityLabel`이 빈 입력일 때 placeholder를 레이블 뒤에 붙이는 것을 확인했다. 실제 입력에 `quick-todo-input` 식별자를 부여하고 모든 빠른 입력 XCTest 조회를 해당 식별자로 바꿨다. 여러 줄 입력은 유지하며 완료 키는 기존 단일 줄과 같이 저장 후 키보드를 닫는다.
+- 후속 로컬 테스트 148개·타입·개발 번들·diff 검사 통과. UI 수정 후 실제 시뮬레이터 재검증은 결과 확인 전이다. 사람의 실기기 VoiceOver와 실제 모델 점수는 계속 미검증이다.

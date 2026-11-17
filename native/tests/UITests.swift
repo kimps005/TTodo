@@ -46,7 +46,7 @@ final class TTodoUITests: XCTestCase {
     let start = app.buttons["이 설정으로 시작하기"]
     XCTAssertTrue(start.waitForExistence(timeout: 30))
     tap(start, in: app)
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     XCTAssertTrue(input.waitForExistence(timeout: 15))
     let taskTitle = "CI independent reset task"
     input.tap(); input.typeText(taskTitle + "\n")
@@ -100,7 +100,7 @@ final class TTodoUITests: XCTestCase {
   }
   // Both tests share the same CRUD assertions; the helper never opens Settings.
   @MainActor private func verifyManualTaskLifecycle(_ app: XCUIApplication) throws {
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     XCTAssertTrue(input.waitForExistence(timeout: 15))
     input.tap(); input.typeText("CI manual task")
     tap(app.buttons["할 일 추가"], in: app)
@@ -186,7 +186,7 @@ final class TTodoUITests: XCTestCase {
     tap(start, in: app)
     try verifyManualTaskLifecycle(app)
     // The Add button is covered above; also check Done and persistence.
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     input.tap(); input.typeText("CI independent keyboard task\n")
     let saved = row(app, title: "CI independent keyboard task")
     XCTAssertTrue(saved.waitForExistence(timeout: 15))
@@ -208,7 +208,7 @@ final class TTodoUITests: XCTestCase {
     screenshot(app, name: "01-onboarding")
     tap(start, in: app)
     try verifyManualTaskLifecycle(app)
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     // Exercise keyboard Done as well as the Add button, then the real Settings
     // reset path. Everything belongs to this fresh, synthetic-only simulator.
     let resetTitle = "CI reset task"
@@ -293,7 +293,7 @@ final class TTodoUITests: XCTestCase {
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
     screenshot(app, name: "large-01-onboarding-top")
     tap(app.buttons["이 설정으로 시작하기"], in: app)
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     tap(input, in: app); input.typeText("CI large text task\n")
     let stored = row(app, title: "CI large text task")
     reveal(stored, in: app)
@@ -386,7 +386,7 @@ final class TTodoUITests: XCTestCase {
     app.launch()
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
     tap(app.buttons["이 설정으로 시작하기"], in: app)
-    let input = app.textViews["새 할 일"]
+    let input = app.textViews["quick-todo-input"]
     tap(input, in: app); input.typeText("CI task before sharing\n")
     XCTAssertTrue(row(app, title: "CI task before sharing").waitForExistence(timeout: 15))
     // XCTest installs the dependency app by its bundle ID. The production app
