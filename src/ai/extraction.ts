@@ -37,7 +37,7 @@ export function validateExtraction(raw: unknown, sourceText: string, mode: 'ai' 
     if (mode === 'ai' && nonActionEvidence(t.evidence_text)) return [];
     return [{ title: normalizeTitle(t.title), description: description === null ? null : truncateText(description, 4000),
       due_at: due, due_precision: precision, assignee, confidence: t.confidence,
-      evidence_text: truncateText(t.evidence_text, 4000), needs_confirmation: t.needs_confirmation || !assignee ? 1 : 0 }];
+      evidence_text: truncateText(t.evidence_text, 4000), needs_confirmation: t.needs_confirmation || !assignee || /\[(상대방|나)\]/.test(sourceText) ? 1 : 0 }];
   });
 }
 export function nonActionEvidence(evidence: string): boolean {

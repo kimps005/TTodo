@@ -108,7 +108,11 @@ enum ExtractionValidator {
       guard let range = Range(match.range, in: source) else { return nil }; return String(source[range])
     }
     let dates = absolute.flatMap { detectedDates($0) }
-    if !dates.isEmpty && !dates.contains(where: { calendar.isDate($0, inSameDayAs: proposed) }) { return true }
+    // Date-only detections have the detector's host timezone, not the requested
+    // extraction timezone. Compare their civil days rather than their instants.
+    let detectedDay = DateFormatter(); detectedDay.locale = Locale(identifier: "en_US_POSIX")
+    detectedDay.calendar = Calendar(identifier: .gregorian); detectedDay.timeZone = .current; detectedDay.dateFormat = "yyyy-MM-dd"
+    if !dates.isEmpty && !dates.contains(where: { detectedDay.string(from: $0) == formatter.string(from: proposed) }) { return true }
     guard let messageDate, validDate(messageDate), let base = formatter.date(from: messageDate) else { return false }
     let offsets = [("그제", -2), ("어제", -1), ("오늘", 0), ("내일", 1), ("모레", 2), ("글피", 3)]
     let relative = offsets.filter { source.contains($0.0) }
@@ -194,7 +198,8 @@ enum ExtractionValidator {
         let confirmation = value.needs_confirmation else { throw ExtractionValidationError.invalid }
       let trimmedAssignee = value.assignee?.trimmingCharacters(in: .whitespacesAndNewlines)
       let assignee = trimmedAssignee?.isEmpty == false ? trimmedAssignee : nil
-      var task = NativeSuggestion(title: title, description: value.description.map { String($0.prefix(4000)) }, due_at: value.due_at, due_precision: precision, assignee: assignee, confidence: confidence, evidence_text: evidence, needs_confirmation: confirmation || assignee == nil)
+      let layoutHints = sourceText.contains("[상대방]") || sourceText.contains("[나]")
+      var task = NativeSuggestion(title: title, description: value.description.map { String($0.prefix(4000)) }, due_at: value.due_at, due_precision: precision, assignee: assignee, confidence: confidence, evidence_text: evidence, needs_confirmation: confirmation || assignee == nil || layoutHints)
       if nonActionEvidence(evidence) { return nil }
       if messageDate == nil && task.due_at != nil {
         let normalized = clean(evidence)

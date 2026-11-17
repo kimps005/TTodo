@@ -14,6 +14,11 @@ test('무행동 안내·취소·광고는 모델이 실행 가능이라고 응�
   assert.throws(() => validateExtraction([task], '풍경 사진'));
   assert.throws(() => validateExtraction({ tasks: [] }, '안내'));
 });
+
+test('좌우 화자 힌트가 있어도 모델의 담당자 추정을 확정하지 않는다', () => {
+  const [result] = validateExtraction([{ ...task, assignee: '나', needs_confirmation: false }], `[상대방] ${task.evidence_text}\n[나] 알겠어`);
+  assert.equal(result.needs_confirmation, 1);
+});
 const textLimits = [
   { text: '가' + '🚀'.repeat(2000), expected: '가' + '🚀'.repeat(1999) },
   { text: '가'.repeat(3999) + '🚀', expected: '가'.repeat(3999) },

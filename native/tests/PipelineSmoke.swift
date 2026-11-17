@@ -26,6 +26,7 @@ struct PipelineSmoke {
     check(reference["current_datetime"] == "2026-11-17 화요일 19:14")
     check(reference["message_date_with_weekday"] == "2026-11-16 월요일")
     check(!ExtractionValidator.detectedDates("November 20, 2026").isEmpty)
+    check(!ExtractionValidator.dateDisagrees(due: "2026-11-20", precision: "date", evidence: "2026-11-20까지 자료 보내줘", messageDate: nil, timezone: "America/Los_Angeles"))
     check(ExtractionValidator.dateDisagrees(due: "2026-11-18", precision: "date", evidence: "다음 주 화요일까지 자료 보내줘", messageDate: "2026-11-13", timezone: "Asia/Seoul"))
     check(!ExtractionValidator.dateDisagrees(due: "2026-11-17", precision: "date", evidence: "다음 주 화요일까지 자료 보내줘", messageDate: "2026-11-13", timezone: "Asia/Seoul"))
     check(ExtractionValidator.dateDisagrees(due: "2026-11-19T00:30:00Z", precision: "datetime", evidence: "내일 오전 자료 보내줘", messageDate: "2026-11-17", timezone: "Asia/Seoul"))

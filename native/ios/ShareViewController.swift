@@ -43,6 +43,7 @@ private struct CaptureShareView: View {
     guard let analysisId else { return true }
     do {
       let store = try SharedStore()
+      semiAutomatic = try store.querySQL("SELECT model_version FROM analyses WHERE id=?", params: [analysisId]).first?["model_version"] as? String == "vision-ocr/manual-v1"
       let stored = try store.captureReviewItems(id: analysisId)
       items = CaptureReviewItem.reconciled(current: items, stored: stored)
       similar = try store.similarCaptures(id: analysisId)
@@ -196,8 +197,11 @@ private struct CaptureShareView: View {
               TextField("시각 수정 17:30 (선택)", text: $item.timeText).textFieldStyle(.roundedBorder).keyboardType(.numbersAndPunctuation).onChange(of: item.timeText) { _, _ in item.dateEdited = true }
               Text("시각을 비우면 날짜만 저장해요. 둘 다 비우면 마감을 해제해요. 시각은 현재 기기 시간대를 사용해요.").font(.caption).foregroundStyle(.secondary)
               Text("원문 근거").font(.caption.bold())
-              Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled)
-              if semiAutomatic { Button("이 글자를 제목으로 선택") { item.selected = true }.buttonStyle(.bordered) }
+              if semiAutomatic {
+                Button { item.selected = true } label: {
+                  VStack(alignment: .leading) { Text(item.evidence); Text("탭해서 제목으로 선택").font(.caption.bold()) }
+                }.accessibilityLabel("인식문을 제목으로 선택: \(item.title)")
+              } else { Text(item.evidence.isEmpty ? "보존 정책 또는 삭제 요청으로 원문을 지웠어요." : item.evidence).font(.caption).textSelection(.enabled) }
             }.padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16)).disabled(working || reviewUnavailable)
           }
           if !items.isEmpty {

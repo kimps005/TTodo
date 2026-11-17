@@ -19,12 +19,13 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [messageDate, setMessageDate] = useState('');
   const [hasPrevious, setHasPrevious] = useState(false);
+  const [aiStatus, setAIStatus] = useState(() => nativeBridge?.localAIAvailability() ?? 'missing_native');
   const working = useRef(false);
   const draftVersion = useRef(0);
   const confirmation = useRef(createReviewConfirmation()).current;
   const closeIfIdle = () => { if (!working.current) { draftVersion.current++; close(); } };
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', () => { draftVersion.current++; });
+    const subscription = AppState.addEventListener('change', state => { draftVersion.current++; if (state === 'active') setAIStatus(nativeBridge?.localAIAvailability() ?? 'missing_native'); });
     return () => { draftVersion.current++; subscription.remove(); };
   }, []);
   const transferred = useRef<string | null>(null);
@@ -105,7 +106,8 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     // Waiting for an alert response holds no work lock, including cancellation.
     prompt: () => {
       const take = confirmation.capture();
-      Alert.alert('기기 안에서 AI로 분석할까요?', '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: '동의하고 분석', onPress: () => { if (take()) void requestAnalysis(reanalyze, true, version).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
+      const semiAutomatic = nativeBridge?.localAIAvailability() !== 'available';
+      Alert.alert(semiAutomatic ? '기기 내 분석과 원문 보관에 동의할까요?' : '기기 안에서 AI로 분석할까요?', semiAutomatic ? '기기 내 OCR·AI 분석과 검토용 원문 보관에 동의해요. 현재는 AI를 사용할 수 없어 OCR 글자를 직접 선택해요. 외부 서버로 보내지 않으며 원문은 7일이 지난 뒤 앱 실행·확인 때 정리해요. 설정에서 동의를 철회할 수 있고, 선택하고 저장하기 전에는 할 일을 만들지 않아요.' : '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: semiAutomatic ? '동의하고 검토' : '동의하고 분석', onPress: () => { if (take()) void requestAnalysis(reanalyze, true, version).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
     },
   }, grantConsent);
   const confirmReanalysis = async () => {
@@ -120,7 +122,6 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     } catch (error) { Alert.alert('분석 기록을 확인하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.'); }
     finally { working.current = false; setBusy(false); }
   };
-  const aiStatus = nativeBridge?.localAIAvailability() ?? 'missing_native';
   return <Modal animationType="slide" onRequestClose={closeIfIdle}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
     <Button title={busy ? '글자를 읽는 중…' : '사진에서 선택'} onPress={() => void select()} disabled={busy} />

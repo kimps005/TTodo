@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Image, Modal, ScrollView, Text, TextInput, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert, AppState, Image, Modal, ScrollView, Text, TextInput, View, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ExtractedTask, Repository } from '../data/repository';
 import { Button, Check } from './components';
@@ -66,7 +66,7 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
       <TextInput accessibilityLabel={`${index + 1}번째 제안, 할 일 제목`} editable={task.review_status === 'pending' && !busy && !checking && !checkError} style={ui.input} value={task.title} onChangeText={title => edit(index, { title })} multiline maxLength={400} />
       <Text style={ui.label}>마감 · {reviewDeadlineLabel(task)}</Text><DeadlineFields accessibilityContext={`${index + 1}번째 제안`} day={task.day} time={task.time} disabled={task.review_status !== 'pending' || busy || checking || checkError} onDay={day => edit(index, { day, dateEdited: true })} onTime={time => edit(index, { time, dateEdited: true })} />
       <View style={ui.row}><Check checked={task.reminder} disabled={task.review_status !== 'pending' || busy || checking || checkError} label={`${index + 1}번째 제안 마감 시각에 알림`} onPress={() => edit(index, { reminder: !task.reminder })} /><Text style={ui.small}>마감 시각에 알림 · 날짜와 시각을 지정하세요</Text></View>
-      <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text><Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>{task.confidence === 0 && <Button secondary title="이 글자를 제목으로 선택" disabled={busy || checking || checkError || task.review_status !== 'pending'} onPress={() => edit(index, { selected: true })} />}
+      <Text style={ui.subtitle}>{task.description}</Text><Text style={ui.label}>원문 근거</Text>{task.confidence === 0 ? <Pressable accessibilityRole="button" accessibilityLabel={`${index + 1}번째 인식문을 제목으로 선택`} accessibilityState={{ selected: task.selected, disabled: busy || checking || checkError || task.review_status !== 'pending' }} disabled={busy || checking || checkError || task.review_status !== 'pending'} onPress={() => edit(index, { selected: true })}><Text style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text><Text style={ui.label}>탭해서 제목으로 선택</Text></Pressable> : <Text selectable style={ui.small}>{task.evidence_text || '보존 정책 또는 삭제 요청에 따라 원문을 지웠어요.'}</Text>}
     </View>)}
     <Button title={`선택한 ${selected.length}개 저장`} disabled={busy || checking || checkError || !selected.length} onPress={save} />
     <Button secondary title="남은 제안 모두 무시" disabled={busy || checking || checkError || !items.some(t => t.review_status === 'pending')} onPress={() => void run(() => repository.ignoreAnalysis(analysisId, items.filter(t => t.review_status === 'pending').map(t => t.id)))} />
