@@ -5,14 +5,15 @@ parent=$1
 prefix=$2
 ps -axo pid=,ppid=,comm= > "$prefix.processes.txt" || exit 1
 # Sample only the measured child and its descendants on this CI host.
-awk -v parent="$parent" -v observer="$$" '
+awk -v parent="$parent" '
   { ppid[$1]=$2 }
+  $2 == parent && $3 ~ /\/(xcrun|simctl)$/ { root=$1 }
   END {
     for (pid in ppid) {
       ancestor=pid
-      while (ancestor in ppid && ancestor != parent && ancestor != observer && ancestor > 1)
+      while (ancestor in ppid && ancestor != root && ancestor > 1)
         ancestor=ppid[ancestor]
-      if (ancestor == parent && pid != parent) print pid
+      if (root && ancestor == root) print pid
     }
   }
 ' "$prefix.processes.txt" | while read -r pid; do

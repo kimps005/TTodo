@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url';
 import simulatorSelection from './ui-simulator-selection.cjs';
 
 const order = process.argv[2];
-if (!['xcrun-first', 'direct-first', 'post-boot-first-help'].includes(order)) throw new Error('Invalid diagnostic order');
+if (!['xcrun-first', 'direct-first', 'post-boot-first-help', 'verify-preparation'].includes(order)) throw new Error('Invalid diagnostic order');
 const baseline = order === 'post-boot-first-help';
+const verify = order === 'verify-preparation';
 const output = path.resolve('artifacts/simctl-diagnostic');
 const sampler = fileURLToPath(new URL('./sample-simctl-wait.sh', import.meta.url));
 mkdirSync(output, { recursive: true });
@@ -81,7 +82,7 @@ const routes = order === 'direct-first' ? ['direct', 'xcrun'] : ['xcrun', 'direc
 const sim = (label, args, timeout) => measure(label, 'xcrun', ['simctl', ...args], { timeout });
 let device;
 try {
-  if (!baseline) findTool('initial-find');
+  if (!baseline && !verify) findTool('initial-find');
   const runtimes = sim('runtimes', ['list', 'runtimes', '--json'], 240000);
   const types = sim('device-types', ['list', 'devicetypes', '--json'], 240000);
   if (!runtimes.ok || !types.ok) throw new Error('Inventory unavailable');
@@ -89,14 +90,23 @@ try {
     JSON.parse(runtimes.stdout).runtimes, JSON.parse(types.stdout).devicetypes, 'iphone-16-pro', 'oldest-installed');
   report.target = { runtime: runtime.identifier, version: runtime.version, build: runtime.buildversion, type: deviceType.identifier };
   if (runtime.version !== '26.2' || runtime.buildversion !== '23C54') throw new Error('Original runtime/build unavailable');
+  if (verify) {
+    help('before-create', 'xcrun');
+    if (report.failures.length) throw new Error('SDK help not confirmed');
+  }
   const created = sim('create', ['create', 'TTodo SDK diagnostic', deviceType.identifier, runtime.identifier], 240000);
   if (!created.ok || !/^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(created.stdout.trim())) throw new Error('Invalid create result');
   report.device = device = created.stdout.trim();
-  if (!baseline) for (const route of routes) help('before-boot', route);
+  if (!baseline && !verify) for (const route of routes) help('before-boot', route);
   if (!sim('boot', ['boot', device], 240000).ok || !sim('bootstatus', ['bootstatus', device, '-b'], 600000).ok) {
     throw new Error('Boot not confirmed');
   }
-  if (baseline) {
+  if (verify) {
+    if (!sim('set-text-size', ['ui', device, 'content_size', 'large'], 240000).ok) throw new Error('Text size setting failed');
+    const actual = sim('read-text-size', ['ui', device, 'content_size'], 240000);
+    report.textSize = actual.stdout.trim();
+    if (!actual.ok || report.textSize !== 'large') throw new Error('Text size not confirmed');
+  } else if (baseline) {
     help('after-boot', 'xcrun');
     findTool('after-boot-find');
     help('after-boot', 'direct');

@@ -1,5 +1,12 @@
 name: 시뮬레이터 SDK 도움말 지연 진단
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '경로·순서 비교 또는 수정된 글자 크기 준비 순서 검증'
+        type: choice
+        default: compare
+        options: [compare, verify-preparation]
 permissions:
   contents: read
 jobs:
@@ -9,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        order: [xcrun-first, direct-first, post-boot-first-help]
+        order: ${{ fromJSON(inputs.mode == 'verify-preparation' && '["verify-preparation"]' || '["xcrun-first","direct-first","post-boot-first-help"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
