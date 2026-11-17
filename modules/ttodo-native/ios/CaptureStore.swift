@@ -209,7 +209,7 @@ extension SharedStore {
     try transaction { try runSQL("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE id=? AND status IN ('processing','queued') AND processing_token=?", params: [code, id, token]) }
   }
   func approveSingleCapture(id: String, expectedTaskId: String, now: Date = Date()) throws -> Bool {
-    try transaction {
+    let added: Bool = try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       if analysis["status"] as? String == "saved" { return false }
       guard try querySQL("SELECT value FROM preferences WHERE key='private_lock'", params: []).first?["value"] as? String == "no" else { throw CaptureError.reviewRequired }
@@ -235,6 +235,8 @@ extension SharedStore {
       try runSQL("UPDATE analyses SET status='saved' WHERE id=?", params: [id])
       return existing == nil
     }
+    if added { publishLockChange() }
+    return added
   }
   func ignoreCapture(id: String, expectedTaskIds: [String]? = nil) throws {
     try transaction {
@@ -268,7 +270,7 @@ extension SharedStore {
     }
   }
   func approveReviewedCapture(id: String, edits: [CaptureTaskEdit], expectedSimilar: [SimilarCapture]? = nil, now: Date = Date()) throws -> Int {
-    try transaction {
+    let added: Int = try transaction {
       guard let analysis = try querySQL("SELECT status,expires_at,source_channel FROM analyses WHERE id=?", params: [id]).first else { throw CaptureError.stateChanged }
       guard let status = analysis["status"] as? String, ["review", "saved"].contains(status), let expires = analysis["expires_at"] as? String,
         let expiry = ExtractionValidator.timestamp(expires), expiry > now else { throw CaptureError.reviewRequired }
@@ -303,5 +305,7 @@ extension SharedStore {
       try runSQL("UPDATE analyses SET status=? WHERE id=?", params: [pending > 0 ? "review" : "saved", id])
       return count
     }
+    if added > 0 { publishLockChange() }
+    return added
   }
 }

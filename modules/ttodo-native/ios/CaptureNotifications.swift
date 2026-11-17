@@ -82,6 +82,9 @@ enum CaptureNotifications {
     }
     if latestPrivacy?.hideContent != false { content.title = "새 분석 결과가 있어요" }
     try? await center.add(UNNotificationRequest(identifier: "ttodo.capture.\(outcome.id)", content: content, trigger: nil))
+    if (try? store.captureNotificationIsCurrent(id: outcome.id, expectedTaskIds: pending.compactMap { $0["id"] as? String })) != true {
+      clearAnalysis(outcome.id)
+    }
   }
   static func clearAll() async {
     let center = UNUserNotificationCenter.current()

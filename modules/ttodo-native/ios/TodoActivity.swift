@@ -1,4 +1,5 @@
 import ActivityKit
+import WidgetKit
 import Foundation
 struct TodoActivityAttributes: ActivityAttributes {
   struct ContentState: Codable, Hashable {
@@ -10,6 +11,11 @@ struct TodoActivityAttributes: ActivityAttributes {
   let name: String
 }
 enum TodoActivityManager {
+  @discardableResult
+  static func publishLockChange() -> Task<Void, Never> {
+    WidgetCenter.shared.reloadAllTimelines()
+    return Task { do { try await refresh() } catch { /* Retry on foreground. */ } }
+  }
   static func status() -> String {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return "disabled" }
     let activities = Activity<TodoActivityAttributes>.activities

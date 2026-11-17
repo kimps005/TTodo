@@ -1,4 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +12,7 @@ import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
 import { createSerializedDatabase } from '../src/data/serializedDatabase';
 import schema from '../src/data/schema.json';
 
-function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
+function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:', notify?: () => void) {
   const native = new DatabaseSync(path);
   const connection: SqlConnection = {
     execAsync: async sql => { native.exec(sql); },
@@ -19,7 +21,7 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:') {
     getAllAsync: async <T>(sql: string, ...params: SqlValue[]) => native.prepare(sql).all(...params) as T[],
   };
   const db: Database = createSerializedDatabase(connection);
-  const repo = new Repository(db, randomUUID, now);
+  const repo = new Repository(db, randomUUID, now, notify);
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
@@ -569,7 +571,7 @@ test('동의 철회 정리가 실패하면 동의·분석 토큰·기존 원문�
   const finished = await repo.createAnalysis('consent-rollback-finished', 'manual', null);
   await repo.finishAnalysis(finished.id, [task], 'test', finished.token!);
   const processing = await repo.createAnalysis('consent-rollback-processing', 'manual', null);
-  native.exec("CREATE TRIGGER fail_revoke BEFORE UPDATE OF evidence_text ON extracted_tasks BEGIN SELECT RAISE(ABORT,'test-only-revoke-failure'); END;");
+  native.exec("CREATE TRIGGER fail_revoke BEFORE DELETE ON extracted_tasks BEGIN SELECT RAISE(ABORT,'test-only-revoke-failure'); END;");
   await assert.rejects(repo.revokeLocalAIConsent(), /test-only-revoke-failure/);
   assert.equal(await repo.getPreference('ai_local_consent'), 'yes');
   const row = (await repo.listAnalyses()).find(item => item.id === processing.id)!;
@@ -578,7 +580,7 @@ test('동의 철회 정리가 실패하면 동의·분석 토큰·기존 원문�
   native.exec('DROP TRIGGER fail_revoke');
   await repo.revokeLocalAIConsent();
   assert.equal(await repo.getPreference('ai_local_consent'), 'no');
-  assert.equal((await repo.listExtracted(finished.id))[0].evidence_text, '');
+  assert.deepEqual(await repo.listExtracted(finished.id), []);
   native.close();
 });
 
@@ -718,8 +720,10 @@ test('빈 결과·무시한 결과는 재분석하고 동의 철회·분석 중�
   await repo.finishAnalysis(a.id, [task, { ...task, title: '다른 제안' }], 'review', token);
   await repo.revokeLocalAIConsent();
   await assert.rejects(repo.restartUnstoredAnalysis(a.id), /동의/);
-  assert.equal((await repo.listExtracted(a.id)).length, 2);
+  assert.deepEqual(await repo.listExtracted(a.id), []);
   await repo.setPreference('ai_local_consent', 'yes');
+  token = await repo.restartUnstoredAnalysis(a.id);
+  await repo.finishAnalysis(a.id, [task, { ...task, title: '다른 제안' }], 'review', token);
   const first = (await repo.listExtracted(a.id))[0];
   await repo.approve(a.id, [{ id: first.id, input: { title: first.title } }]);
   assert.equal((await repo.listAnalyses())[0].status, 'review');
@@ -985,4 +989,80 @@ test('서로 다른 시간대의 마감은 문자열 대신 실제 시각으로 
   await repo.addTodo({ title: '나중', due_at: '2026-11-13T09:00:00Z', due_precision: 'datetime' });
   assert.deepEqual(sortTodos(await repo.listTodos(), new Date('2026-11-13T12:00:00')).map(t => t.title), ['먼저','나중']);
   native.close();
+});
+
+test('오프라인 저장소가 커밋 직후에만 최신 잠금 목록을 게시한다', async () => {
+  const snapshots: string[][] = [];
+  const { repo, native } = fixture(undefined, undefined, () => {
+    snapshots.push(native.prepare("SELECT title FROM todos WHERE status='pending'").all().map(row => String(row.title)));
+    throw new Error('display unavailable');
+  });
+  try {
+    await repo.initialize();
+    const id = await repo.addTodo({ title: '하나' });
+    await repo.updateTodo(id, { title: '수정' });
+    await assert.rejects(repo.updateTodo('missing', { title: '없음' }));
+    await repo.setCompleted(id, true);
+    await repo.setCompleted(id, false);
+    await repo.removeTodo(id);
+    await repo.setPreference('ai_local_consent', 'yes');
+    const a = await repo.createAnalysis('approval', 'share', null);
+    await repo.finishAnalysis(a.id, [task], 'test', a.token!);
+    const [proposal] = await repo.listExtracted(a.id);
+    await repo.approve(a.id, [{ id: proposal.id, input: { title: '승인' } }]);
+    await repo.deleteAll();
+    assert.deepEqual(snapshots, [['하나'], ['수정'], [], ['수정'], [], ['승인'], []]);
+  } finally { native.close(); }
+});
+
+test('프로세스 종료 뒤 미커밋 제안은 복구되지 않고 오래된 작업의 승인과 결과 저장을 거부한다', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ttodo-interrupted-'));
+  const path = join(root, 'store.sqlite');
+  const first = fixture(undefined, path);
+  try {
+    await first.repo.initialize();
+    await first.repo.setPreference('ai_local_consent', 'yes');
+    const a = await first.repo.createAnalysis('interrupted-file', 'share', null);
+    first.native.close();
+    const worker = spawnSync(process.execPath, ['-e', `
+      const db = new (require('node:sqlite').DatabaseSync)(process.argv[1]);
+      db.exec('BEGIN IMMEDIATE');
+      db.prepare("INSERT INTO extracted_tasks(id,analysis_id,title,due_precision,confidence,evidence_text) VALUES(?,?,?,'unknown',0,?)").run('partial', process.argv[2], 'partial title', 'partial OCR');
+      process.kill(process.pid, 'SIGKILL');
+    `, path, a.id]);
+    assert.ifError(worker.error);
+    assert.ok(worker.signal === 'SIGKILL' || (process.platform === 'win32' && worker.status === 1), worker.stderr.toString());
+    const next = fixture(() => '2026-11-13T02:11:00.000Z', path);
+    try {
+      await next.repo.initialize();
+      assert.equal((await next.repo.listAnalyses())[0].error_code, 'INTERRUPTED');
+      assert.deepEqual(await next.repo.listExtracted(a.id), []);
+      await assert.rejects(next.repo.finishAnalysis(a.id, [task], 'late', a.token!));
+      await assert.rejects(next.repo.approve(a.id, [{ id: 'partial', input: {title: 'partial'} }]));
+      assert.deepEqual(await next.repo.listTodos(), []);
+    } finally { next.native.close(); }
+  } finally { if (first.native.isOpen) first.native.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('철회 후 디스크와 내보내기에 미승인 본문이 남지 않고 승인 기록만 유지된다', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ttodo-purge-'));
+  const path = join(root, 'store.sqlite');
+  const { repo, native } = fixture(undefined, path);
+  const secret = 'private-OCR-canary-0714';
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const a = await repo.createAnalysis('mixed-capture', 'share', null);
+    const sensitive = { ...task, description: secret, assignee: secret, evidence_text: secret };
+    await repo.finishAnalysis(a.id, [sensitive, { ...sensitive, title: secret }], 'test', a.token!);
+    const [saved, pending] = await repo.listExtracted(a.id);
+    await repo.approve(a.id, [{ id: saved.id, input: { title: '내가 저장한 제목' } }]);
+    await repo.revokeLocalAIConsent();
+    assert.ok(!(await repo.exportData()).includes(secret));
+    assert.equal(readFileSync(path).includes(Buffer.from(secret)), false);
+    assert.equal((await repo.listTodos())[0].title, '내가 저장한 제목');
+    await repo.setPreference('ai_local_consent', 'yes');
+    await assert.rejects(repo.approve(a.id, [{ id: pending.id, input: { title: secret } }]));
+    await assert.rejects(repo.restartUnstoredAnalysis(a.id));
+  } finally { native.close(); rmSync(root, { recursive: true, force: true }); }
 });

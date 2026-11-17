@@ -27,7 +27,12 @@ export interface ExtractedTask {
   capture_provider?: string | null;
 }
 export class Repository {
-  constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString()) {}
+  constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString(),
+    private readonly notifyLockChange: () => void = () => {}) {}
+  private async changeLockList(write: (tx: SqlConnection) => Promise<void>) {
+    await this.db.withExclusiveTransactionAsync(write);
+    try { this.notifyLockChange(); } catch { /* App foreground retries from SQLite. */ }
+  }
   async initialize() {
     // Reject a known newer database before changing its persistent journal mode.
     // Migration still rechecks the version under the exclusive transaction below.
@@ -43,6 +48,8 @@ export class Repository {
         await tx.execAsync(schema.migration_from_1_after);
       } else if (version?.user_version === 2) await tx.execAsync(schema.migration_from_2);
       else if ((version?.user_version ?? 0) < schema.version) await tx.execAsync(schema.sql);
+      const consent = await tx.getFirstAsync<{ value: string }>("SELECT value FROM preferences WHERE key='ai_local_consent'");
+      if (consent?.value === 'no') await this.purgeCaptureContent(tx);
     });
     await this.pruneEvidence();
   }
@@ -63,8 +70,10 @@ export class Repository {
     validateDue(due, precision);
     const id = this.uuid();
     const time = this.now();
-    await this.db.runAsync('INSERT INTO todos (id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    await this.changeLockList(async tx => {
+      await tx.runAsync('INSERT INTO todos (id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
       id, title, input.description?.trim() || null, due, precision, time, time, source, sourceId, Date.parse(time));
+    });
     return id;
   }
   async updateTodo(id: string, input: TodoInput, expected?: Todo) {
@@ -72,7 +81,7 @@ export class Repository {
     const precision = input.due_precision ?? 'unknown';
     validateDue(due, precision);
     const title = normalizeTitle(input.title);
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await this.changeLockList(async tx => {
       await this.requireTodo(tx, id);
       if (expected) {
         const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
@@ -85,7 +94,7 @@ export class Repository {
   }
   async setCompleted(id: string, complete: boolean, expected?: Todo) {
     const time = this.now();
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await this.changeLockList(async tx => {
       await this.requireTodo(tx, id);
       if (expected) {
         const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
@@ -104,7 +113,7 @@ export class Repository {
   }
   async removeTodo(id: string, expected?: Todo) {
     let analyses: string[] = [];
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await this.changeLockList(async tx => {
       await this.requireTodo(tx, id);
       if (expected) {
         const current = await tx.getFirstAsync<Todo>('SELECT * FROM todos WHERE id=?', id);
@@ -222,7 +231,7 @@ export class Repository {
     });
   }
   async approve(id: string, edits: { id: string; input: TodoInput }[], expectedSimilar?: SimilarCapture[]): Promise<void> {
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await this.changeLockList(async tx => {
       const analysis = await tx.getFirstAsync<Analysis>('SELECT * FROM analyses WHERE id=?', id);
       if (!analysis || !['review', 'saved'].includes(analysis.status)) throw new Error('저장할 수 없는 분석 결과예요.');
       if (!(Date.parse(analysis.expires_at) > Date.parse(this.now()))) throw new Error('보존 기간이 지난 분석 결과예요. 이미지를 다시 선택해 주세요.');
@@ -278,7 +287,7 @@ export class Repository {
   setPreference(key: string, value: string) { return this.db.runAsync('INSERT INTO preferences(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value); }
   async setLockVisibility(value: 'titles' | 'count' | 'hidden') {
     if (!['titles', 'count', 'hidden'].includes(value)) throw new Error('잠금화면 표시 설정을 확인해 주세요.');
-    await this.db.withExclusiveTransactionAsync(async tx => {
+    await this.changeLockList(async tx => {
       await tx.runAsync("INSERT INTO preferences(key,value) VALUES('private_lock',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", value === 'titles' ? 'no' : 'yes');
       await tx.runAsync("INSERT INTO preferences(key,value) VALUES('hide_lock_content',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", value === 'hidden' ? 'yes' : 'no');
     });
@@ -301,11 +310,17 @@ export class Repository {
   async revokeLocalAIConsent() {
     await this.db.withExclusiveTransactionAsync(async tx => {
       await tx.runAsync("INSERT INTO preferences(key,value) VALUES('ai_local_consent','no') ON CONFLICT(key) DO UPDATE SET value='no'");
-      // Re-enabling consent must not authorize workers started before withdrawal.
-      // The same tokens gate native App Intent / Share Extension completions.
-      await tx.runAsync("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE status IN ('queued','processing')", 'CONSENT_REVOKED');
-      await tx.runAsync("UPDATE extracted_tasks SET evidence_text=''");
+      await this.purgeCaptureContent(tx);
     });
+  }
+  private async purgeCaptureContent(tx: SqlConnection) {
+    // Re-enabling consent must not authorize workers started before withdrawal.
+    // The same tokens gate native App Intent / Share Extension completions.
+    await tx.runAsync("UPDATE analyses SET status='failed',error_code=?,processing_token=NULL WHERE status IN ('queued','processing')", 'CONSENT_REVOKED');
+    await tx.runAsync("DELETE FROM extracted_tasks WHERE review_status<>'saved'");
+    await tx.runAsync("UPDATE extracted_tasks SET title='저장한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1");
+    await tx.runAsync("UPDATE analyses SET captured_at=NULL,status=CASE WHEN EXISTS (SELECT 1 FROM extracted_tasks WHERE analysis_id=analyses.id AND review_status='saved') THEN 'saved' ELSE 'ignored' END WHERE status='review'");
+    await tx.runAsync("UPDATE analyses SET captured_at=NULL WHERE captured_at IS NOT NULL");
   }
   async exportData() {
     let result: object = {};
@@ -318,7 +333,7 @@ export class Repository {
     return JSON.stringify(result, null, 2);
   }
   async deleteAll() {
-    await this.db.withExclusiveTransactionAsync(async tx => { await tx.execAsync('DELETE FROM extracted_tasks; DELETE FROM analyses; DELETE FROM todos; DELETE FROM preferences;'); });
+    await this.changeLockList(async tx => { await tx.execAsync('DELETE FROM extracted_tasks; DELETE FROM analyses; DELETE FROM todos; DELETE FROM preferences;'); });
     // Rows are already committed with secure_delete enabled. Space reclamation
     // can be blocked by another process; it must not prevent OS/cache cleanup.
     try { await this.db.execAsync('VACUUM;'); return { compacted: true }; }

@@ -16,6 +16,7 @@ interface NativeBridge {
   refreshReminders(): Promise<boolean>;
   extractTasks(text: string, capturedAt: string | null, timezone: string, messageDate: string | null): Promise<string>;
   recognizeText(uri: string): Promise<OCRResult>;
+  signalCapturePurge(): void;
   reloadWidgets(): void;
   startActivity(): Promise<void>;
   endActivities(): Promise<void>;

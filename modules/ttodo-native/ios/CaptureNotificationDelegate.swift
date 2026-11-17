@@ -22,8 +22,6 @@ final class CaptureNotificationDelegate: NotificationDelegate {
         try store.ignoreCapture(id: id, expectedTaskIds: taskIds)
       }
       UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [response.notification.request.identifier])
-      WidgetCenter.shared.reloadAllTimelines()
-      Task { try? await TodoActivityManager.refresh() }
     } catch { CaptureNotifications.requestReviewAfterFailure(id: id) }
     return true
   }

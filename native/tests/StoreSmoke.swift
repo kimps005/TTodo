@@ -32,6 +32,21 @@ struct StoreSmoke {
       let reopened = try SharedStore(directoryOverride: textDirectory)
       check(try reopened.snapshot().tasks.first?.title == title)
     }
+    // Exercise storage denial/recovery with filesystem permissions on the CI host.
+    // iPhone keybag transitions and Shortcuts input UI require a signed device.
+    let lockDirectory = directory.appendingPathComponent("locked-input")
+    try FileManager.default.createDirectory(at: lockDirectory, withIntermediateDirectories: true)
+    _ = try SharedStore(directoryOverride: lockDirectory)
+    let dbPath = lockDirectory.appendingPathComponent("ttodo.sqlite").path
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: dbPath)
+    do {
+      try SharedStore(directoryOverride: lockDirectory).add(title: "접근 전")
+      fatalError("Protected database unexpectedly accepted a write")
+    } catch {}
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dbPath)
+    try SharedStore(directoryOverride: lockDirectory).add(title: "첫 인증 후 재잠금")
+    check(try SharedStore(directoryOverride: lockDirectory).snapshot().count == 1)
+
     for commit in [true, false] {
       let concurrentDirectory = directory.appendingPathComponent(commit ? "reader-commit" : "reader-rollback")
       try FileManager.default.createDirectory(at: concurrentDirectory, withIntermediateDirectories: true)

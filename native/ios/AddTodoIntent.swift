@@ -9,9 +9,8 @@ struct AddTodoIntent: AppIntent {
   @Parameter(title: "할 일") var title: String
   static var parameterSummary: some ParameterSummary { Summary("\(\.$title)을 할 일에 추가") }
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    try SharedStore().add(title: title)
-    WidgetCenter.shared.reloadAllTimelines()
-    try? await TodoActivityManager.refresh()
+    let update = try SharedStore().add(title: title)
+    await update?.value
     return .result(dialog: "할 일을 저장했어요.")
   }
 }

@@ -11,7 +11,10 @@ struct AnalyzeCaptureIntent: AppIntent {
   @Parameter(title: "실패한 이미지 다시 분석", default: false) var retryFailed: Bool
   func perform() async throws -> some IntentResult & ProvidesDialog {
     if let type = image.type, !type.conforms(to: .image) { throw OCRFailure.invalidImage }
-    let outcome = try await CaptureProcessor.analyze(data: image.data, messageDate: nil, retryFailed: retryFailed, availability: OnDeviceExtraction.availability, extract: OnDeviceExtraction.extract)
+    let work = Task { try await CaptureProcessor.analyze(data: image.data, messageDate: nil, retryFailed: retryFailed, availability: OnDeviceExtraction.availability, extract: OnDeviceExtraction.extract) }
+    let observer = CapturePurgeObserver { work.cancel() }
+    defer { withExtendedLifetime(observer) {} }
+    let outcome = try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     await CaptureNotifications.suggest(outcome)
     if outcome.duplicate { return .result(dialog: "이미 처리한 이미지예요. 기존 분석함에서 확인해 주세요.") }
     if outcome.count == 0 { return .result(dialog: "이미지에서 할 일을 찾지 못했어요.") }

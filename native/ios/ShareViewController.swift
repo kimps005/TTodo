@@ -29,6 +29,7 @@ private struct CaptureShareView: View {
   @State private var failure: String?
   @State private var analysisId: String?
   @State private var items: [CaptureReviewItem] = []
+  @State private var purgeObserver: CapturePurgeObserver?
   @State private var operation: Task<Void, Never>?
   @State private var preview: UIImage?
   @State private var confirmReanalysis = false
@@ -39,6 +40,10 @@ private struct CaptureShareView: View {
   @State private var similarConfirmation: [SimilarCapture]?
   @State private var reviewUnavailable = false
   @State private var semiAutomatic = false
+  private func discardCapture() {
+    operation?.cancel(); preview = nil; items = []; similar = []; analysisId = nil
+    reanalysisSnapshot = nil; similarConfirmation = nil; close()
+  }
   @discardableResult private func refreshReview() -> Bool {
     guard let analysisId else { return true }
     do {
@@ -90,6 +95,7 @@ private struct CaptureShareView: View {
     operation = Task {
       defer { working = false; operation = nil }
       do {
+        guard try SharedStore().hasLocalAIConsent() else { throw CaptureError.consentRequired }
         let data = try await readImage(); try Task.checkCancellation()
         preview = UIImage(cgImage: try VisionOCR.thumbnail(data, maximumDimension: 720))
         let result = try await CaptureProcessor.analyze(data: data, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, availability: OnDeviceExtraction.availability, extract: OnDeviceExtraction.extract)
@@ -145,8 +151,6 @@ private struct CaptureShareView: View {
     hasSaved = true; similar = []
     if !refreshReview() { items = []; failure = "저장은 완료됐어요. 최신 제안은 앱 분석함에서 확인해 주세요." }
     message = "\(count)개를 저장했어요. 앱과 잠금화면 목록에 갱신을 요청해요."
-    WidgetCenter.shared.reloadAllTimelines()
-    Task { try? await TodoActivityManager.refresh() }
     Task {
       do {
         if !(try await CaptureNotifications.refreshReminders()) { failure = "할 일은 저장했어요. 알림을 받으려면 기기 설정에서 TTodo 알림을 허용해 주세요." }
@@ -226,8 +230,14 @@ private struct CaptureShareView: View {
         }.padding(24)
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기") { operation?.cancel(); close() } } }
-        .onDisappear { operation?.cancel() }
+        .onAppear { purgeObserver = CapturePurgeObserver { discardCapture() } }
+        .onDisappear { purgeObserver = nil; operation?.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: .NSExtensionHostDidBecomeActive)) { _ in
+          if let analysisId, let store = try? SharedStore(),
+            (try? store.hasLocalAIConsent()) != true ||
+              (try? store.querySQL("SELECT id FROM analyses WHERE id=?", params: [analysisId]).isEmpty) != false {
+            discardCapture(); return
+          }
           if !working && analysisId != nil { failure = nil; _ = refreshReview() }
         }
         .alert("다시 분석할까요?", isPresented: $confirmReanalysis) {

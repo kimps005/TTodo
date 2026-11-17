@@ -25,7 +25,7 @@ export function openRepository(): Promise<Repository> {
       const db = await SQLite.openDatabaseAsync('ttodo.sqlite');
       repositoryDatabase = createDatabase(db, () => SQLite.openDatabaseAsync('ttodo.sqlite', { useNewConnection: true }));
     }
-    const repo = new Repository(repositoryDatabase, randomUUID);
+    const repo = new Repository(repositoryDatabase, randomUUID, undefined, () => nativeBridge?.reloadWidgets());
     await repo.initialize(); return repo;
   })().catch(error => { opening = undefined; throw error; });
   return opening;

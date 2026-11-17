@@ -1,6 +1,25 @@
 import Foundation
 import SQLite3
 
+#if os(iOS)
+import Darwin
+
+// No content crosses process boundaries. SQLite remains authoritative if the OS
+// suspends a listener or terminates the app before it can post the notification.
+final class CapturePurgeObserver {
+  private static var name: String { TTodoConfiguration.appGroup + ".capture-purged" }
+  private var token: Int32 = 0
+  private let registered: Bool
+  init(onPurge: @escaping () -> Void) {
+    var registration: Int32 = 0
+    registered = notify_register_dispatch(Self.name, &registration, .main) { _ in onPurge() } == NOTIFY_STATUS_OK
+    token = registration
+  }
+  deinit { if registered { notify_cancel(token) } }
+  static func post() { notify_post(name) }
+}
+#endif
+
 enum StoreError: LocalizedError {
   case unavailable, invalidTitle, database, newerSchema
   var errorDescription: String? {
@@ -34,10 +53,33 @@ final class SharedStore {
     var url = directory; try url.setResourceValues(resource)
     return directory
   }
+  #if os(iOS)
+  private static func prepareProtection(directory: URL, path: String) throws {
+    let manager = FileManager.default
+    let protection = FileProtectionType.completeUntilFirstUserAuthentication
+    for entry in [directory.path, path, path + "-journal", path + "-wal", path + "-shm"] {
+      do {
+        let attributes = try manager.attributesOfItem(atPath: entry)
+        if attributes[.protectionKey] as? FileProtectionType != protection {
+          try manager.setAttributes([.protectionKey: protection], ofItemAtPath: entry)
+        }
+      } catch let error as NSError where error.domain == NSCocoaErrorDomain &&
+        [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) && entry != directory.path {
+        // New databases inherit the directory policy. Other writers may remove a journal.
+        continue
+      }
+    }
+  }
+  #endif
   init(directoryOverride: URL? = nil) throws {
     let directory = try directoryOverride ?? Self.directory()
     let path = directory.appendingPathComponent("ttodo.sqlite").path
-    guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+    var flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+    #if os(iOS)
+    try Self.prepareProtection(directory: directory, path: path)
+    flags |= SQLITE_OPEN_FILEPROTECTION_C
+    #endif
+    guard sqlite3_open_v2(path, &db, flags, nil) == SQLITE_OK else {
       sqlite3_close(db); db = nil; throw StoreError.database
     }
     do {
@@ -58,12 +100,6 @@ final class SharedStore {
           try execute("COMMIT")
         } catch { try? execute("ROLLBACK"); throw error }
       }
-      // Existing DB and sidecars must follow the same policy as newly created files.
-      #if os(iOS)
-      for suffix in ["", "-wal", "-shm"] where FileManager.default.fileExists(atPath: path + suffix) {
-        try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: path + suffix)
-      }
-      #endif
     } catch { sqlite3_close(db); db = nil; throw error }
   }
   deinit { sqlite3_close(db) }
@@ -127,7 +163,16 @@ final class SharedStore {
     guard result == SQLITE_DONE else { throw StoreError.database }
     return rows
   }
-  func add(title raw: String) throws {
+  @discardableResult
+  func publishLockChange() -> Task<Void, Never>? {
+    #if os(iOS)
+    return TodoActivityManager.publishLockChange()
+    #else
+    return nil
+    #endif
+  }
+  @discardableResult
+  func add(title raw: String) throws -> Task<Void, Never>? {
     let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     // Unicode scalar count matches the JS/SQLite storage limit (including composed emoji).
     guard !title.isEmpty && title.unicodeScalars.count <= 200 else { throw StoreError.invalidTitle }
@@ -139,6 +184,7 @@ final class SharedStore {
     }
     guard sqlite3_bind_double(stmt, 5, Date().timeIntervalSince1970 * 1000) == SQLITE_OK else { throw StoreError.database }
     guard sqlite3_step(stmt) == SQLITE_DONE else { throw StoreError.database }
+    return sqlite3_get_autocommit(db) != 0 ? publishLockChange() : nil
   }
   func snapshot(now: Date = Date()) throws -> LockSnapshot {
     try execute("BEGIN")
