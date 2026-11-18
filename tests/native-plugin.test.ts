@@ -31,7 +31,7 @@ test('단독 Debug 프로젝트는 Expo 앱 진입점에서 내장 번들을 열
     assert.doesNotMatch(delegate, /RCTBundleURLProvider/);
     assert.equal(await apply('appDelegate', delegate, 'swift'), delegate);
     const pods = await apply('podfile', podfile, 'rb');
-    assert.match(pods, /^  use_expo_modules!\(exclude: \['expo-dev-launcher', 'expo-dev-menu'\]\)$/m);
+    assert.match(pods, /^  use_expo_modules!\(exclude: \['expo-dev-client', 'expo-dev-launcher', 'expo-dev-menu'\]\)$/m);
     assert.equal(await apply('podfile', pods, 'rb'), pods);
   } finally {
     if (env === undefined) delete process.env.TTODO_STANDALONE_DEBUG;

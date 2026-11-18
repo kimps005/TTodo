@@ -14,7 +14,7 @@ function koreanInfoPlist(body) {
 }
 function withStandaloneDebug(config) {
   config = withPodfile(config, c => {
-    const autolink = "  use_expo_modules!(exclude: ['expo-dev-launcher', 'expo-dev-menu'])";
+    const autolink = "  use_expo_modules!(exclude: ['expo-dev-client', 'expo-dev-launcher', 'expo-dev-menu'])";
     if (c.modResults.contents.includes(autolink)) return c;
     const expoModules = /^  use_expo_modules![ \t]*$/m;
     if (!expoModules.test(c.modResults.contents)) {
