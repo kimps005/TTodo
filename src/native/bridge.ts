@@ -2,6 +2,7 @@ import { requireOptionalNativeModule } from 'expo';
 export interface OCRResult { text: string; fingerprint: string; }
 interface NativeBridge {
   databaseDirectory(): string;
+  isUsingLocalStorage?(): Promise<boolean>;
   execSQL(sql: string): Promise<void>;
   runSQL(sql: string, params: (string | null)[]): Promise<void>;
   querySQL(sql: string, params: (string | null)[]): Promise<Record<string, unknown>[]>;

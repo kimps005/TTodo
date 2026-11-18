@@ -58,9 +58,9 @@ public class TTodoNativeModule: Module {
     }
     Function("databaseDirectory") { () throws -> String in
       // Initialize/protect the actual shared DB before expo-sqlite opens its connection.
-      _ = try SharedStore()
-      return try SharedStore.directory().absoluteString
+      return try SharedStore().directory.absoluteString
     }
+    AsyncFunction("isUsingLocalStorage") { self.sqlStore?.usesLocalStorage ?? false }.runOnQueue(storageQueue)
     AsyncFunction("execSQL") { (sql: String) throws in
       try self.storage().execSQL(sql)
     }.runOnQueue(storageQueue)

@@ -1,5 +1,10 @@
 # 개발 현황
 
+## 2026-11-18 Debug 로컬 저장소와 무서명 IPA
+
+- Debug 메인 앱은 App Group 경로가 없을 때 앱의 `Application Support/TTodo`에서 기존 SQLite 스키마를 사용하고 설정에 임시 로컬 모드를 표시한다. Release와 확장은 App Group 경로가 없으면 기존 저장소 오류를 반환한다.
+- 수동 Debug IPA 워크플로우에 저장소 경로 단독 검사, 무서명 iPhoneOS 아카이브, 내장 JavaScript 번들 확인 및 IPA 업로드를 추가했다. Windows에서 타입 검사와 iOS Debug JavaScript 번들 생성을 확인했다. macOS 단독 검사와 IPA 아카이브는 검증 대기 중이며 실제 iPhone 설치 및 AI 정확도는 미검증이다.
+
 ## 2026-11-18 잠금화면 렌더링 데이터 단독 검사
 
 - `LockPresentationSmoke`에서 설정이 없는 기본 상태와 `private_lock`·`hide_lock_content`의 네 조합을 검사한다. 미완료 6개 중 위젯에 전달되는 최대 5개 행, 전체 개수, 마감과 ActivityKit의 전체 직렬화 데이터를 대조한다.

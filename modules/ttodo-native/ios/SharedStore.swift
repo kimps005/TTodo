@@ -51,14 +51,39 @@ struct LockSnapshot {
 }
 final class SharedStore {
   private var db: OpaquePointer?
-  static func directory() throws -> URL {
-    guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: TTodoConfiguration.appGroup) else { throw StoreError.unavailable }
-    let directory = root.appendingPathComponent("TTodo", isDirectory: true)
+  let directory: URL
+  let usesLocalStorage: Bool
+
+  static func resolveLocation(
+    appGroupURL: URL?,
+    isMainApplication: Bool,
+    applicationSupportURL: () throws -> URL
+  ) throws -> (directory: URL, usesLocalStorage: Bool) {
+    if let appGroupURL {
+      return (appGroupURL.appendingPathComponent("TTodo", isDirectory: true), false)
+    }
+    #if DEBUG
+    if isMainApplication {
+      let support = try applicationSupportURL()
+      return (support.appendingPathComponent("TTodo", isDirectory: true), true)
+    }
+    #endif
+    throw StoreError.unavailable
+  }
+
+  private static func storageLocation() throws -> (directory: URL, usesLocalStorage: Bool) {
+    let manager = FileManager.default
+    let location = try resolveLocation(
+      appGroupURL: manager.containerURL(forSecurityApplicationGroupIdentifier: TTodoConfiguration.appGroup),
+      isMainApplication: Bundle.main.object(forInfoDictionaryKey: "CFBundlePackageType") as? String == "APPL",
+      applicationSupportURL: { try manager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) }
+    )
+    let directory = location.directory
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
     // No device-to-device or cloud backup of sensitive local data in this MVP.
     var resource = URLResourceValues(); resource.isExcludedFromBackup = true
     var url = directory; try url.setResourceValues(resource)
-    return directory
+    return location
   }
   #if os(iOS)
   private static func prepareProtection(directory: URL, path: String) throws {
@@ -79,7 +104,9 @@ final class SharedStore {
   }
   #endif
   init(directoryOverride: URL? = nil) throws {
-    let directory = try directoryOverride ?? Self.directory()
+    let location = try directoryOverride.map { (directory: $0, usesLocalStorage: false) } ?? Self.storageLocation()
+    directory = location.directory
+    usesLocalStorage = location.usesLocalStorage
     let path = directory.appendingPathComponent("ttodo.sqlite").path
     let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
     #if os(iOS)

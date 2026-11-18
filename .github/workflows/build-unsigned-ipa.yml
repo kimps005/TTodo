@@ -1,0 +1,49 @@
+name: iPhone용 서명 없는 Debug IPA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - name: Test only the Debug storage fallback
+        run: |
+          executable="$RUNNER_TEMP/ttodo-debug-storage-fallback-tests"
+          swiftc -D DEBUG modules/ttodo-native/ios/SharedStore.swift \
+            modules/ttodo-native/ios/TTodoConfiguration.swift native/tests/DebugStorageFallbackTests.swift -o "$executable"
+          "$executable"
+      - name: Enable the embedded Debug bundle in the dev client
+        run: plutil -insert EXDevClientEmbeddedBundle -bool YES ios/TTodo/Info.plist
+      - name: Install pods
+        working-directory: ios
+        run: pod install
+      - name: Archive for generic iPhoneOS without signing
+        run: |
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo \
+            -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/TTodo.xcarchive" ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
+      - name: Package TTodo-unsigned.ipa
+        working-directory: ${{ runner.temp }}
+        run: |
+          app=TTodo.xcarchive/Products/Applications/TTodo.app
+          test -s "$app/main.jsbundle"
+          mkdir Payload
+          ditto "$app" Payload/TTodo.app
+          zip -r TTodo-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TTodo-unsigned-ipa
+          path: ${{ runner.temp }}/TTodo-unsigned.ipa
+          if-no-files-found: error
