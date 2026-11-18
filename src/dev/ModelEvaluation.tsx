@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { nativeBridge } from '../native/bridge';
-import { runFixtureEvaluation, evalFixtures, evaluationConsoleSummary } from '../ai/fixtureEvaluation';
+import { runFixtureEvaluation, evalFixtures, evaluationConsoleSummary, type FixtureEvaluationReport } from '../ai/fixtureEvaluation';
+import { serializeEvaluationReport, type EvaluationExportFormat } from '../ai/evaluationExport';
 import { EvaluationReport } from './EvaluationReport';
 import { onDeviceProvider, availabilityLabels } from '../ai/onDeviceProvider';
 import { Button } from '../ui/components';
@@ -13,8 +14,7 @@ import { shareTemporaryExport } from '../data/shareTemporaryExport';
 
 export function ModelEvaluation({ close }: { close: () => void }) {
   const [progress, setProgress] = useState('아직 평가하지 않았어요.');
-  const [evaluationResult, setEvaluationResult] = useState<Awaited<ReturnType<typeof runFixtureEvaluation>> | null>(null);
-  const [report, setReport] = useState<string | null>(null);
+  const [evaluationResult, setEvaluationResult] = useState<FixtureEvaluationReport | null>(null);
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const exporting = useRef(false);
@@ -22,27 +22,39 @@ export function ModelEvaluation({ close }: { close: () => void }) {
   useEffect(() => () => controller.current?.abort(), []);
   const run = async () => {
     if (controller.current || exporting.current) return;
-    const status = nativeBridge?.localAIAvailability() ?? 'missing_native';
-    if (status !== 'available') { Alert.alert('평가를 시작할 수 없어요', availabilityLabels[status] ?? availabilityLabels.unavailable); return; }
-    const abort = new AbortController(); controller.current = abort; setBusy(true); setReport(null); setEvaluationResult(null);
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy(true);
+    setEvaluationResult(null);
+    setProgress('모델 상태 확인 중');
     try {
-      const result = await runFixtureEvaluation(onDeviceProvider, abort.signal, (done, total) => setProgress(`${done} / ${total}개 처리`));
+      const result = await runFixtureEvaluation(
+        onDeviceProvider,
+        () => nativeBridge?.localAIAvailability() ?? 'missing_native',
+        abort.signal,
+        (done, total) => setProgress(`${done} / ${total}개 처리`),
+      );
       setEvaluationResult(result);
       if (__DEV__) console.info('TTodo Eval', JSON.stringify(evaluationConsoleSummary(result)));
-      setReport(JSON.stringify({ ...result, operating_system: nativeBridge?.systemVersion() }, null, 2));
-      setProgress(`${result.results.length}개 처리 · ${result.results.filter(row => row.error).length}개 오류 · ${result.completed ? '평가 실행 완료' : result.attempted_all ? '오류 사례 재실행 필요' : '중단됨'}`);
+      setProgress(result.status === 'SKIPPED_UNAVAILABLE'
+        ? availabilityLabels[result.availability] ?? availabilityLabels.unavailable
+        : `${result.results.length}개 처리 · ${result.results.filter(row => row.error).length}개 오류`);
     } catch { Alert.alert('평가가 중단되었어요', '기기 내 모델 상태를 확인한 뒤 다시 시도해 주세요.'); }
     finally { controller.current = null; setBusy(false); }
   };
-  const exportReport = async () => {
-    if (!report || exporting.current || controller.current) return;
+  const exportReport = async (format: EvaluationExportFormat) => {
+    if (!evaluationResult || exporting.current || controller.current) return;
     exporting.current = true; setSharing(true);
-    const file = new File(Paths.cache, 'TTodo-model-evaluation.json');
     try {
       if (!await Sharing.isAvailableAsync()) throw new Error();
+      const file = new File(Paths.cache, 'TTodo-model-evaluation.' + format);
+      const report = serializeEvaluationReport(evaluationResult, format, nativeBridge?.systemVersion());
+      const options = format === 'json'
+        ? { mimeType: 'application/json', UTI: 'public.json' }
+        : { mimeType: 'text/markdown', UTI: 'public.plain-text' };
       const result = await shareTemporaryExport({
         write: async () => { file.create({ overwrite: true }); await file.write(report); },
-        share: () => Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' }),
+        share: () => Sharing.shareAsync(file.uri, options),
         remove: () => { if (file.exists) file.delete(); },
       });
       if (!result.cleaned) Alert.alert('임시 파일을 정리하지 못했어요', '남은 평가 파일은 다음 앱 실행 때 다시 정리해요.');
@@ -55,7 +67,8 @@ export function ModelEvaluation({ close }: { close: () => void }) {
     <Text accessibilityLiveRegion="polite" style={ui.section}>{progress}</Text>
     {evaluationResult && <EvaluationReport report={evaluationResult} />}<Button title="합성 데이터로 기기 내 AI 평가" disabled={busy || sharing} onPress={() => void run()} />
     <Button secondary title="현재 분석 종료 후 중단" disabled={!busy} onPress={() => controller.current?.abort()} />
-    <Button secondary title="평가 결과 내보내기" disabled={busy || sharing || !report} onPress={() => void exportReport()} />
+    <Button secondary title="Markdown 리포트 내보내기" disabled={busy || sharing || !evaluationResult} onPress={() => void exportReport('md')} />
+    <Button secondary title="JSON 리포트 내보내기" disabled={busy || sharing || !evaluationResult} onPress={() => void exportReport('json')} />
     <Button secondary title="닫기" disabled={busy || sharing} onPress={close} />
   </ScrollView></SafeAreaView></Modal>;
 }

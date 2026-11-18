@@ -8,7 +8,7 @@ export function clearTemporaryFiles() {
   cleanupTemporaryEntries([
     () => { const directory = captureDirectory(); if (directory.exists) directory.delete(); },
     () => { const picker = new Directory(Paths.cache, 'ImagePicker'); if (picker.exists) picker.delete(); },
-    ...['TTodo-export.json', 'TTodo-model-evaluation.json'].map(name => () => {
+    ...['TTodo-export.json', 'TTodo-model-evaluation.json', 'TTodo-model-evaluation.md'].map(name => () => {
       const exported = new File(Paths.cache, name);
       if (exported.exists) exported.delete();
     }),
