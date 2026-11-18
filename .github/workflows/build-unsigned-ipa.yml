@@ -9,6 +9,7 @@ jobs:
     timeout-minutes: 45
     env:
       CI: '1'
+      ARCHIVE_NAME: TTodo.xcarchive
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,15 +33,26 @@ jobs:
         run: |
           xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo \
             -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/TTodo.xcarchive" ARCHS=arm64 \
+            -archivePath "$RUNNER_TEMP/$ARCHIVE_NAME" ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
       - name: Package TTodo-unsigned.ipa
         working-directory: ${{ runner.temp }}
+        shell: bash
         run: |
-          app=TTodo.xcarchive/Products/Applications/TTodo.app
-          test -s "$app/main.jsbundle"
+          archive_path="$RUNNER_TEMP/$ARCHIVE_NAME"
+          shopt -s nullglob
+          apps=("$archive_path"/Products/Applications/*.app)
+          if [[ ${#apps[@]} -ne 1 || ! -d ${apps[0]:-} ]]; then
+            echo "::error::Expected one .app directory under $archive_path/Products/Applications; found ${#apps[@]} matching entries."
+            exit 1
+          fi
+          app="${apps[0]}"
+          if [[ ! -s "$app/main.jsbundle" ]]; then
+            echo "::error::Missing or empty embedded bundle at $app/main.jsbundle."
+            exit 1
+          fi
           mkdir Payload
-          ditto "$app" Payload/TTodo.app
+          ditto "$app" "Payload/${app##*/}"
           zip -r TTodo-unsigned.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
