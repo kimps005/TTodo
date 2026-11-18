@@ -180,6 +180,17 @@ try {
     report.photo_fixture = 'generated-korean-png-only';
     report.macos_ocr_fixture_preflight = true;
   }
+  if (scenario === 'task-lifecycle') {
+    report.phase = 'lock-presentation';
+    const executable = path.join(process.env.RUNNER_TEMP, 'ttodo-lock-smoke');
+    const sdk = run('xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-path']);
+    run('xcrun', ['--sdk', 'iphonesimulator', 'swiftc', '-sdk', sdk, '-target', architecture + '-apple-ios18.0-simulator',
+      '-D', 'TTODO_LOCK_TEST', 'modules/ttodo-native/ios/TTodoConfiguration.swift',
+      'modules/ttodo-native/ios/SharedStore.swift', 'modules/ttodo-native/ios/TodoActivity.swift',
+      'native/ios/TTodoWidgets.swift', 'native/tests/LockPresentationSmoke.swift', '-o', executable]);
+    sim('spawn', device, executable);
+    report.lock_content_and_recovery_policy_tested = true;
+  }
   report.command_phases = [];
   uiCommands.runUICommands(execFileSync, { device, resultPath, flow, architecture,
     onPhase(phase, timeout) {
@@ -201,6 +212,22 @@ try {
   report.ios_ocr_tested = scenario === 'photo-ocr';
   report.notification_denial_tested = flow === 'testManualTaskLifecycleAndDataReset';
   report.system_app_settings_tested = flow === 'testManualTaskLifecycleAndDataReset';
+  if (scenario === 'task-lifecycle') {
+    report.phase = 'export-file';
+    const bundle = process.env.TTODO_BUNDLE_ID ?? 'com.kimps005.ttodo';
+    const container = sim('get_app_container', device, bundle, 'data');
+    const file = path.join(container, 'Library/Caches/TTodo-export.json');
+    const exported = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(readFileSync(file)));
+    if (exported.format_version !== 1 || !Number.isFinite(Date.parse(exported.exported_at)) ||
+        exported.todos?.length !== 1 || exported.todos[0].title !== 'CI independent keyboard task' ||
+        !Array.isArray(exported.analyses) || !Array.isArray(exported.extracted_tasks)) {
+      throw new Error('Unexpected simulator export payload.');
+    }
+    sim('launch', device, bundle);
+    for (let i = 0; i < 60 && existsSync(file); i++) await new Promise(resolve => setTimeout(resolve, 500));
+    if (existsSync(file)) throw new Error('Relaunch did not clean up the interrupted share.');
+    report.export_file_and_cleanup_tested = true;
+  }
   report.completed = true; report.phase = 'complete';
 } catch (error) {
   report.error = error instanceof Error ? error.message : String(error);

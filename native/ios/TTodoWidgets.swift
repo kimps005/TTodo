@@ -17,8 +17,8 @@ struct TodoProvider: TimelineProvider {
   func getTimeline(in context: Context, completion: @escaping (Timeline<TodoEntry>) -> Void) {
     completion(Timeline(entries: [entry()], policy: .after(Date().addingTimeInterval(900))))
   }
-  private func entry() -> TodoEntry {
-    do { let value = try SharedStore().snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles, contentHidden: value.hideContent, deadlineText: value.deadlineText) }
+  func entry(snapshot: () throws -> LockSnapshot = { try SharedStore().snapshot() }) -> TodoEntry {
+    do { let value = try snapshot(); return .init(date: Date(), tasks: value.tasks, count: value.count, hidden: value.hideTitles, contentHidden: value.hideContent, deadlineText: value.deadlineText) }
     catch { return .init(date: Date(), tasks: [], count: 0, hidden: true, unavailable: true) }
   }
 }
@@ -59,6 +59,8 @@ struct TodoLiveActivity: Widget {
     }
   }
 }
+#if !TTODO_LOCK_TEST
 @main struct TTodoWidgets: WidgetBundle {
   var body: some Widget { TodoWidget(); TodoLiveActivity() }
 }
+#endif

@@ -6,6 +6,10 @@ on:
     paths:
       - '.github/workflows/ui-tests.yml'
       - 'native/tests/UITests.swift'
+      - 'native/tests/LockPresentationSmoke.swift'
+      - 'native/ios/TTodoWidgets.swift'
+      - 'modules/ttodo-native/ios/TodoActivity.swift'
+      - 'src/data/shareTemporaryExport.ts'
       - 'native/ios/AnalyzeCaptureIntent.swift'
       - 'modules/ttodo-native/ios/TTodoNativeModule.swift'
       - 'scripts/ui-tests.mjs'
@@ -55,7 +59,7 @@ jobs:
     env:
       CI: '1'
       TTODO_UI_TEXT_SIZE: ${{ matrix.profile == 'compact' && 'accessibility-extra-extra-extra-large' || inputs.text_size || 'large' }}
-      TTODO_UI_SCENARIO: ${{ matrix.profile == 'compact' && 'app' || inputs.scenario || 'app' }}
+      TTODO_UI_SCENARIO: ${{ matrix.profile == 'compact' && 'app' || inputs.scenario || 'task-lifecycle' }}
       TTODO_UI_MODEL: ${{ matrix.profile == 'compact' && 'iphone-se-3' || inputs.model || 'iphone-16-pro' }}
       TTODO_UI_RUNTIME: ${{ matrix.profile == 'oldest' && 'oldest-installed' || inputs.runtime || 'latest' }}
     steps:

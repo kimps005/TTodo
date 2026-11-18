@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/release-archive.yml'
       - 'plugins/with-ttodo-ios.js'
+      - 'modules/ttodo-native/ios/**'
+      - 'native/ios/**'
       - 'app.config.ts'
       - 'scripts/privacy-manifests.mjs'
   workflow_dispatch:

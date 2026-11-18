@@ -18,6 +18,7 @@ interface NativeBridge {
   recognizeText(uri: string): Promise<OCRResult>;
   signalCapturePurge(): void;
   reloadWidgets(): void;
+  recoverActivity(): Promise<void>;
   startActivity(): Promise<void>;
   endActivities(): Promise<void>;
 }

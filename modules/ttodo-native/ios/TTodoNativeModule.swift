@@ -87,7 +87,8 @@ public class TTodoNativeModule: Module {
     AsyncFunction("refreshReminders") { () async throws -> Bool in try await CaptureNotifications.refreshReminders() }
     AsyncFunction("clearCaptureNotifications") { () async in await CaptureNotifications.clearAll() }
     Function("clearCaptureNotification") { (id: String) in CaptureNotifications.clearAnalysis(id) }
-    AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.start() }
-    AsyncFunction("endActivities") { () async in await TodoActivityManager.end() }
+    AsyncFunction("recoverActivity") { () async throws in try await TodoActivityManager.perform(.foreground) }
+    AsyncFunction("startActivity") { () async throws in try await TodoActivityManager.perform(.start) }
+    AsyncFunction("endActivities") { () async throws in try await TodoActivityManager.perform(.stop) }
   }
 }

@@ -195,6 +195,13 @@ final class TTodoUITests: XCTestCase {
     XCTAssertTrue(saved.waitForExistence(timeout: 30))
     XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "CI independent keyboard task, ")).count, 1)
     screenshot(app, name: "crud-independent-keyboard-persisted")
+    tap(control(app, label: "설정"), in: app)
+    tap(app.buttons["내 데이터 내보내기"], in: app)
+    let sheet = app.otherElements["ActivityListView"]
+    let filename = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "TTodo-export")).firstMatch
+    XCTAssertTrue(sheet.waitForExistence(timeout: 5) || filename.waitForExistence(timeout: 15))
+    // Interrupt sharing before cleanup so the host can inspect the actual Expo file.
+    app.terminate()
   }
 
   @MainActor func testManualTaskLifecycleAndDataReset() throws {

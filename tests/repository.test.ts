@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { shareDataExport } from '../src/data/shareTemporaryExport';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,6 +49,58 @@ test('OCR 반자동 다중 초안은 명시 승인 전 할 일·알림을 만들
     assert.equal(native.prepare("SELECT * FROM preferences WHERE key LIKE 'todo_reminder.%'").all().length, 0);
     await assert.rejects(repo.restartUnstoredAnalysis(a.id), /한 번이라도/);
   } finally { native.close(); }
+});
+
+test('공유 직전의 JSON 파일은 한국어와 필수 필드를 보존하고 삭제·철회한 원문은 제거한다', async () => {
+  const { repo, native } = fixture();
+  const directory = mkdtempSync(join(tmpdir(), 'ttodo-export-'));
+  const path = join(directory, 'TTodo-export.json');
+  const evidence = ['삭제할 원문 🚀', '철회할 원문 “한글”'];
+  const titles = ['삭제할 제안', '남겨 둘 할 일 📅'];
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analysis = await repo.createAnalysis('export-file', 'manual', null);
+    await repo.finishAnalysis(analysis.id, titles.map((title, i) => ({ ...task, title, evidence_text: evidence[i] })), 'test', analysis.token!);
+    const proposals = await repo.listExtracted(analysis.id);
+    await repo.approve(analysis.id, proposals.map(p => ({ id: p.id, input: { title: p.title } })));
+    const deleted = (await repo.listTodos()).find(todo => todo.title === titles[0])!;
+    for (const phase of ['before', 'deleted', 'revoked']) {
+      if (phase === 'deleted') await repo.removeTodo(deleted.id);
+      if (phase === 'revoked') await repo.revokeLocalAIConsent();
+      await shareDataExport(repo, {
+        create: () => writeFileSync(path, ''),
+        write: data => writeFileSync(path, data, 'utf8'),
+      }, {
+        share: async () => {
+          const bytes = readFileSync(path);
+          const json = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          const payload = JSON.parse(json);
+          assert.equal(payload.format_version, 1);
+          assert.equal(payload.exported_at, '2026-11-13T02:00:00.000Z');
+          assert.equal(payload.todos.length, phase === 'before' ? 2 : 1);
+          assert.equal(payload.analyses[0].id, analysis.id);
+          const fields = [
+            [payload.todos, 'id owner_id title description status due_at due_precision created_at updated_at completed_at source_type source_id sort_order visibility sync_state'],
+            [payload.analyses, 'id image_fingerprint captured_at received_at status source_channel model_version error_code processing_token expires_at'],
+            [payload.extracted_tasks, 'id analysis_id title description due_at due_precision assignee confidence evidence_text needs_confirmation review_status linked_todo_id'],
+          ] as const;
+          for (const [rows, keys] of fields) {
+            assert.ok(rows.length > 0);
+            for (const row of rows) for (const key of keys.split(' ')) assert.ok(Object.hasOwn(row, key), key);
+          }
+          assert.ok(payload.todos.some((row: { title: string }) => row.title === titles[1]));
+          assert.equal(json.includes(titles[0]), phase === 'before');
+          for (const [index, original] of evidence.entries()) {
+            const present = phase === 'before' || (phase === 'deleted' && index === 1);
+            assert.equal(bytes.includes(Buffer.from(original, 'utf8')), present);
+            assert.equal(JSON.stringify(payload).includes(original), present);
+          }
+        },
+        remove: () => rmSync(path),
+      });
+    }
+  } finally { native.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('중복 할 일 또는 날짜 없는 알림 설정은 선택 전체와 알림 설정을 롤백한다', async () => {
