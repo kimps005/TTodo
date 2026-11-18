@@ -1,5 +1,5 @@
 import AppIntents
-import TTodoNative
+internal import TTodoNative
 import UniformTypeIdentifiers
 import Foundation
 

@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/ui-tests.yml'
       - 'native/tests/UITests.swift'
+      - 'native/ios/AnalyzeCaptureIntent.swift'
       - 'modules/ttodo-native/ios/TTodoNativeModule.swift'
       - 'scripts/ui-tests.mjs'
       - 'scripts/ui-simulator-selection.cjs'
