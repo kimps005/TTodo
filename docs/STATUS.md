@@ -1,5 +1,16 @@
 # 개발 현황
 
+## 2026-11-18 Debug 로컬 저장소와 무서명 IPA
+
+- Debug 메인 앱은 App Group 경로가 없을 때 앱의 `Application Support/TTodo`에서 기존 SQLite 스키마를 사용하고 설정에 임시 로컬 모드를 표시한다. Release와 확장은 App Group 경로가 없으면 기존 저장소 오류를 반환한다.
+- [macOS 단독 CI](https://github.com/kimps005/TTodo/actions/runs/44299051273)에서 `f445b07`의 `testMissingAppGroupUsesMainAppApplicationSupport` 한 건이 통과했다. Windows 타입 검사, iOS Debug·Release JavaScript 번들 생성, 새 워크플로우의 YAML·Bash 검사도 통과했다.
+- 수동 Debug IPA 워크플로우에 무서명 iPhoneOS 아카이브, 내장 JavaScript 번들 확인 및 IPA 업로드를 추가했다. 작업 브랜치에 있으며 기본 브랜치 등록 후 수동 실행할 수 있다. Xcode 아카이브·IPA 업로드, 실제 iPhone 설치 및 AI 정확도는 미검증이다.
+
+## 2026-11-18 잠금화면 렌더링 데이터 단독 검사
+
+- `LockPresentationSmoke`에서 설정이 없는 기본 상태와 `private_lock`·`hide_lock_content`의 네 조합을 검사한다. 미완료 6개 중 위젯에 전달되는 최대 5개 행, 전체 개수, 마감과 ActivityKit의 전체 직렬화 데이터를 대조한다.
+- `de939d6`의 [단독 macOS CI](https://github.com/kimps005/TTodo/actions/runs/44269637206)에서 제품 Swift 소스를 컴파일하고 iPhone 16 Pro 시뮬레이터로 해당 타깃만 실행해 통과했다. 실제 잠금화면 갱신 시점은 실기기 검증 대상으로 남아 있다.
+
 ## 2026-11-18 잠금화면 복구와 파일 내보내기 회귀 검사
 
 - 카드 시작 선택을 SQLite에 보존하고 전경 복귀에서 ActivityKit의 현재 목록을 확인한다. 활성·stale 카드 한 개를 최신 마감 순서와 개인정보 설정으로 갱신하고 만료·중복 항목을 정리한다. 시작 선택이 남은 경우에만 사라진 카드를 복구한다. 확장 저장은 카드 생성을 요청하지 않는다.
@@ -1087,3 +1098,8 @@ Windows에서 SQLite 상태 전이와 JS 테스트 140개를 통과했다. 별�
 ## 2026-11-18 ARM 러너 부족에 대비한 명시적 Intel UI 경로
 
 GitHub가 ARM 수용량 부족을 명시하여 UI workflow에 기존 저장소에서도 사용하는 무료 macos-26-intel 선택지를 추가했다. 기본 push는 기존 ARM을 유지한다. 수동 실행에서 선택하면 호스트 아키텍처와 일치하는 x86_64 설치 런타임·요청 기종·OS 조합만 허용하고 Xcode ARCHS와 report에 명시한다. 미지원 조합은 다른 OS/기종으로 대체하지 않고 실행 전 실패한다. 실제 SDK 지원과 UI 실행은 아직 확인 전이다. Windows JS 152개·타입·Node 구문·diff 검사는 통과했다. 제품 Swift/JS 코드는 cc983e3 품질 통과 소스와 동일하다.
+
+## Eval Runner 가용성 판정과 검수 리포트
+
+- 모델 사용 불가 상태는 실행 전과 도중 모두 `SKIPPED_UNAVAILABLE`로 기록하고 목표 판정을 보류한다. Debug 화면에서 PRD 목표 요약(할 일 정밀도 90%, 명시적 마감일 정확도 95%)과 사례별 합성 원문·기대값·모델 출력·검수 양식이 담긴 Markdown 또는 JSON 형식 4를 내보낸다. [실행 및 검수 안내](EVAL-RUNNER.md)
+- Windows에서 Eval Runner 타겟 단위 테스트 11개, 타입 검사, iOS 개발 JS 번들을 검증했다. 이번 확인 범위는 주입한 모델 가용성과 출력으로 검증한 상태 분기와 직렬화다. 최신 변경의 네이티브 빌드, iPhone 공유 메뉴, 실제 AI 생성과 정확도는 검증 대기다.

@@ -1,9 +1,21 @@
 import fixtures from '../../evaluation/EvalFixtures.json';
-import type { TaskExtractionProvider, TaskSuggestion } from './extraction';
+import type { ExtractionContext, TaskExtractionProvider, TaskSuggestion } from './extraction';
 
 export const evalFixtures = fixtures;
 type Expected = typeof fixtures.cases[number]['expected'][number];
 type Prediction = Pick<TaskSuggestion, 'title' | 'evidence_text' | 'due_at' | 'due_precision'>;
+type CaseResult = {
+  id: string;
+  category: string;
+  input: ExtractionContext;
+  expected: Expected[];
+  actual: TaskSuggestion[] | null;
+  score: ReturnType<typeof scoreFixture>;
+  error: 'EXTRACTION_FAILED' | null;
+  elapsed_ms: number;
+};
+type EvaluationStatus = 'PASS' | 'FAIL' | 'INCOMPLETE' | 'SKIPPED_UNAVAILABLE';
+export type FixtureEvaluationReport = Awaited<ReturnType<typeof runFixtureEvaluation>>;
 const normalized = (text: string) => text.normalize('NFKC').replace(/[\s\p{P}]/gu, '').toLowerCase();
 function matches(expected: Expected, actual: Prediction, source: string) {
   const evidence = normalized(actual.evidence_text), reference = normalized(expected.evidence_text);
@@ -39,36 +51,60 @@ export function scoreFixture(sample: { text: string; expected: Expected[] }, act
     matches: [...byExpected].map(([expected, actual]) => ({ expected, actual })), falsePositives, missed, deadlineErrors, unexpectedDeadlines };
 }
 const percentage = (n: number, d: number) => d ? n / d * 100 : null;
-export async function runFixtureEvaluation(provider: TaskExtractionProvider, signal: AbortSignal, progress: (done: number, total: number) => void) {
-  const results = [];
+const target = (minimum_percent: number, measured_percent: number | null, completed: boolean) => ({
+  minimum_percent,
+  measured_percent,
+  status: !completed || measured_percent === null ? 'NOT_EVALUATED' as const
+    : measured_percent >= minimum_percent ? 'PASS' as const : 'FAIL' as const,
+});
+
+export async function runFixtureEvaluation(
+  provider: TaskExtractionProvider,
+  getAvailability: () => string,
+  signal: AbortSignal,
+  progress: (done: number, total: number) => void,
+) {
+  const results: CaseResult[] = [];
+  let availability = 'available';
   for (const sample of fixtures.cases) {
-    if (signal.aborted) break;
-    const input = { text: sample.text, captured_at: sample.captured_at, message_date: sample.message_date, timezone: fixtures.timezone };
+    availability = getAvailability();
+    if (availability !== 'available' || signal.aborted) break;
+    const input: ExtractionContext = { text: sample.text, captured_at: sample.captured_at, message_date: sample.message_date, timezone: fixtures.timezone };
     const started = Date.now();
+    let actual: TaskSuggestion[] | null;
     try {
-      const actual = await provider.extract({ ...input }, signal);
-      if (signal.aborted) break;
-      results.push({ id: sample.id, category: sample.category, expected: sample.expected, actual, score: scoreFixture(sample, actual), error: null, elapsed_ms: Date.now() - started });
+      actual = await provider.extract({ ...input }, signal);
     } catch {
-      if (signal.aborted) break;
-      // Errors count as missing expected tasks, but invalidate the complete-run target verdict.
-      results.push({ id: sample.id, category: sample.category, expected: sample.expected, actual: [], score: scoreFixture(sample, []), error: 'EXTRACTION_FAILED', elapsed_ms: Date.now() - started });
+      actual = null;
     }
+    const elapsed_ms = Date.now() - started;
+    availability = getAvailability();
+    if (availability !== 'available' || signal.aborted) break;
+    // Failed requests retain their input and count as missing tasks in the diagnostic totals.
+    results.push({ id: sample.id, category: sample.category, input, expected: sample.expected, actual,
+      score: scoreFixture(sample, actual ?? []), error: actual === null ? 'EXTRACTION_FAILED' : null, elapsed_ms });
     progress(results.length, fixtures.cases.length);
   }
   const total = results.reduce((sum, row) => ({ tp: sum.tp + row.score.tp, fp: sum.fp + row.score.fp, fn: sum.fn + row.score.fn,
     deadlines: sum.deadlines + row.score.deadlines, correctDeadlines: sum.correctDeadlines + row.score.correctDeadlines }), { tp: 0, fp: 0, fn: 0, deadlines: 0, correctDeadlines: 0 });
-  const completed = results.length === fixtures.cases.length && !signal.aborted && results.every(r => r.error === null);
+  const attempted_all = results.length === fixtures.cases.length && !signal.aborted;
+  const completed = availability === 'available' && attempted_all && results.every(r => r.error === null);
   const metrics = { ...total, precision: percentage(total.tp, total.tp + total.fp), recall: percentage(total.tp, total.tp + total.fn), deadlineAccuracy: percentage(total.correctDeadlines, total.deadlines) };
-  return { format_version: 3, dataset_version: fixtures.version, provider: provider.version, generated_at: new Date().toISOString(), completed,
-    attempted_all: results.length === fixtures.cases.length && !signal.aborted, metrics,
-    meetsAutomaticTargets: completed && metrics.precision !== null && metrics.precision >= 90 && metrics.deadlineAccuracy !== null && metrics.deadlineAccuracy >= 95,
+  const targets = {
+    precision: target(90, metrics.precision, completed),
+    deadlineAccuracy: target(95, metrics.deadlineAccuracy, completed),
+  };
+  const meetsAutomaticTargets = targets.precision.status === 'PASS' && targets.deadlineAccuracy.status === 'PASS';
+  const status: EvaluationStatus = availability !== 'available' ? 'SKIPPED_UNAVAILABLE' :
+    !completed ? 'INCOMPLETE' : meetsAutomaticTargets ? 'PASS' : 'FAIL';
+  return { format_version: 4, dataset_version: fixtures.version, provider: provider.version, generated_at: new Date().toISOString(),
+    status, availability, completed, attempted_all, metrics, targets, meetsAutomaticTargets,
     note: '고정 어휘·원문 범위 일대일 자동 판정. 오류/취소는 목표 판정 불가. 의미 검토·실제 이미지 OCR·실기기 VoiceOver와 별도.', results };
 }
 // Console reports contain only case IDs, counts and indices; never OCR/model text.
-export function evaluationConsoleSummary(report: Awaited<ReturnType<typeof runFixtureEvaluation>>) {
+export function evaluationConsoleSummary(report: FixtureEvaluationReport) {
   return { dataset_version: report.dataset_version, provider: report.provider, completed: report.completed, metrics: report.metrics,
-    meetsAutomaticTargets: report.meetsAutomaticTargets,
+    status: report.status, availability: report.availability, meetsAutomaticTargets: report.meetsAutomaticTargets,
     discrepancies: report.results.filter(r => r.error || r.score.fp || r.score.fn || r.score.deadlineErrors.length || r.score.unexpectedDeadlines.length)
       .map(r => ({ id: r.id, error: r.error, ...r.score })) };
 }

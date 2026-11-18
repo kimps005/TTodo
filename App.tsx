@@ -45,6 +45,7 @@ function Application() {
   const today = useDayClock();
   const { fontScale } = useWindowDimensions();
   const [repo, setRepo] = useState<Repository | null>(null);
+  const [usesLocalStorage, setUsesLocalStorage] = useState(false);
   const [error, setError] = useState('');
   const [todos, setTodos] = useState<Todo[]>([]);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
@@ -93,6 +94,7 @@ function Application() {
       const repository = await openRepository(); startupPhase('store_ready'); if ((await repository.getPreference('ai_local_consent')) !== 'yes') {
         try { await nativeBridge?.clearCaptureNotifications(); } catch { cleanupFailed = true; }
       }
+      setUsesLocalStorage(await nativeBridge?.isUsingLocalStorage?.() ?? false);
       await refresh(repository); setRepo(repository); startupPhase('boot_ready'); requestLockRefresh(); void recoverLockCard();
       if (cleanupFailed) Alert.alert('임시 파일 일부가 남아 있어요', '할 일은 계속 사용할 수 있어요. 남은 임시 이미지·내보내기 파일은 다음 앱 실행 때 다시 정리해요.');
     } catch (e) { startupPhase('boot_failed'); setError(e instanceof Error ? e.message : '저장소를 열 수 없어요.'); }
@@ -206,6 +208,7 @@ function Application() {
         </>}
         {tab === 'settings' && <>
           <Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 방식으로</Text><Text style={ui.subtitle}>빠른 기록과 개인정보를 함께 챙겨요.</Text>
+          {usesLocalStorage && <Text style={ui.subtitle}>임시 로컬 모드 (App Group 미연결)</Text>}
           <View style={ui.card}><Text accessibilityRole="header" style={ui.section}>잠금화면 빠른 추가</Text><Text style={ui.subtitle}>단축어에서 ‘입력 요청’ 다음에 ‘TTodo에 할 일 추가’를 연결하세요. 잠긴 상태에서 인증 없는 입력은 실제 iPhone 검증이 필요해요.</Text><Text style={ui.small}>설정 안내를 읽은 것만으로 연결 완료로 처리하지 않아요.</Text></View>
           <View style={ui.card}><Text accessibilityRole="header" style={ui.section}>잠금화면 목록</Text><Text style={ui.subtitle}>위젯과 큰 목록 카드는 네이티브 빌드에서 검증하고 있어요. 큰 목록은 iOS에 의해 만료될 수 있어요. 시작해 둔 카드는 앱을 다시 열 때 복구를 시도해요.</Text><Text style={ui.small}>기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. iOS 갱신에는 시간이 걸릴 수 있어요.</Text><LockVisibilityChoices value={lockVisibility} disabled={busy} onSelect={chooseVisibility} /><Text accessibilityLiveRegion="polite" style={ui.subtitle}>카드 상태: {activityStatusLabels[activityStatus] ?? activityStatusLabels.unknown}</Text><Text style={ui.small}>앱 실행·복귀와 아래 버튼에서 확인한 시스템 상태예요. 실제 잠금화면 표시와 갱신 여부도 확인해 주세요. 작은 위젯은 잠금화면 편집에서 별도로 추가할 수 있어요.</Text><Button secondary title="큰 목록 카드 상태 다시 확인" disabled={busy || !nativeBridge} onPress={() => setActivityStatus(readActivityStatus())} /><Button secondary title="큰 목록 카드 시작" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.startActivity(); })} /><Button secondary title="큰 목록 카드 종료" disabled={busy || !nativeBridge} onPress={() => void run(async () => { await nativeBridge!.endActivities(); })} /></View>
           <View style={ui.card}><Text accessibilityRole="header" style={ui.section}>캡처 자동화</Text><Text style={ui.subtitle}>단축어의 ‘TTodo에서 캡처 분석’에 이미지를 직접 전달하세요. 스크린샷 자동화가 없는 환경에서는 사진 선택 단축어로 시험할 수 있어요.</Text><Text style={ui.small}>실제 스크린샷 전달·잠금 실행·AI 정확도는 미검증이에요. 최신 사진을 임의로 가져오지 않으며, 설정 화면 방문만으로 연결 완료로 처리하지 않아요.</Text></View>

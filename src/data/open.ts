@@ -8,7 +8,7 @@ import { createSerializedDatabase } from './serializedDatabase';
 let opening: Promise<Repository> | undefined;
 export function openRepository(): Promise<Repository> {
   if (!opening) opening = (async () => {
-    // Never silently create a second iOS database if the App Group is unavailable.
+    // The native store owns iOS path selection and its Debug-only fallback.
     if (Platform.OS === 'ios' && !nativeBridge) throw new Error('iOS 개발 빌드가 필요해요. Expo Go에서는 공유 저장소를 사용할 수 없어요.');
     let repositoryDatabase;
     if (Platform.OS === 'ios') {
