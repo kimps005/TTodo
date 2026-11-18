@@ -3,7 +3,8 @@
 ## 2026-11-18 Debug 로컬 저장소와 무서명 IPA
 
 - Debug 메인 앱은 App Group 경로가 없을 때 앱의 `Application Support/TTodo`에서 기존 SQLite 스키마를 사용하고 설정에 임시 로컬 모드를 표시한다. Release와 확장은 App Group 경로가 없으면 기존 저장소 오류를 반환한다.
-- 수동 Debug IPA 워크플로우에 저장소 경로 단독 검사, 무서명 iPhoneOS 아카이브, 내장 JavaScript 번들 확인 및 IPA 업로드를 추가했다. Windows에서 타입 검사와 iOS Debug JavaScript 번들 생성을 확인했다. macOS 단독 검사와 IPA 아카이브는 검증 대기 중이며 실제 iPhone 설치 및 AI 정확도는 미검증이다.
+- [macOS 단독 CI](https://github.com/kimps005/TTodo/actions/runs/44299051273)에서 `f445b07`의 `testMissingAppGroupUsesMainAppApplicationSupport` 한 건이 통과했다. Windows 타입 검사, iOS Debug·Release JavaScript 번들 생성, 새 워크플로우의 YAML·Bash 검사도 통과했다.
+- 수동 Debug IPA 워크플로우에 무서명 iPhoneOS 아카이브, 내장 JavaScript 번들 확인 및 IPA 업로드를 추가했다. 작업 브랜치에 있으며 기본 브랜치 등록 후 수동 실행할 수 있다. Xcode 아카이브·IPA 업로드, 실제 iPhone 설치 및 AI 정확도는 미검증이다.
 
 ## 2026-11-18 잠금화면 렌더링 데이터 단독 검사
 
