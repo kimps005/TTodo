@@ -3,7 +3,7 @@
 ## 2026-11-18 잠금화면 렌더링 데이터 단독 검사
 
 - `LockPresentationSmoke`에서 설정이 없는 기본 상태와 `private_lock`·`hide_lock_content`의 네 조합을 검사한다. 미완료 6개 중 위젯에 전달되는 최대 5개 행, 전체 개수, 마감과 ActivityKit의 전체 직렬화 데이터를 대조한다.
-- 단독 macOS CI 경로를 추가했다. Windows에는 iOS SDK가 없어 로컬 네이티브 실행 결과는 없다. 실제 잠금화면 갱신 시점은 실기기 검증 대상으로 남아 있다.
+- `de939d6`의 [단독 macOS CI](https://github.com/kimps005/TTodo/actions/runs/44269637206)에서 제품 Swift 소스를 컴파일하고 iPhone 16 Pro 시뮬레이터로 해당 타깃만 실행해 통과했다. 실제 잠금화면 갱신 시점은 실기기 검증 대상으로 남아 있다.
 
 ## 2026-11-18 잠금화면 복구와 파일 내보내기 회귀 검사
 
