@@ -1,0 +1,34 @@
+name: 잠금화면 렌더링 모델 단독 검사
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/**']
+    paths:
+      - 'native/tests/LockPresentationSmoke.swift'
+      - '.github/workflows/lock-presentation.yml'
+permissions:
+  contents: read
+jobs:
+  lock-presentation:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      - name: Run LockPresentationSmoke
+        run: |
+          sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          executable="$RUNNER_TEMP/ttodo-lock-smoke"
+          xcrun --sdk iphonesimulator swiftc -sdk "$sdk" -target "$(uname -m)-apple-ios18.0-simulator" \
+            -D TTODO_LOCK_TEST modules/ttodo-native/ios/TTodoConfiguration.swift \
+            modules/ttodo-native/ios/SharedStore.swift modules/ttodo-native/ios/TodoActivity.swift \
+            native/ios/TTodoWidgets.swift native/tests/LockPresentationSmoke.swift -o "$executable"
+          device=$(xcrun simctl create TTodoLock com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro)
+          trap 'xcrun simctl delete "$device"' EXIT
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl spawn "$device" "$executable"
