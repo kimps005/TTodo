@@ -2,6 +2,10 @@
 
 ## 2026-11-18 후속: 단축어 큐 통합과 UI 실행 시간 분리
 
+- `318063c`의 [UI 회귀 CI](https://github.com/kimps005/TTodo/actions/runs/44234310254)는 primary·oldest·compact 모두 통과했다. iPhone 16 Pro 시뮬레이터의 iOS 26.5와 26.2에서 각각 `testManualTaskLifecycleAndDataReset` 1/1 통과(건너뜀 없음). 두 XCTest 첨부 모두 `application_page=false notification_controls=false`였다. 설정 앱이 전면에 오고, TTodo 복귀 후 거부 상태·수동 안내·미저장 초안·기존 할 일이 유지되는 것을 검증했다. 전용 페이지 도착이나 권한 변경 성공을 뜻하지 않는다. compact는 최대 글자 크기의 입력·편집·탭 이동 검사다. 실기기 120 MB 피크와 한국어 모델 정확도는 보류한다.
+
+- `318063c`의 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/44234310385)에서 **ios 작업 통과**: Swift 검사, 한국어 Vision OCR, 시뮬레이터 앱·위젯·공유 확장 빌드 및 개인정보 선언 검사 성공. core의 타입 검사·JS 테스트는 통과했고 동일한 `picomatch` 권고로 `npm audit`만 실패했다.
+
 - `da2dc18`의 [품질 CI](https://github.com/kimps005/TTodo/actions/runs/44233006798)에서 Swift 저장소·캡처·한국어 OCR·큐·설정 검사가 모두 통과했다. 앱 타깃은 Expo 생성 파일의 `internal import TTodoNative`와 단축어 파일의 암시적 import 가시성이 달라 컴파일에 실패했다. 단축어에도 동일한 접근 수준을 명시했다.
 - 동일 실행에서 JS 154개와 타입 검사는 통과했고, `npm audit`가 빌드 도구의 간접 의존성 picomatch 2.3.2/4.0.7을 지적해 core는 실패했다. 2026-11-18 확인한 [보안 권고](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)에는 패치 버전이 없다. 감사 기준과 의존성은 유지하고 CI가 건너뛴 iOS Release·개발 번들을 Windows에서 각각 생성해 확인했다.
 
