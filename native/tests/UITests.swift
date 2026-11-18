@@ -262,6 +262,7 @@ final class TTodoUITests: XCTestCase {
     #endif
     screenshot(settings, name: "06-system-app-settings")
     app.activate()
+    reveal(denied, in: app)
     #if targetEnvironment(simulator)
     reveal(control(app, label: "시뮬레이터에서는 알림 설정이 표시되지 않을 수 있어 앱 설정 열기를 요청했어요. 설정 앱에서 앱 → TTodo → 알림을 선택해 주세요. 알림 항목이 없으면 이 환경에서는 변경할 수 없어요."), in: app)
     #endif

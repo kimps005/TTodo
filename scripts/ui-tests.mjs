@@ -5,6 +5,7 @@ import path from 'node:path';
 import resultValidation from './ui-test-result.cjs';
 import simulatorSelection from './ui-simulator-selection.cjs';
 import diagnosticHelp from './ui-diagnostic-help.cjs';
+import uiCommands from './ui-test-commands.cjs';
 
 if (process.platform !== 'darwin') throw new Error('이 검사는 GitHub macOS CI에서만 실행합니다.');
 const output = path.resolve('artifacts/ui-tests'); mkdirSync(output, { recursive: true });
@@ -179,8 +180,16 @@ try {
     report.photo_fixture = 'generated-korean-png-only';
     report.macos_ocr_fixture_preflight = true;
   }
-  report.phase = 'test'; console.log('UI tests: building and running the synthetic manual task flow');
-  execFileSync('xcodebuild', ['-workspace', 'ios/TTodo.xcworkspace', '-scheme', 'TTodoUITests', '-configuration', 'Release', '-destination', `id=${device}`, '-derivedDataPath', 'build', '-resultBundlePath', resultPath, '-only-testing:TTodoUITests/TTodoUITests/' + flow, '-parallel-testing-enabled', 'NO', `ARCHS=${architecture}`, 'ONLY_ACTIVE_ARCH=YES', 'CODE_SIGNING_ALLOWED=YES', 'CODE_SIGN_IDENTITY=-', 'test'], { stdio: 'inherit', timeout: 30 * 60000 });
+  report.command_phases = [];
+  uiCommands.runUICommands(execFileSync, { device, resultPath, flow, architecture,
+    onPhase(phase, timeout) {
+      report.phase = phase;
+      report.command_phases.push({ phase, timeout_ms: timeout, started_at: new Date().toISOString() });
+      // Preserve the last confirmed phase even if a host-level timeout kills Node.
+      writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
+      console.log(`UI tests: ${phase} (timeout=${timeout}ms)`);
+    },
+  });
   const summary = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'summary', '--path', resultPath]));
   const tests = JSON.parse(run('xcrun', ['xcresulttool', 'get', 'test-results', 'tests', '--path', resultPath]));
   writeFileSync(path.join(output, 'summary.json'), JSON.stringify(summary, null, 2));

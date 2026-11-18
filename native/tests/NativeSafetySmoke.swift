@@ -43,6 +43,7 @@ private actor Calls {
     precondition(ModelContextBudget.estimatedTokens(emoji) > emoji.count * 4)
     let emojiChunks = try ModelContextBudget.chunks(emoji)
     precondition(emojiChunks == [emoji])
+    precondition(ModelContextBudget.processingOrder(["그날의 기록", "내일까지 제출", "별도 메모", "앞선 요청 취소"]) == [1, 3, 0, 2])
     for invalid in [" ", String(repeating: "가", count: 201), String(repeating: "a\n", count: 10_001)] {
       do { _ = try ModelContextBudget.chunks(invalid); fatalError("Oversized input accepted") }
       catch LocalAIError.inputLimit { }

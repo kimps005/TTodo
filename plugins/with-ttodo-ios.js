@@ -44,14 +44,18 @@ function withTTodo(config) {
     fs.writeFileSync(path.join(coreDir, 'TTodoConfiguration.swift'), swiftConfiguration(appGroup));
     const appDir = path.join(ios, generated);
     fs.mkdirSync(appDir, { recursive: true });
-    for (const name of [...common, ...captureSources, 'TTodoConfiguration.swift']) copy(name, coreDir, appDir);
+    for (const name of [...common, 'TTodoConfiguration.swift']) copy(name, coreDir, appDir);
     for (const name of intentSources) copy(name, path.join(root, 'native/ios'), appDir);
     let appGroupId = project.findPBXGroupKey({ name: generated });
     if (!appGroupId) {
       appGroupId = project.addPbxGroup([], generated, '.').uuid;
       project.addToPbxGroup(appGroupId, project.getFirstProject().firstProject.mainGroup);
     }
-    for (const name of [...common, ...captureSources, 'TTodoConfiguration.swift', ...intentSources]) {
+    for (const name of captureSources) {
+      const obsolete = `${generated}/${name}`;
+      if (project.hasFile(obsolete)) project.removeSourceFile(obsolete, { target: main }, appGroupId);
+    }
+    for (const name of [...common, 'TTodoConfiguration.swift', ...intentSources]) {
       project.addSourceFile(`${generated}/${name}`, { target: main }, appGroupId);
     }
     project.addFramework('FoundationModels.framework', { target: main, weak: true });

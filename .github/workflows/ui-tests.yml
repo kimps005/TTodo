@@ -9,6 +9,7 @@ on:
       - 'modules/ttodo-native/ios/TTodoNativeModule.swift'
       - 'scripts/ui-tests.mjs'
       - 'scripts/ui-simulator-selection.cjs'
+      - 'scripts/ui-test-commands.cjs'
   workflow_dispatch:
     inputs:
       macos_runner:
@@ -39,7 +40,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ui-tests-${{ github.ref }}-${{ inputs.scenario || 'automatic' }}
+  group: ui-tests-${{ github.ref }}-${{ inputs.scenario || 'automatic' }}-${{ inputs.macos_runner || 'macos-26' }}
   cancel-in-progress: true
 jobs:
   ui:
@@ -49,7 +50,7 @@ jobs:
       matrix:
         profile: ${{ fromJSON(github.event_name == 'push' && '["primary", "compact", "oldest"]' || '["manual"]') }}
     runs-on: ${{ inputs.macos_runner || 'macos-26' }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ inputs.macos_runner == 'macos-26-intel' && 75 || 45 }}
     env:
       CI: '1'
       TTODO_UI_TEXT_SIZE: ${{ matrix.profile == 'compact' && 'accessibility-extra-extra-extra-large' || inputs.text_size || 'large' }}

@@ -77,7 +77,7 @@ enum CaptureProcessor {
         }
       }
       try Task.checkCancellation()
-      try store.finishCapture(id: registration.id, tasks: tasks, provider: semiAutomatic ? "vision-ocr/manual-v1" : "apple-ondevice/prompt-v3", token: token)
+      try store.finishCapture(id: registration.id, tasks: tasks, provider: semiAutomatic ? "vision-ocr/manual-v1" : "apple-ondevice/prompt-v4", token: token)
       await CaptureWorkQueue.shared.release()
       return CaptureOutcome(id: registration.id, count: tasks.count, duplicate: false, semiAutomatic: semiAutomatic)
     } catch {

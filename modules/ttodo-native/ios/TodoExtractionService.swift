@@ -30,6 +30,18 @@ enum ModelContextBudget {
   static let responseTokens = 1024
   static let safetyReserve = 256
   static let chunkBytes = 600
+  // Schedule likely actions/deadlines first without discarding surrounding OCR,
+  // which can change an assignment or cancel a request. Ties retain source order.
+  static func processingOrder(_ chunks: [String]) -> [Int] {
+    let cues = ["주세요", "부탁", "까지", "마감", "기한", "제출", "취소", "하지 마", "해야", "부탁드", "deadline", "please"]
+    var urgent: [Int] = [], remaining: [Int] = []
+    for (index, text) in chunks.enumerated() {
+      let normalized = text.lowercased()
+      if cues.contains(where: { normalized.contains($0) }) { urgent.append(index) }
+      else { remaining.append(index) }
+    }
+    return urgent + remaining
+  }
   // UTF-8 bytes are deliberately conservative for Korean/emoji, unlike count/4.
   // This is an estimate, not Apple's private tokenizer. Runtime errors still
   // fail closed, and no partial chunk results reach storage.
