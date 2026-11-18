@@ -44,6 +44,10 @@ jobs:
       - name: Inspect archive products and privacy declarations
         run: |
           app=artifacts/TTodo.xcarchive/Products/Applications/TTodo.app
+          if [[ ! -s "$app/main.jsbundle" ]]; then
+            echo "::error::Missing or empty Release bundle at $app/main.jsbundle."
+            exit 1
+          fi
           test -d "$app/PlugIns/TTodoWidgets.appex"
           test -d "$app/PlugIns/TTodoShare.appex"
           plutil -lint artifacts/TTodo.xcarchive/Info.plist

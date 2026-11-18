@@ -8,6 +8,37 @@ import { execFileSync } from 'node:child_process';
 const xcode = require('xcode');
 const plist = require('@expo/plist').default;
 const withTTodo = require('../plugins/with-ttodo-ios');
+
+test('단독 Debug 프로젝트는 Expo 앱 진입점에서 내장 번들을 열고 런처를 링크하지 않는다', async () => {
+  const readTemplate = (filename: string) =>
+    execFileSync('tar', ['-xOf', path.resolve('node_modules/expo/template.tgz'), `package/ios/${filename}`], { encoding: 'utf8' });
+  const appDelegate = readTemplate('HelloWorld/AppDelegate.swift');
+  const podfile = readTemplate('Podfile');
+  const env = process.env.TTODO_STANDALONE_DEBUG;
+  const baseConfig = () => ({ name: 'TTodo', slug: 'ttodo', ios: { bundleIdentifier: 'com.kimps005.ttodo' } });
+  try {
+    delete process.env.TTODO_STANDALONE_DEBUG;
+    const normal = withTTodo(baseConfig());
+    assert.equal(normal.mods.ios.appDelegate, undefined);
+    assert.equal(normal.mods.ios.podfile, undefined);
+
+    process.env.TTODO_STANDALONE_DEBUG = '1';
+    const config = withTTodo(baseConfig());
+    const apply = async (mod: 'appDelegate' | 'podfile', contents: string, language: 'swift' | 'rb') =>
+      (await config.mods.ios[mod]({ ...config, modResults: { contents, language }, modRequest: {} })).modResults.contents;
+    const delegate = await apply('appDelegate', appDelegate, 'swift');
+    assert.match(delegate, /override func bundleURL\(\) -> URL\? \{\n    return Bundle\.main\.url\(forResource: "main", withExtension: "jsbundle"\)\n  \}/);
+    assert.doesNotMatch(delegate, /RCTBundleURLProvider/);
+    assert.equal(await apply('appDelegate', delegate, 'swift'), delegate);
+    const pods = await apply('podfile', podfile, 'rb');
+    assert.match(pods, /^  use_expo_modules!\(exclude: \['expo-dev-launcher', 'expo-dev-menu'\]\)$/m);
+    assert.equal(await apply('podfile', pods, 'rb'), pods);
+  } finally {
+    if (env === undefined) delete process.env.TTODO_STANDALONE_DEBUG;
+    else process.env.TTODO_STANDALONE_DEBUG = env;
+  }
+});
+
 test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재적용 시 타깃을 중복하지 않는다', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'ttodo-plugin-'));
   try {

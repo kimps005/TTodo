@@ -1,5 +1,11 @@
 # 개발 현황
 
+## 2026-11-18 단독 실행 Debug IPA의 내장 번들
+
+- Expo의 Xcode 빌드 단계가 Debug에서 `SKIP_BUNDLING=1`을 설정해 아카이브의 번들과 Metro 에셋 생성이 건너뛰어졌다. Pods 설치가 끝난 뒤 Xcode가 마지막에 읽는 `.xcode.env.local`에서 이 값을 해제했다. 기존 Expo 빌드 단계가 Debug JS와 앱에서 사용하는 에셋을 앱 번들에 출력한다.
+- Debug IPA용 prebuild는 Dev Launcher와 Dev Menu를 제외하고 AppDelegate가 로컬 `main.jsbundle`을 직접 열도록 생성한다. 압축 직전 Payload에서 번들, 앱 식별자, arm64 Mach-O 실행 파일, 깨진 링크를 검사한다. Release 아카이브에도 내장 번들 확인을 추가했다.
+- Windows에서 테스트 159개, 타입, 두 워크플로우의 YAML·Bash 구문, Expo 자동 연결 제외 목록, iOS Debug JS 및 이미지 에셋 5개 생성을 확인했다. 변경 후 iPhoneOS 아카이브와 IPA 업로드, 실제 iPhone의 Metro 없는 첫 실행은 각 실행 결과를 확인해야 한다.
+
 ## 2026-11-18 Debug 로컬 저장소와 무서명 IPA
 
 - Debug 메인 앱은 App Group 경로가 없을 때 앱의 `Application Support/TTodo`에서 기존 SQLite 스키마를 사용하고 설정에 임시 로컬 모드를 표시한다. Release와 확장은 App Group 경로가 없으면 기존 저장소 오류를 반환한다.

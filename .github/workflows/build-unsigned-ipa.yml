@@ -17,18 +17,30 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npx expo prebuild --platform ios --no-install
+      - name: Generate the standalone Debug project
+        env:
+          TTODO_STANDALONE_DEBUG: '1'
+        run: npx expo prebuild --platform ios --no-install
       - name: Test only the Debug storage fallback
         run: |
           executable="$RUNNER_TEMP/ttodo-debug-storage-fallback-tests"
           swiftc -D DEBUG modules/ttodo-native/ios/SharedStore.swift \
             modules/ttodo-native/ios/TTodoConfiguration.swift native/tests/DebugStorageFallbackTests.swift -o "$executable"
           "$executable"
-      - name: Enable the embedded Debug bundle in the dev client
-        run: plutil -insert EXDevClientEmbeddedBundle -bool YES ios/TTodo/Info.plist
       - name: Install pods
         working-directory: ios
         run: pod install
+      - name: Enable Expo bundling for the Debug archive
+        shell: bash
+        run: |
+          # Expo sources .xcode.env.local again after setting SKIP_BUNDLING for Debug.
+          # Append after pod install so CocoaPods' Node configuration is preserved.
+          cat >> ios/.xcode.env.local <<'EOF'
+
+          unset SKIP_BUNDLING
+          export FORCE_BUNDLING=1
+          export SKIP_BUNDLING_METRO_IP=1
+          EOF
       - name: Archive for generic iPhoneOS without signing
         run: |
           xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo \
@@ -36,24 +48,56 @@ jobs:
             -archivePath "$RUNNER_TEMP/$ARCHIVE_NAME" ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
       - name: Package TTodo-unsigned.ipa
-        working-directory: ${{ runner.temp }}
         shell: bash
         run: |
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
           archive_path="$RUNNER_TEMP/$ARCHIVE_NAME"
           shopt -s nullglob
           apps=("$archive_path"/Products/Applications/*.app)
           if [[ ${#apps[@]} -ne 1 || ! -d ${apps[0]:-} ]]; then
-            echo "::error::Expected one .app directory under $archive_path/Products/Applications; found ${#apps[@]} matching entries."
-            exit 1
+            fail "Expected one .app directory under $archive_path/Products/Applications; found ${#apps[@]} matching entries."
           fi
-          app="${apps[0]}"
-          if [[ ! -s "$app/main.jsbundle" ]]; then
-            echo "::error::Missing or empty embedded bundle at $app/main.jsbundle."
-            exit 1
-          fi
+
+          package_dir=$(mktemp -d "$RUNNER_TEMP/ttodo-ipa.XXXXXX")
+          cd "$package_dir"
           mkdir Payload
-          ditto "$app" "Payload/${app##*/}"
-          zip -r TTodo-unsigned.ipa Payload
+          app="Payload/${apps[0]##*/}"
+          ditto "${apps[0]}" "$app"
+
+          [[ -f "$app/main.jsbundle" && -s "$app/main.jsbundle" ]] ||
+            fail "Missing or empty embedded bundle at $app/main.jsbundle."
+          plist="$app/Info.plist"
+          [[ -f "$plist" ]] && plutil -lint "$plist" ||
+            fail "Missing or invalid Info.plist at $plist."
+          bundle_id=$(plutil -extract CFBundleIdentifier raw -expect string -o - "$plist") ||
+            fail "Missing or invalid CFBundleIdentifier in $plist."
+          [[ "$bundle_id" =~ ^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$ ]] ||
+            fail "CFBundleIdentifier in $plist is not a reverse-DNS identifier: $bundle_id."
+          executable=$(plutil -extract CFBundleExecutable raw -expect string -o - "$plist") ||
+            fail "Missing or invalid CFBundleExecutable in $plist."
+          [[ "$executable" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] ||
+            fail "CFBundleExecutable in $plist is not a valid filename: $executable."
+          binary="$app/$executable"
+          [[ -f "$binary" && -s "$binary" && -x "$binary" ]] ||
+            fail "Missing, empty, or non-executable main binary at $binary."
+          binary_type=$(file -b "$binary")
+          [[ "$binary_type" == "Mach-O 64-bit executable arm64"* ]] ||
+            fail "Expected an arm64 Mach-O executable at $binary; found $binary_type."
+
+          broken_links=$(find -L "$app" -type l -print) ||
+            fail "Could not resolve symlinks while checking $app."
+          if [[ -n "$broken_links" ]]; then
+            printf '%s\n' "$broken_links"
+            fail "Found broken symlinks in $app (listed above)."
+          fi
+
+          echo "Verified $bundle_id, $binary_type, embedded JS bundle and symlinks in $app."
+          zip -qry TTodo-unsigned.ipa Payload
+          mv TTodo-unsigned.ipa "$RUNNER_TEMP/TTodo-unsigned.ipa"
       - uses: actions/upload-artifact@v4
         with:
           name: TTodo-unsigned-ipa

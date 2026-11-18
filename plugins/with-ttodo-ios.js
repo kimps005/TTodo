@@ -1,6 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { withEntitlementsPlist, withInfoPlist, withXcodeProject } = require('expo/config-plugins');
+const { withAppDelegate, withEntitlementsPlist, withInfoPlist, withPodfile, withXcodeProject } = require('expo/config-plugins');
 const schema = require('../src/data/schema.json');
 
 function swiftConfiguration(group) {
@@ -12,7 +12,33 @@ function plist(body) {
 function koreanInfoPlist(body) {
   return plist('<key>CFBundleDevelopmentRegion</key><string>ko</string><key>CFBundleLocalizations</key><array><string>ko</string></array>' + body);
 }
+function withStandaloneDebug(config) {
+  config = withPodfile(config, c => {
+    const autolink = "  use_expo_modules!(exclude: ['expo-dev-launcher', 'expo-dev-menu'])";
+    if (c.modResults.contents.includes(autolink)) return c;
+    const expoModules = /^  use_expo_modules![ \t]*$/m;
+    if (!expoModules.test(c.modResults.contents)) {
+      throw new Error('Cannot configure the standalone Debug Podfile: missing use_expo_modules!.');
+    }
+    c.modResults.contents = c.modResults.contents.replace(expoModules, autolink);
+    return c;
+  });
+  return withAppDelegate(config, c => {
+    // Expo's Debug launcher supplies its own root view before the bundle URL is used.
+    // With the launcher excluded, use the same local URL as Release.
+    const localBundle = '    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")';
+    const standaloneMethod = `  override func bundleURL() -> URL? {\n${localBundle}\n  }`;
+    if (c.modResults.contents.includes(standaloneMethod)) return c;
+    const expoBundleURL = /  override func bundleURL\(\) -> URL\? \{\r?\n#if DEBUG\r?\n    return RCTBundleURLProvider[^\r\n]*\r?\n#else\r?\n    return Bundle\.main\.url\(forResource: "main", withExtension: "jsbundle"\)\r?\n#endif\r?\n  \}/;
+    if (c.modResults.language !== 'swift' || !expoBundleURL.test(c.modResults.contents)) {
+      throw new Error('Cannot configure the standalone Debug AppDelegate: unexpected Expo bundleURL implementation.');
+    }
+    c.modResults.contents = c.modResults.contents.replace(expoBundleURL, standaloneMethod);
+    return c;
+  });
+}
 function withTTodo(config) {
+  if (process.env.TTODO_STANDALONE_DEBUG === '1') config = withStandaloneDebug(config);
   const bundle = config.ios.bundleIdentifier;
   const appGroup = `group.${bundle}`;
   config = withEntitlementsPlist(config, c => {
