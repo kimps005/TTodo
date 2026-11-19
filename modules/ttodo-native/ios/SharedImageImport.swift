@@ -19,7 +19,7 @@ enum SharedImageImport {
     pending = nil
     let board = UIPasteboard.general
     let changeCount = board.changeCount
-    guard board.pasteboardTypes.contains(ShareImageHandoff.marker) else {
+    guard board.types.contains(ShareImageHandoff.marker) else {
       if request == .latest { return nil }
       throw CaptureImageInput.Failure.unreadable
     }
