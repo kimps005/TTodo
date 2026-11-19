@@ -36,6 +36,28 @@ public class TTodoNativeModule: Module {
     if let sqlStore { return sqlStore }
     let store = try SharedStore(); sqlStore = store; return store
   }
+  @MainActor
+  private func pasteClipboardImage() async throws -> String? {
+    let clipboard = UIPasteboard.general
+    guard clipboard.hasImages,
+      let provider = clipboard.itemProviders.first(where: { CaptureImageInput.imageType(in: $0) != nil }) else { return nil }
+
+    return try await CaptureImageInput.withImageFile(provider) { url in
+      try VisionOCR.validateFile(url)
+      let directory = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        .appendingPathComponent("ttodo-captures", isDirectory: true)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      let image = directory.appendingPathComponent("\(UUID().uuidString).image")
+      do {
+        try FileManager.default.copyItem(at: url, to: image)
+        return image.absoluteString
+      } catch {
+        try? FileManager.default.removeItem(at: image)
+        throw CaptureImageInput.Failure.unreadable
+      }
+    }
+  }
+
   public func definition() -> ModuleDefinition {
     Name("TTodoNative")
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
@@ -76,6 +98,9 @@ public class TTodoNativeModule: Module {
       guard let bytes = info.fileSize, bytes > 0, bytes <= 20 * 1024 * 1024 else { throw OCRFailure.tooLarge }
       let data = try Data(contentsOf: url, options: .mappedIfSafe)
       return ["text": try VisionOCR.recognize(data), "fingerprint": VisionOCR.fingerprint(data)]
+    }
+    AsyncFunction("pasteClipboardImage") { () async throws -> String? in
+      try await self.pasteClipboardImage()
     }
     Function("signalCapturePurge") {
       CapturePurgeObserver.post()

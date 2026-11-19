@@ -140,7 +140,7 @@ function withTTodo(config) {
     }
     const shareName = 'TTodoShare';
     const shareDir = path.join(ios, shareName);
-    const shareSources = [...common, ...captureSources, 'TTodoConfiguration.swift'];
+    const shareSources = [...common, ...captureSources, 'CaptureImageInput.swift', 'TTodoConfiguration.swift'];
     fs.mkdirSync(shareDir, { recursive: true });
     for (const name of shareSources) copy(name, coreDir, shareDir);
     copy('ShareViewController.swift', path.join(root, 'native/ios'), shareDir);
@@ -162,12 +162,14 @@ function withTTodo(config) {
     for (const name of [...shareSources, 'ShareViewController.swift']) project.addSourceFile(`${shareName}/${name}`, { target: shareId }, shareGroup);
     const shareList = project.pbxXCConfigurationList()[nativeTargets[shareId].buildConfigurationList];
     for (const ref of shareList.buildConfigurations) {
-      Object.assign(project.pbxXCBuildConfigurationSection()[ref.value].buildSettings, {
+      const configuration = project.pbxXCBuildConfigurationSection()[ref.value];
+      Object.assign(configuration.buildSettings, {
         IPHONEOS_DEPLOYMENT_TARGET: '18.0', SWIFT_VERSION: '5.9', TARGETED_DEVICE_FAMILY: '1',
         CODE_SIGN_ENTITLEMENTS: `${shareName}/${shareName}.entitlements`, CODE_SIGN_STYLE: 'Automatic',
         APPLICATION_EXTENSION_API_ONLY: 'YES', GENERATE_INFOPLIST_FILE: 'NO',
         CURRENT_PROJECT_VERSION: c.ios.buildNumber ?? '1', MARKETING_VERSION: c.version ?? '1.0.0',
         OTHER_LDFLAGS: ['"$(inherited)"', '"-lsqlite3"', '"-weak_framework"', '"FoundationModels"'],
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: configuration.name === 'Debug' ? '"$(inherited) DEBUG"' : '"$(inherited)"',
       });
     }
     return c;

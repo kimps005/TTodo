@@ -1,5 +1,12 @@
 # 개발 현황
 
+## 2026-11-19 공유 확장 로컬 모드와 Dev Client IPA
+
+- 생성된 iOS 공유 확장은 사진·스크린샷 한 장을 받으며, 공유 제공자가 등록한 이미지 형식으로 파일을 요청한다. App Group이 연결된 공유 확장은 공용 DB와 기존 동의·검토 흐름을 사용한다.
+- Debug에서 App Group 컨테이너가 없으면 공유 화면의 ‘클립보드에 이미지 복사’로 축소한 이미지를 이 기기에 5분간 복사한다. 공유 호스트가 `ttodo://capture` 열기를 허용하면 캡처 화면으로 이동한다. 앱이 열리지 않으면 직접 TTodo의 ‘사진·클립보드에서 할 일 찾기’로 이동한다. 확장이 표시되지 않을 때는 사진 앱에서 이미지를 복사할 수 있다. 캡처 화면에서 ‘클립보드 이미지 붙여넣기’를 누르면 기존 OCR·동의·승인 흐름으로 이어진다.
+- 수동 `iPhone용 Dev Client Debug IPA` 작업이 `TTodo-dev-client-unsigned.ipa`를 생성하도록 구성했다. Expo Dev Client·Launcher·Menu Pods, URL 스킴과 iOS 로컬 네트워크 설정을 검사한다. Metro는 개발 PC에서 `npx expo start --dev-client`로 실행한다.
+- Windows에서 테스트 160개, 타입 검사, iOS Debug·Release JS 번들, 두 IPA 모드의 Expo iOS 프로젝트 설정, 새 워크플로우 YAML·Bash 구문, diff 검사를 통과했다. `artifacts/`는 타입 검사 대상에서 제외했다. 새 워크플로우의 Xcode 아카이브·산출물과 실기기의 공유 시트·붙여넣기 권한·Metro 접속·AI 정확도는 별도로 검증한다.
+
 ## 2026-11-19 단독 실행 Debug IPA 번들링과 패키징 검증 보강
 
 - Expo가 Debug에서 설정한 `SKIP_BUNDLING`을 생성된 Xcode 빌드 단계의 마지막 환경 파일 로드 직후 해제한다. 기존 Release와 같은 `export:embed` 경로로 `main.jsbundle`과 Metro 에셋을 앱에 넣는다.

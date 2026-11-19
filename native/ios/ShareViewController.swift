@@ -7,20 +7,93 @@ final class ShareViewController: UIViewController {
   override func viewDidLoad() {
     super.viewDidLoad()
     let items = extensionContext?.inputItems as? [NSExtensionItem] ?? []
-    let providers = items.flatMap { $0.attachments ?? [] }.filter { $0.hasItemConformingToTypeIdentifier(UTType.image.identifier) }
-    let host = UIHostingController(rootView: CaptureShareView(providers: providers) { [weak self] in
+    let providers = items.flatMap { $0.attachments ?? [] }.filter { CaptureImageInput.imageType(in: $0) != nil }
+    let close: () -> Void = { [weak self] in
       self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
-    })
+    }
+    #if DEBUG
+    if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: TTodoConfiguration.appGroup) == nil {
+      show(LocalShareView(providers: providers, close: close) { [weak self] in
+        guard let url = URL(string: "ttodo://capture") else { return }
+        self?.extensionContext?.open(url, completionHandler: nil)
+      })
+      return
+    }
+    #endif
+    show(CaptureShareView(providers: providers, close: close))
+  }
+
+  private func show<Content: View>(_ content: Content) {
+    let host = UIHostingController(rootView: content)
     addChild(host); host.view.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(host.view)
     NSLayoutConstraint.activate([host.view.topAnchor.constraint(equalTo: view.topAnchor), host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor), host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor), host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)])
     host.didMove(toParent: self)
   }
 }
+
 private enum ShareInputError: LocalizedError {
-  case singleImage, unreadable
-  var errorDescription: String? { self == .singleImage ? "이미지를 한 장씩 공유해 주세요." : "공유한 이미지를 읽지 못했어요. 다른 이미지를 선택해 주세요." }
+  case singleImage
+  var errorDescription: String? { "이미지를 한 장씩 공유해 주세요." }
 }
+
+#if DEBUG
+private struct LocalShareView: View {
+  let providers: [NSItemProvider]
+  let close: () -> Void
+  let openCapture: () -> Void
+  @State private var operation: Task<Void, Never>?
+  @State private var copied = false
+  @State private var failure: String?
+
+  var body: some View {
+    NavigationStack {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          Text("공유한 이미지 가져오기").font(.title.bold()).accessibilityAddTraits(.isHeader)
+          Text("공유 저장소를 사용할 수 없어요. 이미지를 이 기기의 클립보드에 5분 동안 복사할 수 있어요.")
+          if copied {
+            Text("복사했어요. TTodo의 ‘사진·클립보드에서 할 일 찾기’에서 ‘클립보드 이미지 붙여넣기’를 눌러 주세요.")
+              .accessibilityAddTraits(.updatesFrequently)
+          }
+          if let failure { Text(failure).foregroundStyle(.red) }
+          if operation != nil { ProgressView("이미지를 준비하고 있어요") }
+          Button("클립보드에 이미지 복사", action: copyImage).buttonStyle(.borderedProminent).disabled(operation != nil)
+        }.padding(24)
+      }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기", action: close) } }
+        .onDisappear { operation?.cancel() }
+    }
+  }
+
+  private func copyImage() {
+    guard operation == nil else { return }
+    guard providers.count == 1, let provider = providers.first else {
+      failure = ShareInputError.singleImage.errorDescription
+      return
+    }
+    failure = nil
+    copied = false
+    operation = Task { @MainActor in
+      defer { operation = nil }
+      do {
+        let jpeg = try await CaptureImageInput.withImageFile(provider) { try CaptureImageInput.compressedImage(at: $0) }
+        try Task.checkCancellation()
+        UIPasteboard.general.setItems([[UTType.jpeg.identifier: jpeg]], options: [
+          .localOnly: true,
+          .expirationDate: Date().addingTimeInterval(5 * 60),
+        ])
+        copied = true
+        // The host can decline opening the app. The instructions remain on screen.
+        openCapture()
+      } catch {
+        if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? CaptureImageInput.Failure.unreadable.errorDescription }
+      }
+    }
+  }
+}
+#endif
+
 private struct CaptureShareView: View {
   let providers: [NSItemProvider]
   let close: () -> Void
@@ -77,24 +150,17 @@ private struct CaptureShareView: View {
   }
   private func readImage() async throws -> URL {
     guard providers.count == 1, let provider = providers.first else { throw ShareInputError.singleImage }
-    return try await withCheckedThrowingContinuation { continuation in
-      provider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier) { url, _ in
-        guard let url else { continuation.resume(throwing: ShareInputError.unreadable); return }
-        do {
-          try VisionOCR.validateFile(url)
-          // Provider URLs expire when this callback returns. Copy on disk,
-          // never load the original compressed bytes or full bitmap into RAM.
-          let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-share-\(UUID().uuidString)", isDirectory: true)
-          try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-          do {
-            let owned = directory.appendingPathComponent("input")
-            try FileManager.default.copyItem(at: url, to: owned)
-            continuation.resume(returning: owned)
-          } catch {
-            try? FileManager.default.removeItem(at: directory)
-            throw error
-          }
-        } catch { continuation.resume(throwing: error) }
+    return try await CaptureImageInput.withImageFile(provider) { url in
+      try VisionOCR.validateFile(url)
+      let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-share-\(UUID().uuidString)", isDirectory: true)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      do {
+        let owned = directory.appendingPathComponent("input")
+        try FileManager.default.copyItem(at: url, to: owned)
+        return owned
+      } catch {
+        try? FileManager.default.removeItem(at: directory)
+        throw error
       }
     }
   }

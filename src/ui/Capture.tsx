@@ -21,12 +21,14 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   const [hasPrevious, setHasPrevious] = useState(false);
   const [aiStatus, setAIStatus] = useState(() => nativeBridge?.localAIAvailability() ?? 'missing_native');
   const working = useRef(false);
+  const mounted = useRef(false);
   const draftVersion = useRef(0);
   const confirmation = useRef(createReviewConfirmation()).current;
   const closeIfIdle = () => { if (!working.current) { draftVersion.current++; close(); } };
   useEffect(() => {
+    mounted.current = true;
     const subscription = AppState.addEventListener('change', state => { draftVersion.current++; if (state === 'active') setAIStatus(nativeBridge?.localAIAvailability() ?? 'missing_native'); });
-    return () => { draftVersion.current++; subscription.remove(); };
+    return () => { mounted.current = false; draftVersion.current++; subscription.remove(); };
   }, []);
   const transferred = useRef<string | null>(null);
   useEffect(() => () => { if (image && transferred.current !== image) discardTemporaryImage(image); }, [image]);
@@ -35,27 +37,37 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     try { await analyzed(id, image ?? undefined); }
     catch (error) { transferred.current = null; throw error; }
   };
-  const select = async () => {
+  const select = async (source: 'photo' | 'clipboard') => {
     if (working.current) return;
     draftVersion.current++;
     working.current = true; setBusy(true);
     try {
       if (!nativeBridge) throw new Error('기기 내 OCR은 iOS 개발 빌드에서 사용할 수 있어요.');
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
-      if (picked.canceled) return;
-      const asset = picked.assets[0];
-      if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { discardTemporaryImage(asset.uri); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
-      const uri = await ownTemporaryImage(asset.uri);
+      let uri: string;
+      if (source === 'clipboard') {
+        const pasted = await nativeBridge.pasteClipboardImage?.();
+        if (!pasted) throw new Error('붙여넣을 수 있는 이미지가 없어요. 사진을 다시 복사하고 iOS에서 붙여넣기를 허용해 주세요.');
+        uri = pasted;
+      } else {
+        const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
+        if (picked.canceled) return;
+        const asset = picked.assets[0];
+        if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { discardTemporaryImage(asset.uri); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
+        uri = await ownTemporaryImage(asset.uri);
+      }
+      if (!mounted.current) { discardTemporaryImage(uri); return; }
       // Commit a new draft only after a real selection. Cancelling preserves edits;
       // a different image must never inherit the previous conversation's date.
       setText(''); setFingerprint(null); setHasPrevious(false); setMessageDate('');
       setImage(uri);
       const result = await nativeBridge.recognizeText(uri);
+      if (!mounted.current) return;
       setText(result.text); setFingerprint(result.fingerprint);
       setHasPrevious((await repository.listAnalyses()).some(item => item.image_fingerprint === result.fingerprint));
       if (!result.text.trim()) Alert.alert('글자를 찾지 못했어요', '더 선명한 이미지를 선택해 주세요.');
-    } catch (error) { Alert.alert('사진을 읽지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.'); }
-    finally { working.current = false; setBusy(false); }
+    } catch (error) {
+      if (mounted.current) Alert.alert(source === 'clipboard' ? '이미지를 붙여넣지 못했어요' : '사진을 읽지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
+    } finally { working.current = false; if (mounted.current) setBusy(false); }
   };
   type Reanalysis = { id: string; status: Analysis['status']; taskIds: string[] };
   const analyze = async (reanalyze?: Reanalysis) => {
@@ -123,7 +135,8 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
   };
   return <Modal animationType="slide" onRequestClose={closeIfIdle}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
-    <Button title={busy ? '글자를 읽는 중…' : '사진에서 선택'} onPress={() => void select()} disabled={busy} />
+    <Button title={busy ? '처리 중…' : '사진에서 선택'} onPress={() => void select('photo')} disabled={busy} />
+    {nativeBridge?.pasteClipboardImage && <Button secondary title="클립보드 이미지 붙여넣기" onPress={() => void select('clipboard')} disabled={busy} />}
     {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}
     {fingerprint !== null && <View style={ui.card}><Text style={ui.label}>기기에서 인식한 글자</Text><TextInput accessibilityLabel="인식된 글자" style={[ui.input, { minHeight: 150 }]} multiline editable={!busy} value={text} onChangeText={value => { draftVersion.current++; setText(value); }} />{containsSensitiveText(text) && <Text style={[ui.subtitle, ui.danger]}>민감한 정보가 감지되었어요. 이 내용은 기기 내 AI로도 분석하지 않아요. 필요한 할 일은 직접 입력해 주세요.</Text>}</View>}
     <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI · 실험 중</Text><Text style={ui.subtitle}>{availabilityLabels[aiStatus] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>{aiStatus !== 'available' ? 'AI를 쓸 수 없을 때는 인식한 글자를 탭하고 제목·날짜를 수정한 뒤 저장할 수 있어요. AI 제안이 아니며 선택 전에는 저장하지 않아요.' : '인터넷 API 없이 Apple의 기기 내 모델을 사용해요.'}</Text><Text style={ui.small}> 한국어 정확도는 실제 기기에서 검증해야 해요.</Text><TextInput accessibilityLabel="원문 메시지 기준 날짜 YYYY-MM-DD" style={ui.input} placeholder="대화 기준 날짜 YYYY-MM-DD (선택)" editable={!busy} value={messageDate} onChangeText={value => { draftVersion.current++; setMessageDate(value); }} maxLength={10} keyboardType="numbers-and-punctuation" /><Text style={ui.small}>캡처 날짜와 대화 날짜는 다를 수 있어요. 기준 날짜가 없으면 ‘내일’ 같은 날짜를 확정하지 않아요.</Text><Button title={busy ? '처리 중…' : aiStatus === 'available' ? '기기 내 AI로 할 일 찾기' : '인식한 글자에서 직접 선택'} disabled={busy || !text.trim() || !fingerprint} onPress={() => void requestAnalysis().catch(() => Alert.alert('설정을 확인하지 못했어요', '다시 시도해 주세요.'))} /></View>

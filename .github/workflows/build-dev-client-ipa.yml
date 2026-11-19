@@ -1,0 +1,124 @@
+name: iPhone용 Dev Client Debug IPA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      CI: '1'
+      ARCHIVE_NAME: TTodoDevClient.xcarchive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Expo prebuild applies the installed Dev Client plugin and autolinks its pods.
+      - name: Generate the Dev Client Debug project
+        run: npx expo prebuild --platform ios --no-install
+      - name: Test only the Debug storage fallback
+        run: |
+          executable="$RUNNER_TEMP/ttodo-debug-storage-fallback-tests"
+          swiftc -D DEBUG modules/ttodo-native/ios/SharedStore.swift \
+            modules/ttodo-native/ios/TTodoConfiguration.swift native/tests/DebugStorageFallbackTests.swift -o "$executable"
+          "$executable"
+      - name: Install pods
+        working-directory: ios
+        run: |
+          pod install
+          for pod in expo-dev-client expo-dev-launcher expo-dev-menu; do
+            grep -Fq "  - $pod (" Podfile.lock || { echo "::error::Missing $pod in Podfile.lock"; exit 1; }
+          done
+      - name: Archive for generic iPhoneOS without signing
+        run: |
+          xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo \
+            -configuration Debug -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/$ARCHIVE_NAME" ARCHS=arm64 \
+            SKIP_BUNDLING=1 SKIP_BUNDLING_METRO_IP=1 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive
+      - name: Package TTodo-dev-client-unsigned.ipa
+        shell: bash
+        run: |
+          fail() {
+            echo "::error::$1"
+            exit 1
+          }
+
+          archive_path="$RUNNER_TEMP/$ARCHIVE_NAME"
+          shopt -s nullglob
+          apps=("$archive_path"/Products/Applications/*.app)
+          if [[ ${#apps[@]} -ne 1 || ! -d ${apps[0]:-} ]]; then
+            fail "Expected one .app directory under $archive_path/Products/Applications; found ${#apps[@]} matching entries."
+          fi
+
+          package_dir=$(mktemp -d "$RUNNER_TEMP/ttodo-ipa.XXXXXX")
+          cd "$package_dir"
+          mkdir Payload
+          app="Payload/${apps[0]##*/}"
+          ditto "${apps[0]}" "$app"
+
+          [[ ! -e "$app/main.jsbundle" && ! -L "$app/main.jsbundle" ]] ||
+            fail "Unexpected embedded JS bundle in the Metro app: $app/main.jsbundle."
+          [[ ! -e "$app/ip.txt" && ! -L "$app/ip.txt" ]] ||
+            fail "The app must not use the CI runner's IP as the Metro host: $app/ip.txt."
+          plist="$app/Info.plist"
+          [[ -f "$plist" ]] && plutil -lint "$plist" ||
+            fail "Missing or invalid Info.plist at $plist."
+          plutil -extract NSLocalNetworkUsageDescription raw -expect string -o - "$plist" >/dev/null ||
+            fail "Missing the iOS local network permission description in $plist."
+          plutil -extract CFBundleURLTypes json -o - "$plist" | node -e '
+            const types = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+            const schemes = types.flatMap(type => type.CFBundleURLSchemes ?? []);
+            if (!["ttodo", "exp+ttodo"].every(scheme => schemes.includes(scheme))) process.exitCode = 1;
+          ' || fail "Missing the app or Expo Dev Client URL scheme in $plist."
+          bundle_id=$(plutil -extract CFBundleIdentifier raw -expect string -o - "$plist") ||
+            fail "Missing or invalid CFBundleIdentifier in $plist."
+          [[ "$bundle_id" =~ ^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$ ]] ||
+            fail "CFBundleIdentifier in $plist is not a reverse-DNS identifier: $bundle_id."
+          executable=$(plutil -extract CFBundleExecutable raw -expect string -o - "$plist") ||
+            fail "Missing or invalid CFBundleExecutable in $plist."
+          [[ "$executable" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] ||
+            fail "CFBundleExecutable in $plist is not a valid filename: $executable."
+          binary="$app/$executable"
+          [[ -f "$binary" && -s "$binary" && -x "$binary" ]] ||
+            fail "Missing, empty, or non-executable main binary at $binary."
+          binary_type=$(file -b "$binary")
+          [[ "$binary_type" == "Mach-O 64-bit executable arm64"* ]] ||
+            fail "Expected an arm64 Mach-O executable at $binary; found $binary_type."
+          binary_build=$(xcrun vtool -show-build "$binary") ||
+            fail "Could not read Mach-O build metadata at $binary."
+          awk '$1 == "platform" && $2 == "IOS" { found = 1 } END { exit !found }' <<< "$binary_build" ||
+            fail "Expected an iPhoneOS executable at $binary."
+
+          # zip -y preserves symlinks. Only relative links that resolve within
+          # the app will still work when the Payload is unpacked elsewhere.
+          find "$app" -type l -exec node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const [app, ...links] = process.argv.slice(1);
+            const root = fs.realpathSync.native(app);
+            for (const link of links) {
+              try {
+                const target = fs.realpathSync.native(link);
+                if (path.isAbsolute(fs.readlinkSync(link)) || (target !== root && !target.startsWith(root + path.sep))) {
+                  throw new Error("link must be relative and resolve inside the app");
+                }
+              } catch (error) {
+                console.error(`${link}: ${error.message}`);
+                process.exitCode = 1;
+              }
+            }
+          ' "$app" {} + || fail "Found broken or non-portable symlinks in $app (listed above)."
+
+          echo "Verified $bundle_id, $binary_type, Dev Client schemes and symlinks in $app."
+          zip -qry TTodo-dev-client-unsigned.ipa Payload
+          mv TTodo-dev-client-unsigned.ipa "$RUNNER_TEMP/TTodo-dev-client-unsigned.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TTodo-dev-client-unsigned-ipa
+          path: ${{ runner.temp }}/TTodo-dev-client-unsigned.ipa
+          if-no-files-found: error

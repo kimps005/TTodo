@@ -73,11 +73,19 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     const shareTargets = Object.values(project.pbxNativeTargetSection()).filter((value: any) => value.name === '"TTodoShare"') as any[];
     assert.equal(shareTargets.length, 1);
     assert.ok(first.includes('TTodoShare/ShareViewController.swift'));
+    assert.ok(first.includes('TTodoShare/CaptureImageInput.swift'));
     assert.ok(first.includes('TTodoShare/CaptureNotifications.swift'), '공유창의 재분석 알림 정리에 필요한 Swift 소스를 포함해야 한다');
     const sharePlist = readFileSync(path.join(ios, 'TTodoShare/TTodoShare-Info.plist'), 'utf8');
-    assert.ok(sharePlist.includes('com.apple.share-services'));
-    assert.ok(sharePlist.includes('NSExtensionActivationSupportsImageWithMaxCount'));
+    const { NSExtension: extension } = plist.parse(sharePlist);
+    assert.equal(extension.NSExtensionPointIdentifier, 'com.apple.share-services');
+    assert.deepEqual({ ...extension.NSExtensionAttributes.NSExtensionActivationRule }, { NSExtensionActivationSupportsImageWithMaxCount: 1 });
     assert.ok(sharePlist.includes('$(CURRENT_PROJECT_VERSION)'));
+    const shareConfigs = project.pbxXCConfigurationList()[shareTargets[0].buildConfigurationList].buildConfigurations;
+    for (const ref of shareConfigs) {
+      const { name, buildSettings } = project.pbxXCBuildConfigurationSection()[ref.value];
+      assert.equal(buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS, name === 'Debug' ? '"$(inherited) DEBUG"' : '"$(inherited)"');
+      assert.equal(buildSettings.APPLICATION_EXTENSION_API_ONLY, 'YES');
+    }
     const phases = targets[0].buildPhases.filter((phase: any) => phase.comment === 'Sources');
     assert.equal(phases.length, 1);
     assert.equal(project.hash.project.objects.PBXSourcesBuildPhase[phases[0].value].files.length, 4);

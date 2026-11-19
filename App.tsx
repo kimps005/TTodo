@@ -19,7 +19,7 @@ import { availabilityLabels } from './src/ai/onDeviceProvider';
 import { ModelEvaluation } from './src/dev/ModelEvaluation';
 import { analysisReviewRoute } from './src/notifications/route';
 import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibilityChoices';
-import { isHomeLink } from './src/navigation/route';
+import { isCaptureLink, isHomeLink } from './src/navigation/route';
 import { shareDataExport } from './src/data/shareTemporaryExport';
 import { createLatestRefresh } from './src/data/latestRefresh';
 import { createReviewConfirmation } from './src/ui/reviewConfirmation';
@@ -63,6 +63,7 @@ function Application() {
   const [localAIConsent, setLocalAIConsent] = useState(false);
   const [notificationReview, setNotificationReview] = useState<string | null>(null);
   const [homeRequested, setHomeRequested] = useState(false);
+  const [captureRequested, setCaptureRequested] = useState(false);
   const [onboarded, setOnboarded] = useState(false);
   const [permission, setPermission] = useState<Notifications.NotificationPermissionsStatus | null>(null);
   const [settingsNotice, setSettingsNotice] = useState(settingsInstructions);
@@ -102,7 +103,11 @@ function Application() {
   useEffect(() => { void boot(); }, [boot]);
   useEffect(() => {
     let alive = true;
-    const receive = (url: unknown) => { if (alive && isHomeLink(url)) setHomeRequested(true); };
+    const receive = (url: unknown) => {
+      if (!alive) return;
+      if (isHomeLink(url)) setHomeRequested(true);
+      if (isCaptureLink(url)) setCaptureRequested(true);
+    };
     const subscription = Linking.addEventListener('url', event => receive(event.url));
     void Linking.getInitialURL().then(receive).catch(() => {});
     return () => { alive = false; subscription.remove(); };
@@ -112,6 +117,14 @@ function Application() {
     setTab('today'); setHomeRequested(false);
     void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.'));
   }, [repo, homeRequested, editing, review, capture, evaluation, notificationReview, refresh]);
+  useEffect(() => {
+    if (!repo || !captureRequested || editing || review || evaluation || notificationReview || busy) return;
+    setCaptureRequested(false);
+    if (!capture) {
+      setTab('inbox');
+      setCapture(true);
+    }
+  }, [repo, captureRequested, editing, review, capture, evaluation, notificationReview, busy]);
   useEffect(() => { const sub = AppState.addEventListener('change', state => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); if (state === 'active' && repo) void refresh(repo).then(() => { requestLockRefresh(); return recoverLockCard(); }).catch(() => Alert.alert('최신 목록을 불러오지 못했어요', '입력 중인 내용은 유지돼요. 화면을 닫은 뒤 탭을 다시 눌러 갱신해 주세요.')); }); return () => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); sub.remove(); }; }, [repo, refresh, recoverLockCard, deleteConfirmation, consentConfirmation]);
   useEffect(() => {
     if (!repo) return;
@@ -166,7 +179,7 @@ function Application() {
   });
   const clearCaptureScreens = () => {
     nativeBridge?.signalCapturePurge();
-    setLocalAIConsent(false); setReview(null); setCapture(false); setEvaluation(false);
+    setLocalAIConsent(false); setReview(null); setCapture(false); setCaptureRequested(false); setEvaluation(false);
     setEditing(null); setNotificationReview(null); setAnalyses([]);
   };
   const revokeConsent = async () => {
@@ -197,6 +210,7 @@ function Application() {
           <View style={{ gap: 7 }}><Text style={ui.subtitle}>{today.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' })}</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>오늘의 할 일</Text><Text style={ui.subtitle}>앞으로 할 일 <Text style={{ color: colors.accent, fontWeight: '700' }}>{pending.length}개</Text></Text></View>
           {!onboarded && <View style={ui.card}><Text accessibilityRole="header" style={ui.section}>잠금화면에 얼마나 보여줄까요?</Text><Text style={ui.subtitle}>잠금화면은 다른 사람도 볼 수 있어요. 기본값은 개수만 표시예요. 내용 숨김은 제목과 개수를 모두 숨겨요. 설정에서 언제든 바꿀 수 있어요.</Text><LockVisibilityChoices value={lockVisibility} disabled={busy} onSelect={chooseVisibility} /><Text style={ui.small}>할 일은 기기에 저장돼요. 잠금화면 기능은 설정에서 따로 준비하며, 이 선택만으로 위젯이나 단축어를 연결하지 않아요.</Text><Button title="이 설정으로 시작하기" disabled={busy} onPress={() => void run(() => repo.setPreference('onboarded', 'yes'))} /></View>}
           <View style={ui.card}><TextInput testID="quick-todo-input" accessibilityLabel="새 할 일" accessibilityHint="할 일을 입력한 뒤 키보드 완료 또는 할 일 추가 버튼으로 저장해요" multiline submitBehavior="blurAndSubmit" placeholder="어떤 일을 해야 하나요?" placeholderTextColor={colors.muted} value={draft} onChangeText={setDraft} style={[ui.input, { flexShrink: 1 }]} returnKeyType="done" onSubmitEditing={event => add(event.nativeEvent.text)} maxLength={400} editable={!busy} /><Button title="할 일 추가" disabled={busy || !draft.trim()} onPress={() => add()} /></View>
+          {nativeBridge?.pasteClipboardImage && <Button secondary title="사진·클립보드에서 할 일 찾기" disabled={busy} onPress={() => setCapture(true)} />}
           {!pending.length && <View style={[ui.card, { paddingVertical: 36 }]}><Text style={{ fontSize: 30, color: colors.accent }}>✓</Text><Text accessibilityRole="header" style={ui.section}>머릿속을 조금 비워 보세요</Text><Text style={ui.subtitle}>할 일을 하나 적어 두면 기억하는 대신 지금 하는 일에 집중할 수 있어요.</Text></View>}
           {pending.map(todo => <View key={todo.id} style={[ui.card, ui.row, { padding: 12 }]}><Check disabled={busy} checked={false} label={`${todo.title} 완료하기`} onPress={() => void run(() => repo.setCompleted(todo.id, true, todo))} /><Pressable accessibilityRole="button" accessibilityLabel={`${todo.title}, ${dueLabel(todo)}${todo.source_type !== 'manual' ? (todo.capture_provider === 'vision-ocr/manual-v1' ? ', OCR에서 직접 선택' : ', AI 제안') : ''}, 상세 편집`} accessibilityHint="제목, 메모와 마감을 수정하거나 할 일을 삭제해요" accessibilityValue={{ text: '미완료' }} style={[ui.grow, { paddingVertical: 7 }]} disabled={busy} accessibilityState={{ disabled: busy }} onPress={() => setEditing(todo)}><Text style={{ fontSize: 17, color: colors.ink, lineHeight: 25 }}>{todo.title}</Text><TodoMetadata todo={todo} /></Pressable></View>)}
           {!!completed.length && <><Text accessibilityRole="header" style={ui.section}>마친 일 · {completed.length}</Text>{completed.map(todo => <View key={todo.id} style={[ui.row, { paddingVertical: 3 }]}><Check disabled={busy} checked label={`${todo.title} 미완료로 되돌리기`} onPress={() => void run(() => repo.setCompleted(todo.id, false, todo))} /><Pressable style={ui.grow} accessibilityHint="제목, 메모와 마감을 수정하거나 할 일을 삭제해요" accessibilityValue={{ text: '완료' }} accessibilityRole="button" accessibilityLabel={`${todo.title}, 완료됨, ${dueLabel(todo)}${todo.source_type !== 'manual' ? (todo.capture_provider === 'vision-ocr/manual-v1' ? ', OCR에서 직접 선택' : ', AI 제안') : ''}, 상세 편집`} disabled={busy} accessibilityState={{ disabled: busy }} onPress={() => setEditing(todo)}><Text style={{ color: colors.muted, fontSize: 16, textDecorationLine: 'line-through' }}>{todo.title}</Text><TodoMetadata todo={todo} /></Pressable></View>)}</>}
