@@ -24,21 +24,43 @@ function withStandaloneDebug(config) {
     return c;
   });
   return withAppDelegate(config, c => {
-    // Expo's Debug launcher supplies its own root view before the bundle URL is used.
-    // With the launcher excluded, use the same local URL as Release.
-    const localBundle = '    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")';
-    const standaloneMethod = `  override func bundleURL() -> URL? {\n${localBundle}\n  }`;
-    if (c.modResults.contents.includes(standaloneMethod)) return c;
+    const contents = c.modResults.contents;
+    const disableMetro = '    RCTBundleURLProviderAllowPackagerServerAccess(false)';
+    if (contents.includes(disableMetro)) return c;
+    const delegateStart = '    let delegate = ReactNativeDelegate()';
+    const bridgeURL = '    bridge.bundleURL ?? bundleURL()';
     const expoBundleURL = /  override func bundleURL\(\) -> URL\? \{\r?\n#if DEBUG\r?\n    return RCTBundleURLProvider[^\r\n]*\r?\n#else\r?\n    return Bundle\.main\.url\(forResource: "main", withExtension: "jsbundle"\)\r?\n#endif\r?\n  \}/;
-    if (c.modResults.language !== 'swift' || !expoBundleURL.test(c.modResults.contents)) {
-      throw new Error('Cannot configure the standalone Debug AppDelegate: unexpected Expo bundleURL implementation.');
+    if (c.modResults.language !== 'swift' || !contents.includes(delegateStart)
+      || !contents.includes(bridgeURL) || !expoBundleURL.test(contents)) {
+      throw new Error('Cannot configure the standalone Debug AppDelegate: unexpected Expo launch or bundle URL implementation.');
     }
-    c.modResults.contents = c.modResults.contents.replace(expoBundleURL, standaloneMethod);
+    c.modResults.contents = contents
+      .replace(delegateStart, `${disableMetro}\n${delegateStart}`)
+      .replace('    // needed to return the correct URL for expo-dev-client.\n', '')
+      .replace(bridgeURL, '    bundleURL()')
+      .replace(expoBundleURL, '  override func bundleURL() -> URL? {\n    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")\n  }');
     return c;
   });
 }
+
+function configureStandaloneDebugBundlePhase(project, target) {
+  const phase = project.buildPhaseObject('PBXShellScriptBuildPhase', 'Bundle React Native code and images', target);
+  const script = phase?.shellScript ? JSON.parse(phase.shellScript) : '';
+  const settings = 'unset SKIP_BUNDLING\nexport FORCE_BUNDLING=1\nexport SKIP_BUNDLING_METRO_IP=1';
+  if (script.includes(settings)) return;
+
+  // Override Expo's Debug default after the last .xcode.env.local read, then let
+  // its normal export:embed path write the Hermes bundle and Metro assets.
+  const reactNativeScript = /^.*require\.resolve\('react-native\/package\.json'\).*\/scripts\/react-native-xcode\.sh.*$/m;
+  if (!reactNativeScript.test(script)) {
+    throw new Error('Cannot configure standalone Debug bundling: missing the Expo React Native build phase invocation.');
+  }
+  phase.shellScript = JSON.stringify(script.replace(reactNativeScript, invocation => `${settings}\n\n${invocation}`));
+}
+
 function withTTodo(config) {
-  if (process.env.TTODO_STANDALONE_DEBUG === '1') config = withStandaloneDebug(config);
+  const standaloneDebug = process.env.TTODO_STANDALONE_DEBUG === '1';
+  if (standaloneDebug) config = withStandaloneDebug(config);
   const bundle = config.ios.bundleIdentifier;
   const appGroup = `group.${bundle}`;
   config = withEntitlementsPlist(config, c => {
@@ -58,6 +80,7 @@ function withTTodo(config) {
     projectInfo.developmentRegion = 'ko';
     projectInfo.knownRegions = [...(projectInfo.knownRegions ?? []).filter(region => region.replaceAll('"', '') !== 'ko'), 'ko'];
     const main = project.getFirstTarget().uuid;
+    if (standaloneDebug) configureStandaloneDebugBundlePhase(project, main);
     const generated = 'TTodoGenerated';
     const common = ['SharedStore.swift', 'TodoActivity.swift'];
     const captureSources = ['TodoExtractionService.swift', 'VisionOCR.swift', 'ExtractionValidator.swift', 'OnDeviceExtraction.swift', 'CaptureStore.swift', 'CaptureProcessor.swift', 'CaptureNotifications.swift'];

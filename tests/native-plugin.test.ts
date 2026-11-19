@@ -28,7 +28,9 @@ test('단독 Debug 프로젝트는 Expo 앱 진입점에서 내장 번들을 열
       (await config.mods.ios[mod]({ ...config, modResults: { contents, language }, modRequest: {} })).modResults.contents;
     const delegate = await apply('appDelegate', appDelegate, 'swift');
     assert.match(delegate, /override func bundleURL\(\) -> URL\? \{\n    return Bundle\.main\.url\(forResource: "main", withExtension: "jsbundle"\)\n  \}/);
-    assert.doesNotMatch(delegate, /RCTBundleURLProvider/);
+    assert.match(delegate, /RCTBundleURLProviderAllowPackagerServerAccess\(false\)\n    let delegate = ReactNativeDelegate\(\)/);
+    assert.match(delegate, /override func sourceURL\(for bridge: RCTBridge\) -> URL\? \{\n    bundleURL\(\)\n  \}/);
+    assert.doesNotMatch(delegate, /RCTBundleURLProvider\.sharedSettings|bridge\.bundleURL/);
     assert.equal(await apply('appDelegate', delegate, 'swift'), delegate);
     const pods = await apply('podfile', podfile, 'rb');
     assert.match(pods, /^  use_expo_modules!\(exclude: \['expo-dev-client', 'expo-dev-launcher', 'expo-dev-menu'\]\)$/m);
@@ -95,5 +97,24 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     project.removeSourceFile('TTodoShare/CaptureNotifications.swift', { target: shareId }, shareGroup);
     await apply();
     assert.ok(project.writeSync().includes('TTodoShare/CaptureNotifications.swift'), '과거 생성 타깃에서도 새로 필요한 소스를 복구해야 한다');
+
+    const phase = project.buildPhaseObject('PBXShellScriptBuildPhase', 'Bundle React Native code and images', project.getFirstTarget().uuid);
+    const script = () => JSON.parse(phase.shellScript) as string;
+    assert.doesNotMatch(script(), /FORCE_BUNDLING|SKIP_BUNDLING_METRO_IP/);
+    const env = process.env.TTODO_STANDALONE_DEBUG;
+    try {
+      process.env.TTODO_STANDALONE_DEBUG = '1';
+      const standalone = withTTodo({ name: 'TTodo', slug: 'ttodo', ios: { bundleIdentifier: 'com.kimps005.ttodo' } });
+      const applyStandalone = () => standalone.mods.ios.xcodeproj({ ...standalone, modResults: project, modRequest: { projectRoot: root, platformProjectRoot: ios, platform: 'ios', modName: 'xcodeproj' } });
+      await applyStandalone();
+      assert.match(script(), /source "\$SRCROOT\/\.xcode\.env\.local"\nfi\n\nunset SKIP_BUNDLING\nexport FORCE_BUNDLING=1\nexport SKIP_BUNDLING_METRO_IP=1\n\n[^\n]*react-native-xcode\.sh/);
+      assert.match(script(), /export BUNDLE_COMMAND="export:embed"/);
+      const firstStandalone = project.writeSync();
+      await applyStandalone();
+      assert.equal(project.writeSync(), firstStandalone);
+    } finally {
+      if (env === undefined) delete process.env.TTODO_STANDALONE_DEBUG;
+      else process.env.TTODO_STANDALONE_DEBUG = env;
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -30,17 +30,6 @@ jobs:
       - name: Install pods
         working-directory: ios
         run: pod install
-      - name: Enable Expo bundling for the Debug archive
-        shell: bash
-        run: |
-          # Expo sources .xcode.env.local again after setting SKIP_BUNDLING for Debug.
-          # Append after pod install so CocoaPods' Node configuration is preserved.
-          cat >> ios/.xcode.env.local <<'EOF'
-
-          unset SKIP_BUNDLING
-          export FORCE_BUNDLING=1
-          export SKIP_BUNDLING_METRO_IP=1
-          EOF
       - name: Archive for generic iPhoneOS without signing
         run: |
           xcodebuild -workspace ios/TTodo.xcworkspace -scheme TTodo \
@@ -70,6 +59,8 @@ jobs:
 
           [[ -f "$app/main.jsbundle" && -s "$app/main.jsbundle" ]] ||
             fail "Missing or empty embedded bundle at $app/main.jsbundle."
+          [[ ! -e "$app/ip.txt" && ! -L "$app/ip.txt" ]] ||
+            fail "Unexpected Metro host file in the standalone app: $app/ip.txt."
           plist="$app/Info.plist"
           [[ -f "$plist" ]] && plutil -lint "$plist" ||
             fail "Missing or invalid Info.plist at $plist."
@@ -87,13 +78,30 @@ jobs:
           binary_type=$(file -b "$binary")
           [[ "$binary_type" == "Mach-O 64-bit executable arm64"* ]] ||
             fail "Expected an arm64 Mach-O executable at $binary; found $binary_type."
+          binary_build=$(xcrun vtool -show-build "$binary") ||
+            fail "Could not read Mach-O build metadata at $binary."
+          awk '$1 == "platform" && $2 == "IOS" { found = 1 } END { exit !found }' <<< "$binary_build" ||
+            fail "Expected an iPhoneOS executable at $binary."
 
-          broken_links=$(find -L "$app" -type l -print) ||
-            fail "Could not resolve symlinks while checking $app."
-          if [[ -n "$broken_links" ]]; then
-            printf '%s\n' "$broken_links"
-            fail "Found broken symlinks in $app (listed above)."
-          fi
+          # zip -y preserves symlinks. Only relative links that resolve within
+          # the app will still work when the Payload is unpacked elsewhere.
+          find "$app" -type l -exec node -e '
+            const fs = require("node:fs");
+            const path = require("node:path");
+            const [app, ...links] = process.argv.slice(1);
+            const root = fs.realpathSync.native(app);
+            for (const link of links) {
+              try {
+                const target = fs.realpathSync.native(link);
+                if (path.isAbsolute(fs.readlinkSync(link)) || (target !== root && !target.startsWith(root + path.sep))) {
+                  throw new Error("link must be relative and resolve inside the app");
+                }
+              } catch (error) {
+                console.error(`${link}: ${error.message}`);
+                process.exitCode = 1;
+              }
+            }
+          ' "$app" {} + || fail "Found broken or non-portable symlinks in $app (listed above)."
 
           echo "Verified $bundle_id, $binary_type, embedded JS bundle and symlinks in $app."
           zip -qry TTodo-unsigned.ipa Payload

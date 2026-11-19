@@ -1,5 +1,12 @@
 # 개발 현황
 
+## 2026-11-19 단독 실행 Debug IPA 번들링과 패키징 검증 보강
+
+- Expo가 Debug에서 설정한 `SKIP_BUNDLING`을 생성된 Xcode 빌드 단계의 마지막 환경 파일 로드 직후 해제한다. 기존 Release와 같은 `export:embed` 경로로 `main.jsbundle`과 Metro 에셋을 앱에 넣는다.
+- 단독 Debug AppDelegate는 React Native 초기화 전에 Metro 탐색을 끄고 두 번들 URL 진입점에서 내장 파일을 사용한다. Expo Dev Client·Launcher·Menu는 이 빌드의 Pod 자동 연결에서 제외한다.
+- IPA를 압축하기 직전에 `Payload`에서 비어 있지 않은 번들, `Info.plist`의 앱 식별자와 실행 파일 이름, arm64 iPhoneOS Mach-O, Metro 호스트 파일 부재, 압축 해제 후에도 유효한 앱 내부 상대 링크를 검사한다.
+- Windows에서 테스트 159개, 타입 검사, Expo 템플릿 기반 iOS 프로젝트 설정 생성, YAML·Bash 구문, Debug·Release 번들 생성과 `export:embed` 이미지·폰트 복사를 확인했다. 패키징의 정상·실패 경로 14개는 macOS 도구와 링크 응답을 모의해 검사했다. 새 변경의 macOS 아카이브·실제 IPA 생성과 서명된 iPhone에서 Metro 없이 최초 실행하는 검증은 후속 확인이 필요하다.
+
 ## 2026-11-18 단독 실행 Debug IPA의 내장 번들
 
 - Expo의 Xcode 빌드 단계가 Debug에서 `SKIP_BUNDLING=1`을 설정해 아카이브의 번들과 Metro 에셋 생성이 건너뛰어졌다. Pods 설치가 끝난 뒤 Xcode가 마지막에 읽는 `.xcode.env.local`에서 이 값을 해제했다. 기존 Expo 빌드 단계가 Debug JS와 앱에서 사용하는 에셋을 앱 번들에 출력한다.
