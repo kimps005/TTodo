@@ -30,7 +30,7 @@ jobs:
         working-directory: ios
         run: |
           pod install
-          for pod in expo-dev-client expo-dev-launcher expo-dev-menu; do
+          for pod in expo-dev-client expo-dev-launcher expo-dev-menu ExpoHaptics ExpoImagePicker; do
             grep -Fq "  - $pod (" Podfile.lock || { echo "::error::Missing $pod in Podfile.lock"; exit 1; }
           done
       - name: Archive for generic iPhoneOS without signing
@@ -61,6 +61,8 @@ jobs:
           app="Payload/${apps[0]##*/}"
           ditto "${apps[0]}" "$app"
 
+          [[ -d "$app/PlugIns/TTodoShare.appex" ]] ||
+            fail "Missing the embedded TTodo Share Extension."
           [[ ! -e "$app/main.jsbundle" && ! -L "$app/main.jsbundle" ]] ||
             fail "Unexpected embedded JS bundle in the Metro app: $app/main.jsbundle."
           [[ ! -e "$app/ip.txt" && ! -L "$app/ip.txt" ]] ||

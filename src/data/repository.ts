@@ -26,6 +26,8 @@ export interface ExtractedTask {
   review_status: 'pending' | 'saved' | 'ignored'; linked_todo_id: string | null;
   capture_provider?: string | null;
 }
+type TodoInsert = TodoInput & { completed?: boolean };
+
 export class Repository {
   constructor(private db: Database, private uuid: () => string, private now = () => new Date().toISOString(),
     private readonly notifyLockChange: () => void = () => {}) {}
@@ -64,17 +66,24 @@ export class Repository {
     return evidence;
   }
   async addTodo(input: TodoInput, source: SourceType = 'manual', sourceId: string | null = null): Promise<string> {
+    const id = this.uuid();
+    await this.changeLockList(tx => this.insertTodo(tx, id, input, source, sourceId, this.now()));
+    return id;
+  }
+  async addManualTodos(inputs: readonly TodoInsert[]) {
+    await this.changeLockList(async tx => {
+      const time = this.now();
+      for (const input of inputs) await this.insertTodo(tx, this.uuid(), input, 'manual', null, time);
+    });
+  }
+  private async insertTodo(tx: SqlConnection, id: string, input: TodoInsert, source: SourceType, sourceId: string | null, time: string) {
     const title = normalizeTitle(input.title);
     const due = input.due_at ?? null;
     const precision = input.due_precision ?? 'unknown';
     validateDue(due, precision);
-    const id = this.uuid();
-    const time = this.now();
-    await this.changeLockList(async tx => {
-      await tx.runAsync('INSERT INTO todos (id,title,description,due_at,due_precision,created_at,updated_at,source_type,source_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?)',
-      id, title, input.description?.trim() || null, due, precision, time, time, source, sourceId, Date.parse(time));
-    });
-    return id;
+    await tx.runAsync('INSERT INTO todos (id,title,description,status,due_at,due_precision,created_at,updated_at,completed_at,source_type,source_id,sort_order) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      id, title, input.description?.trim() || null, input.completed ? 'completed' : 'pending',
+      due, precision, time, time, input.completed ? time : null, source, sourceId, Date.parse(time));
   }
   async updateTodo(id: string, input: TodoInput, expected?: Todo) {
     const due = input.due_at ?? null;
@@ -120,14 +129,27 @@ export class Repository {
         const fields: (keyof Todo)[] = ['id', 'title', 'description', 'status', 'due_at', 'due_precision', 'completed_at', 'source_type', 'source_id'];
         if (!current || fields.some(field => current[field] !== expected[field])) throw new Error('할 일이 변경되었어요. 목록을 다시 확인한 뒤 삭제해 주세요.');
       }
-      analyses = (await tx.getAllAsync<{ analysis_id: string }>('SELECT DISTINCT analysis_id FROM extracted_tasks WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)', id, id)).map(row => row.analysis_id);
-      // Keep the saved marker and image fingerprint so a cached approval cannot
-      // recreate the task. Remove both original and edited proposal content.
-      await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1,linked_todo_id=NULL WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)", id, id);
-      await tx.runAsync('DELETE FROM todos WHERE id=?', id);
-      await tx.runAsync('DELETE FROM preferences WHERE key=?', `todo_reminder.${id}`);
+      analyses = await this.removeTodoInTransaction(tx, id);
     });
     return analyses;
+  }
+  async removeAllTodos(): Promise<string[]> {
+    const analyses = new Set<string>();
+    await this.changeLockList(async tx => {
+      const todos = await tx.getAllAsync<{ id: string }>('SELECT id FROM todos');
+      for (const { id } of todos) {
+        for (const analysisId of await this.removeTodoInTransaction(tx, id)) analyses.add(analysisId);
+      }
+    });
+    return [...analyses];
+  }
+  private async removeTodoInTransaction(tx: SqlConnection, id: string) {
+    const analyses = await tx.getAllAsync<{ analysis_id: string }>('SELECT DISTINCT analysis_id FROM extracted_tasks WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)', id, id);
+    // Preserve saved markers and image fingerprints so cached approvals cannot recreate tasks.
+    await tx.runAsync("UPDATE extracted_tasks SET title='삭제한 할 일',description=NULL,due_at=NULL,due_precision='unknown',assignee=NULL,evidence_text='',confidence=0,needs_confirmation=1,linked_todo_id=NULL WHERE linked_todo_id=? OR id=(SELECT source_id FROM todos WHERE id=?)", id, id);
+    await tx.runAsync('DELETE FROM todos WHERE id=?', id);
+    await tx.runAsync('DELETE FROM preferences WHERE key=?', `todo_reminder.${id}`);
+    return analyses.map(row => row.analysis_id);
   }
   async listAnalyses() {
     let rows: Analysis[] = [];

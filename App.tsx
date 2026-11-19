@@ -152,9 +152,9 @@ function Application() {
     }
   }, [repo, captureRequested, sharedImages, editing, review, capture, evaluation, notificationReview, busy]);
   useEffect(() => {
-    const [image, ...remaining] = sharedImages;
+    const [image] = sharedImages;
     if (!repo || !image || capture || editing || review || evaluation || notificationReview || busy) return;
-    setSharedImages(remaining);
+    setSharedImages(images => images.slice(1));
     setTab('inbox'); setCaptureRequested(false); setCapture(image);
   }, [repo, sharedImages, capture, editing, review, evaluation, notificationReview, busy]);
   useEffect(() => { const sub = AppState.addEventListener('change', state => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); if (state === 'active' && repo) void refresh(repo).then(() => { requestLockRefresh(); return recoverLockCard(); }).catch(() => Alert.alert('최신 목록을 불러오지 못했어요', '입력 중인 내용은 유지돼요. 화면을 닫은 뒤 탭을 다시 눌러 갱신해 주세요.')); }); return () => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); sub.remove(); }; }, [repo, refresh, recoverLockCard, deleteConfirmation, consentConfirmation]);
@@ -266,6 +266,26 @@ function Application() {
           <View style={ui.card}><Text accessibilityRole="header" style={ui.section}>개인정보와 데이터</Text><Text style={ui.subtitle}>이미지나 글자를 외부 AI 서버에 보내지 않아요. 할 일과 분석 제안은 기기에 저장돼요. 원본 이미지는 보관하지 않고 임시 파일은 화면 종료 또는 다음 앱 실행 때 정리해요.</Text><Button title="내 데이터 내보내기" secondary onPress={exportData} disabled={busy} /><Button title="모든 데이터 삭제" hint="삭제 확인창을 열어요" secondary disabled={busy} onPress={deleteData} /></View>
           <Text style={ui.small}>TTodo 1.0.0 · 개발 중{'\n'}실기기 검증 및 App Store 출시 준비 전 버전이에요.</Text>
           {__DEV__ && <Button secondary title="개발용 한국어 AI 평가" disabled={busy} onPress={() => setEvaluation(true)} />}
+          {__DEV__ && <View style={ui.card}>
+            <Text accessibilityRole="header" style={ui.section}>개발자 QA 도구</Text>
+            <Button secondary title="샘플 할 일 5개 채우기" disabled={busy}
+              onPress={() => void run(async () => {
+                const { sampleTodos } = await import('./src/dev/qaTodos');
+                await repo.addManualTodos(sampleTodos());
+              })} />
+            <Text style={ui.small}>초기화하면 이 기기에 저장된 할 일이 모두 즉시 삭제돼요.</Text>
+            <Button secondary title="로컬 할 일 전체 초기화" disabled={busy || !todos.length}
+              onPress={() => void run(async () => {
+                const analyses = await repo.removeAllTodos();
+                setTodos([]);
+                try {
+                  for (const id of analyses) nativeBridge?.clearCaptureNotification(id);
+                  await nativeBridge?.refreshReminders();
+                } catch {
+                  Alert.alert('할 일은 삭제됐어요', '일부 알림을 정리하지 못했어요. 앱을 다시 열어 주세요.');
+                }
+              })} />
+          </View>}
         </>}
       </ScrollView>
     <View style={{ flexDirection: 'row', backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.line }}>{([['today', '할 일'], ['inbox', '분석함'], ['settings', '설정']] as const).map(([key, label]) => <Pressable key={key} accessibilityRole="tab" accessibilityLabel={label} accessibilityHint="해당 화면으로 이동해요" accessibilityValue={key === 'inbox' ? { text: analyses.some(a => a.status === 'review') ? '검토할 제안 있음' : '검토할 제안 없음' } : undefined} accessibilityState={{ selected: tab === key }} style={{ flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', padding: 10 }} onPress={() => { setTab(key); void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.')); }}><Text style={{ color: tab === key ? colors.accent : colors.muted, fontWeight: tab === key ? '800' : '500', fontSize: 15 }}>{label}{key === 'inbox' && analyses.some(a => a.status === 'review') ? ' •' : ''}</Text></Pressable>)}</View>

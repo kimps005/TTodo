@@ -34,6 +34,12 @@ public class CaptureAppDelegateSubscriber: ExpoAppDelegateSubscriber {
 
   #if DEBUG
   @MainActor
+  public func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+    if let url = launchOptions?[.url] as? URL { _ = SharedImageImport.receive(url) }
+    return true
+  }
+
+  @MainActor
   public func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any]) -> Bool {
     SharedImageImport.receive(url)
   }

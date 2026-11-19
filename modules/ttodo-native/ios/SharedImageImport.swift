@@ -1,4 +1,5 @@
 #if DEBUG
+import ImageIO
 import UIKit
 import UniformTypeIdentifiers
 
@@ -30,7 +31,7 @@ enum SharedImageImport {
     }
     guard token != consumed, request == .latest || request == .token(token) else { return nil }
     guard let jpeg = board.data(forPasteboardType: UTType.jpeg.identifier, inItemSet: first)?.first,
-      !jpeg.isEmpty, jpeg.count <= ShareImageHandoff.maximumBytes, board.changeCount == changeCount else {
+      board.changeCount == changeCount, isBoundedJPEG(jpeg) else {
       throw CaptureImageInput.Failure.unreadable
     }
 
@@ -44,6 +45,16 @@ enum SharedImageImport {
     consumed = token
     if board.changeCount == changeCount { board.items = [] }
     return image.absoluteString
+  }
+
+  private static func isBoundedJPEG(_ data: Data) -> Bool {
+    guard !data.isEmpty, data.count <= ShareImageHandoff.maximumBytes,
+      let source = CGImageSourceCreateWithData(data as CFData, nil),
+      let type = CGImageSourceGetType(source), type as String == UTType.jpeg.identifier,
+      let dimensions = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+      let width = dimensions[kCGImagePropertyPixelWidth as String] as? Int,
+      let height = dimensions[kCGImagePropertyPixelHeight as String] as? Int else { return false }
+    return min(width, height) > 0 && max(width, height) <= ShareImageHandoff.maximumDimension
   }
 
   static func discard(_ uri: String) {

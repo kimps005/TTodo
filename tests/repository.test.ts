@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { Repository, type Database, type SqlConnection, type SqlValue } from '../src/data/repository';
 import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
 import { createSerializedDatabase } from '../src/data/serializedDatabase';
+import { sampleTodos } from '../src/dev/qaTodos';
 import schema from '../src/data/schema.json';
 
 function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:', notify?: () => void) {
@@ -26,6 +27,50 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:', noti
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+
+test('개발용 샘플 5개는 한 번에 추가되며 잘못된 배치는 모두 롤백된다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    const samples = sampleTodos(new Date(2026, 10, 19, 12, 30));
+    await assert.rejects(repo.addManualTodos([...samples, { title: ' ' }]), /할 일을 입력/);
+    assert.deepEqual(await repo.listTodos(), []);
+    await repo.addManualTodos(samples);
+    const todos = await repo.listTodos();
+    assert.equal(todos.length, 5);
+    assert.ok(todos.every(todo => todo.source_type === 'manual'));
+    assert.deepEqual(todos.filter(todo => todo.status === 'completed').map(todo => todo.completed_at), ['2026-11-13T02:00:00.000Z']);
+    assert.equal(todos.find(todo => todo.due_precision === 'datetime')?.due_at, new Date(2026, 10, 19, 13).toISOString());
+    assert.deepEqual(todos.filter(todo => todo.due_precision === 'date').map(todo => todo.due_at).sort(), ['2026-11-18', '2026-11-19']);
+  } finally { native.close(); }
+});
+
+test('할 일 전체 초기화는 저장한 제안 내용과 마감 알림만 정리하고 미저장 제안을 보존한다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    await repo.addTodo({ title: '수동 할 일' });
+    const analysis = await repo.createAnalysis('qa-reset', 'share', null);
+    await repo.finishAnalysis(analysis.id, [task, { ...task, title: '검토할 제안' }], 'test', analysis.token!);
+    const [saved, pending] = await repo.listExtracted(analysis.id);
+    await repo.approve(analysis.id, [{ id: saved.id, input: { title: saved.title, due_at: '2026-11-20T09:00:00Z', due_precision: 'datetime', reminder: true } }]);
+    assert.deepEqual(await repo.removeAllTodos(), [analysis.id]);
+    assert.deepEqual(await repo.listTodos(), []);
+    assert.deepEqual(await repo.removeAllTodos(), []);
+    const [deleted, kept] = await repo.listExtracted(analysis.id);
+    assert.equal(deleted.review_status, 'saved');
+    assert.equal(deleted.linked_todo_id, null);
+    assert.equal(deleted.title, '삭제한 할 일');
+    assert.equal(deleted.evidence_text, '');
+    assert.equal(deleted.due_at, null);
+    assert.deepEqual(kept, pending);
+    assert.equal(await repo.getPreference('ai_local_consent'), 'yes');
+    assert.equal((await repo.listAnalyses())[0].image_fingerprint, 'qa-reset');
+    assert.deepEqual(native.prepare("SELECT key FROM preferences WHERE key LIKE 'todo_reminder.%'").all(), []);
+    await assert.rejects(repo.restartUnstoredAnalysis(analysis.id), /한 번이라도/);
+  } finally { native.close(); }
+});
 
 test('OCR 반자동 다중 초안은 명시 승인 전 할 일·알림을 만들지 않고 선택만 원자적으로 저장한다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
