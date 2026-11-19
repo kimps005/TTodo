@@ -5,7 +5,7 @@
 - App Group이 없는 Debug 공유 확장은 이미지를 긴 변 2048px 이하, JPEG 품질 0.85로 줄인 뒤 5분 만료 토큰과 함께 기기 내 클립보드에 기록한다. 응답자 체인에서 `openURL:`을 시도하고 거절되면 완료 콜백이 있는 URL 열기 메서드도 시도한다. 앱 열기가 실패하면 복사 버튼을 표시한다. App Group이 연결된 경우 기존 공유 흐름을 사용한다.
 - Expo AppDelegate가 콜드 스타트와 복귀 URL을 받아 두고, 활성화된 앱이 토큰과 일치하는 이미지를 `Application Support`에 임시 저장한 뒤 해당 클립보드 항목을 소비한다. 기존 편집·검토 화면을 닫으면 공유 이미지로 이동하며, 미리보기와 OCR은 자동으로 시작한다. 기기 내 분석 동의와 할 일 저장 승인은 기존 방식대로 진행한다. 임시 파일은 화면을 닫거나 앱을 다시 시작할 때, 동의 철회와 전체 삭제 때 정리한다.
 - Windows 테스트 161개, 타입 검사, iOS Debug·Release JS 번들 및 diff 검사를 통과했다. 공유 호스트의 앱 열기 허용 여부, iOS 붙여넣기 권한, 실제 확장 메모리 사용량, iPhone의 최초 실행·복귀 및 AI 정확도는 실기기 검증이 필요하다.
-- [첫 Dev Client CI](https://github.com/kimps005/TTodo/actions/runs/44511004613)의 iPhoneOS 아카이브가 `UIPasteboard.pasteboardTypes`의 Swift 이름 오류로 중단됐다. iPhoneOS 26.5 SDK 진단에 따라 `UIPasteboard.types`로 수정했다. Dev Client CI에서 아카이브와 무서명 IPA 패키징을 검증한다.
+- [첫 Dev Client CI](https://github.com/kimps005/TTodo/actions/runs/44511004613)의 iPhoneOS 아카이브가 `UIPasteboard.pasteboardTypes`의 Swift 이름 오류로 중단됐다. iPhoneOS 26.5 SDK 진단에 따라 `UIPasteboard.types`로 수정했다. `dc50b25`의 [재실행](https://github.com/kimps005/TTodo/actions/runs/44512689008)에서 Debug 로컬 저장소 검사, iPhoneOS 아카이브, IPA 패키징 검사 및 [무서명 IPA 업로드](https://github.com/kimps005/TTodo/actions/runs/44512689008/artifacts/14523954158)가 통과했다.
 
 ## 2026-11-19 공유 확장 로컬 모드와 Dev Client IPA
 
