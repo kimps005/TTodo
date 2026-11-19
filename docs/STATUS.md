@@ -5,7 +5,9 @@
 - Debug 로컬 모드는 공유 확장에서 JPEG와 만료 토큰을 자동 전달한다. 앱 첫 실행 옵션에서도 공유 URL을 접수하고, 앱이 활성화되면 토큰과 일치하는 JPEG의 크기와 2048px 제한을 검사한 뒤 `Application Support`에 저장한다. 저장 성공 후 클립보드 항목을 소비하고 기존 미리보기와 OCR로 이동한다. 공유 호스트가 앱 열기를 거부하면 확장에서 수동 복사를 사용할 수 있다.
 - Expo SDK 58 기본 호환표에 맞는 `expo-haptics` 58.0.8을 추가하고 `expo-image-picker`를 유지했다. Windows에서 두 Pod의 Expo 자동 링크 식별을 확인했다. Dev Client CI는 CocoaPods 잠금 파일에서 두 Pod를, IPA 패키징 단계에서 내장 공유 확장을 검사한다.
 - 개발 설정에서 테스트용 할 일 5개를 한 트랜잭션으로 추가하거나 기기에 저장된 할 일을 한 번에 삭제할 수 있다. 초기화는 연결된 제안 본문과 마감 알림을 정리하며 재등록 방지 기록, 미저장 제안과 설정을 보존한다.
-- Windows에서 테스트 163개, 타입 검사, iOS Debug·Release 번들 및 diff 검사를 통과했다. iOS 프로젝트 생성·Pod 설치·네이티브 아카이브는 macOS CI에서 확인한다. 실제 기기의 공유 호스트 전환, 붙여넣기 권한, QA 화면 조작, Metro 연결과 AI 정확도는 실기기 검증이 필요하다.
+- Windows에서 테스트 163개, 타입 검사, iOS Debug·Release 번들 및 diff 검사를 통과했다. QA 버튼과 샘플이 Debug 번들에 있고 Release Hermes 번들에서 빠진 것을 확인했다.
+- `64c3711`의 [Dev Client CI](https://github.com/kimps005/TTodo/actions/runs/44516685055)는 iOS 프로젝트 생성, Debug 로컬 저장소 검사, CocoaPods 설치 및 필수 Pod 확인, iPhoneOS arm64 아카이브, 내장 공유 확장 확인과 [무서명 IPA 업로드](https://github.com/kimps005/TTodo/actions/runs/44516685055/artifacts/14527105245)를 통과했다. 같은 푸시의 품질 검사와 Release 아카이브는 취소됐고 UI 검사는 트리거되지 않았다.
+- 실제 기기의 공유 호스트 전환, 붙여넣기 권한, QA 화면 조작, Metro 연결과 AI 정확도는 실기기 검증이 필요하다.
 
 ## 2026-11-19 Debug 공유 이미지 자동 전달
 
