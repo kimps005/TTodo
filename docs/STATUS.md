@@ -4,7 +4,9 @@
 
 - Expo의 Xcode 빌드 단계가 Debug에서 `SKIP_BUNDLING=1`을 설정해 아카이브의 번들과 Metro 에셋 생성이 건너뛰어졌다. Pods 설치가 끝난 뒤 Xcode가 마지막에 읽는 `.xcode.env.local`에서 이 값을 해제했다. 기존 Expo 빌드 단계가 Debug JS와 앱에서 사용하는 에셋을 앱 번들에 출력한다.
 - Debug IPA용 prebuild는 Expo Dev Client와 하위 Launcher·Menu를 제외하고 AppDelegate가 로컬 `main.jsbundle`을 직접 열도록 생성한다. [첫 CI](https://github.com/kimps005/TTodo/actions/runs/44320935018)는 Launcher·Menu만 제외했을 때 Dev Client의 Pod 의존성 해석에 실패했다. 압축 직전 Payload에서 번들, 앱 식별자, arm64 Mach-O 실행 파일, 깨진 링크를 검사한다. Release 아카이브에도 내장 번들 확인을 추가했다.
-- Windows에서 테스트 159개, 타입, 두 워크플로우의 YAML·Bash 구문, Expo 자동 연결 제외 목록, iOS Debug JS 및 이미지 에셋 5개 생성을 확인했다. 변경 후 iPhoneOS 아카이브와 IPA 업로드, 실제 iPhone의 Metro 없는 첫 실행은 각 실행 결과를 확인해야 한다.
+- Windows에서 테스트 159개, 타입, 두 워크플로우의 YAML·Bash 구문, Expo 자동 연결 제외 목록을 확인했다. 패키징의 정상·실패 분기는 로컬 테스트 자료로 확인했고, 별도 Expo 번들에서 샘플 이미지·폰트의 바이트가 원본과 일치했다.
+- `95815f2`의 [Debug IPA CI](https://github.com/kimps005/TTodo/actions/runs/44321611321)에서 Swift 저장소 검사, 무서명 iPhoneOS 아카이브, Payload 무결성 검사와 IPA 업로드가 통과했다. 내려받은 [IPA](https://github.com/kimps005/TTodo/actions/runs/44321611321/artifacts/14436001250)에서 3,870,536바이트 Hermes 번들, 원본과 같은 Metro 이미지 5개, 네이티브 에셋 카탈로그, Metro IP 파일 부재를 확인했다. 같은 커밋의 [Release 아카이브 CI](https://github.com/kimps005/TTodo/actions/runs/44321564290)도 Xcode 26.6·iPhoneOS SDK 26.5에서 내장 번들 검사까지 통과했다.
+- 실제 iPhone의 서명·설치와 Metro 없이 앱을 처음 여는 동작은 실기기 검증을 기다린다.
 
 ## 2026-11-18 Debug 로컬 저장소와 무서명 IPA
 
