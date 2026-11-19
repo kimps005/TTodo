@@ -13,15 +13,41 @@ final class ShareViewController: UIViewController {
     }
     #if DEBUG
     if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: TTodoConfiguration.appGroup) == nil {
-      show(LocalShareView(providers: providers, close: close) { [weak self] in
-        guard let url = URL(string: "ttodo://capture") else { return }
-        self?.extensionContext?.open(url, completionHandler: nil)
+      show(LocalShareView(providers: providers, close: close) { [weak self] url in
+        await self?.openImport(url) ?? false
       })
       return
     }
     #endif
     show(CaptureShareView(providers: providers, close: close))
   }
+
+  #if DEBUG
+  private func openImport(_ url: URL) async -> Bool {
+    // This Debug-only handoff depends on the host's responder chain.
+    let legacy = NSSelectorFromString("openURL:")
+    let modern = NSSelectorFromString("openURL:options:completionHandler:")
+    typealias LegacyOpen = @convention(c) (AnyObject, Selector, NSURL) -> Bool
+    typealias OpenCompletion = @convention(block) (Bool) -> Void
+    typealias ModernOpen = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, OpenCompletion) -> Void
+    var responder: UIResponder? = self
+    while let candidate = responder {
+      if candidate.responds(to: legacy), let method = candidate.method(for: legacy),
+        unsafeBitCast(method, to: LegacyOpen.self)(candidate, legacy, url as NSURL) {
+        return true
+      }
+      if candidate.responds(to: modern), let method = candidate.method(for: modern) {
+        return await withCheckedContinuation { continuation in
+          unsafeBitCast(method, to: ModernOpen.self)(candidate, modern, url as NSURL, [:] as NSDictionary) {
+            continuation.resume(returning: $0)
+          }
+        }
+      }
+      responder = candidate.next
+    }
+    return false
+  }
+  #endif
 
   private func show<Content: View>(_ content: Content) {
     let host = UIHostingController(rootView: content)
@@ -41,8 +67,8 @@ private enum ShareInputError: LocalizedError {
 private struct LocalShareView: View {
   let providers: [NSItemProvider]
   let close: () -> Void
-  let openCapture: () -> Void
-  @State private var operation: Task<Void, Never>?
+  let openImport: (URL) async -> Bool
+  @State private var fallbackImage: Data?
   @State private var copied = false
   @State private var failure: String?
 
@@ -51,44 +77,42 @@ private struct LocalShareView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           Text("공유한 이미지 가져오기").font(.title.bold()).accessibilityAddTraits(.isHeader)
-          Text("공유 저장소를 사용할 수 없어요. 이미지를 이 기기의 클립보드에 5분 동안 복사할 수 있어요.")
-          if copied {
-            Text("복사했어요. TTodo의 ‘사진·클립보드에서 할 일 찾기’에서 ‘클립보드 이미지 붙여넣기’를 눌러 주세요.")
-              .accessibilityAddTraits(.updatesFrequently)
+          if let fallbackImage {
+            Text("TTodo를 자동으로 열지 못했어요. 이미지를 복사한 후 TTodo를 직접 열 수 있어요.")
+            Button("클립보드에 이미지 복사") {
+              ShareImageHandoff.copy(fallbackImage)
+              copied = true
+            }.buttonStyle(.borderedProminent)
+            if copied {
+              Text("복사했어요. TTodo의 ‘사진·클립보드에서 할 일 찾기’에서 ‘클립보드 이미지 붙여넣기’를 눌러 주세요.")
+                .accessibilityAddTraits(.updatesFrequently)
+            }
+          } else if let failure {
+            Text(failure).foregroundStyle(.red)
+          } else {
+            ProgressView("이미지를 준비하고 있어요")
           }
-          if let failure { Text(failure).foregroundStyle(.red) }
-          if operation != nil { ProgressView("이미지를 준비하고 있어요") }
-          Button("클립보드에 이미지 복사", action: copyImage).buttonStyle(.borderedProminent).disabled(operation != nil)
         }.padding(24)
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기", action: close) } }
-        .onDisappear { operation?.cancel() }
+        .task { await forwardImage() }
     }
   }
 
-  private func copyImage() {
-    guard operation == nil else { return }
+  @MainActor private func forwardImage() async {
     guard providers.count == 1, let provider = providers.first else {
       failure = ShareInputError.singleImage.errorDescription
       return
     }
-    failure = nil
-    copied = false
-    operation = Task { @MainActor in
-      defer { operation = nil }
-      do {
-        let jpeg = try await CaptureImageInput.withImageFile(provider) { try CaptureImageInput.compressedImage(at: $0) }
-        try Task.checkCancellation()
-        UIPasteboard.general.setItems([[UTType.jpeg.identifier: jpeg]], options: [
-          .localOnly: true,
-          .expirationDate: Date().addingTimeInterval(5 * 60),
-        ])
-        copied = true
-        // The host can decline opening the app. The instructions remain on screen.
-        openCapture()
-      } catch {
-        if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? CaptureImageInput.Failure.unreadable.errorDescription }
-      }
+    do {
+      let jpeg = try await CaptureImageInput.withImageFile(provider) { try CaptureImageInput.compressedImage(at: $0) }
+      try Task.checkCancellation()
+      let token = UUID()
+      ShareImageHandoff.copy(jpeg, token: token)
+      if await openImport(ShareImageHandoff.url(for: token)) { close() }
+      else if !Task.isCancelled { fallbackImage = jpeg }
+    } catch {
+      if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? CaptureImageInput.Failure.unreadable.errorDescription }
     }
   }
 }

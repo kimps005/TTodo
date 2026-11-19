@@ -19,7 +19,7 @@ import { availabilityLabels } from './src/ai/onDeviceProvider';
 import { ModelEvaluation } from './src/dev/ModelEvaluation';
 import { analysisReviewRoute } from './src/notifications/route';
 import { LockVisibilityChoices, type LockVisibility } from './src/ui/LockVisibilityChoices';
-import { isCaptureLink, isHomeLink } from './src/navigation/route';
+import { isCaptureLink, isHomeLink, isShareImportLink } from './src/navigation/route';
 import { shareDataExport } from './src/data/shareTemporaryExport';
 import { createLatestRefresh } from './src/data/latestRefresh';
 import { createReviewConfirmation } from './src/ui/reviewConfirmation';
@@ -57,7 +57,9 @@ function Application() {
   const consentConfirmation = useRef(createReviewConfirmation()).current;
   const [editing, setEditing] = useState<Todo | null>(null);
   const [review, setReview] = useState<{ id: string; tasks: ExtractedTask[]; imageUri?: string } | null>(null);
-  const [capture, setCapture] = useState(false);
+  const [capture, setCapture] = useState<boolean | string>(false);
+  const [sharedImages, setSharedImages] = useState<string[]>([]);
+  const shareGeneration = useRef(0);
   const [evaluation, setEvaluation] = useState(false);
   const [lockVisibility, setLockVisibility] = useState<LockVisibility>('count');
   const [localAIConsent, setLocalAIConsent] = useState(false);
@@ -91,6 +93,7 @@ function Application() {
       setError('');
       let cleanupFailed = false;
       try { clearTemporaryFiles(); } catch { cleanupFailed = true; }
+      try { await nativeBridge?.clearSharedImages?.(false); } catch { cleanupFailed = true; }
       startupPhase('store_opening');
       const repository = await openRepository(); startupPhase('store_ready'); if ((await repository.getPreference('ai_local_consent')) !== 'yes') {
         try { await nativeBridge?.clearCaptureNotifications(); } catch { cleanupFailed = true; }
@@ -113,18 +116,47 @@ function Application() {
     return () => { alive = false; subscription.remove(); };
   }, []);
   useEffect(() => {
+    const bridge = nativeBridge;
+    if (!repo || !bridge?.takeSharedImage) return;
+    let alive = true;
+    const receive = async () => {
+      const generation = shareGeneration.current;
+      try {
+        const uri = await bridge.takeSharedImage?.();
+        if (!uri) return;
+        if (alive && generation === shareGeneration.current) setSharedImages(images => [...images, uri]);
+        else discardTemporaryImage(uri);
+      } catch {
+        if (alive && generation === shareGeneration.current) {
+          Alert.alert('공유한 이미지를 가져오지 못했어요', '이미지를 다시 공유하고, iOS에서 묻는 경우 붙여넣기를 허용해 주세요.');
+        }
+      }
+    };
+    const link = Linking.addEventListener('url', ({ url }) => { if (isShareImportLink(url)) void receive(); });
+    const state = AppState.addEventListener('change', value => { if (value === 'active') void receive(); });
+    // The native AppDelegate also queues links delivered before JS is ready.
+    void receive();
+    return () => { alive = false; link.remove(); state.remove(); };
+  }, [repo]);
+  useEffect(() => {
     if (!repo || !homeRequested || editing || review || capture || evaluation || notificationReview) return;
     setTab('today'); setHomeRequested(false);
     void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '잠시 후 다시 시도해 주세요.'));
   }, [repo, homeRequested, editing, review, capture, evaluation, notificationReview, refresh]);
   useEffect(() => {
-    if (!repo || !captureRequested || editing || review || evaluation || notificationReview || busy) return;
+    if (!repo || !captureRequested || sharedImages.length || editing || review || evaluation || notificationReview || busy) return;
     setCaptureRequested(false);
     if (!capture) {
       setTab('inbox');
       setCapture(true);
     }
-  }, [repo, captureRequested, editing, review, capture, evaluation, notificationReview, busy]);
+  }, [repo, captureRequested, sharedImages, editing, review, capture, evaluation, notificationReview, busy]);
+  useEffect(() => {
+    const [image, ...remaining] = sharedImages;
+    if (!repo || !image || capture || editing || review || evaluation || notificationReview || busy) return;
+    setSharedImages(remaining);
+    setTab('inbox'); setCaptureRequested(false); setCapture(image);
+  }, [repo, sharedImages, capture, editing, review, evaluation, notificationReview, busy]);
   useEffect(() => { const sub = AppState.addEventListener('change', state => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); if (state === 'active' && repo) void refresh(repo).then(() => { requestLockRefresh(); return recoverLockCard(); }).catch(() => Alert.alert('최신 목록을 불러오지 못했어요', '입력 중인 내용은 유지돼요. 화면을 닫은 뒤 탭을 다시 눌러 갱신해 주세요.')); }); return () => { deleteConfirmation.invalidate(); consentConfirmation.invalidate(); sub.remove(); }; }, [repo, refresh, recoverLockCard, deleteConfirmation, consentConfirmation]);
   useEffect(() => {
     if (!repo) return;
@@ -179,6 +211,7 @@ function Application() {
   });
   const clearCaptureScreens = () => {
     nativeBridge?.signalCapturePurge();
+    shareGeneration.current++; setSharedImages([]);
     setLocalAIConsent(false); setReview(null); setCapture(false); setCaptureRequested(false); setEvaluation(false);
     setEditing(null); setNotificationReview(null); setAnalyses([]);
   };
@@ -187,6 +220,7 @@ function Application() {
     clearCaptureScreens();
     const cleanup = await Promise.allSettled([
       Promise.resolve().then(clearTemporaryFiles),
+      Promise.resolve().then(() => nativeBridge?.clearSharedImages?.(true)),
       Promise.resolve().then(() => nativeBridge?.clearCaptureNotifications()),
     ]);
     if (cleanup.some(result => result.status === 'rejected')) Alert.alert('AI 동의를 철회했어요', '일부 파일이나 알림이 남았어요. 앱을 다시 열어 정리를 재시도해 주세요.');
@@ -199,6 +233,7 @@ function Application() {
       Promise.resolve().then(() => nativeBridge?.clearCaptureNotifications()),
       Promise.resolve().then(() => nativeBridge?.refreshReminders()),
       Promise.resolve().then(clearTemporaryFiles),
+      Promise.resolve().then(() => nativeBridge?.clearSharedImages?.(true)),
     ]);
     if (!deletion.compacted || cleanup.some(result => result.status === 'rejected')) Alert.alert('데이터는 삭제됐어요', '일부 정리를 마치지 못했어요. 남은 알림·잠금화면을 확인하고 ‘모든 데이터 삭제’를 다시 눌러 정리를 재시도해 주세요.');
   }); } }]); };
@@ -237,7 +272,7 @@ function Application() {
     </KeyboardAvoidingView>
     {editing && <TodoEditor key={editing.id} todo={editing} close={() => { setEditing(null); void refresh(repo).catch(() => Alert.alert('목록을 갱신하지 못했어요', '할 일 탭을 눌러 다시 확인해 주세요.')); }} loadEvidence={() => repo.getTodoEvidence(editing.id)} save={async input => { await repo.updateTodo(editing.id, input, editing); await changed(); }} remove={async () => { const analyses = await repo.removeTodo(editing.id, editing); for (const id of analyses) nativeBridge?.clearCaptureNotification(id); await changed(); }} />}
     {review && <Review key={review.id} analysisId={review.id} tasks={review.tasks} repository={repo} close={() => setReview(null)} changed={changed} imageUri={review.imageUri} />}
-    {capture && <Capture repository={repo} close={() => setCapture(false)} analyzed={async (id, imageUri) => { await changed(); const tasks = await repo.listExtracted(id); setCapture(false); if (tasks.length) setReview({ id, tasks, imageUri }); else { if (imageUri) discardTemporaryImage(imageUri); Alert.alert('발견한 할 일이 없어요', '필요한 내용은 직접 할 일로 입력할 수 있어요.'); } }} />}
+    {capture && <Capture initialImage={typeof capture === 'string' ? capture : undefined} repository={repo} close={() => setCapture(false)} analyzed={async (id, imageUri) => { await changed(); const tasks = await repo.listExtracted(id); setCapture(false); if (tasks.length) setReview({ id, tasks, imageUri }); else { if (imageUri) discardTemporaryImage(imageUri); Alert.alert('발견한 할 일이 없어요', '필요한 내용은 직접 할 일로 입력할 수 있어요.'); } }} />}
     {__DEV__ && evaluation && <ModelEvaluation close={() => setEvaluation(false)} />}
   </SafeAreaView>;
 }

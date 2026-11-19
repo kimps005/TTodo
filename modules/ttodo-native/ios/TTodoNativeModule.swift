@@ -102,6 +102,17 @@ public class TTodoNativeModule: Module {
     AsyncFunction("pasteClipboardImage") { () async throws -> String? in
       try await self.pasteClipboardImage()
     }
+    #if DEBUG
+    AsyncFunction("takeSharedImage") { () async throws -> String? in
+      try await SharedImageImport.take()
+    }
+    AsyncFunction("discardSharedImage") { (uri: String) async in
+      await SharedImageImport.discard(uri)
+    }
+    AsyncFunction("clearSharedImages") { (purgePending: Bool) async throws in
+      try await SharedImageImport.clear(purgePending: purgePending)
+    }
+    #endif
     Function("signalCapturePurge") {
       CapturePurgeObserver.post()
     }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,8 +12,8 @@ import { availabilityLabels, onDeviceProvider } from '../ai/onDeviceProvider';
 import { validateDue } from '../domain/todo';
 import { requestCaptureAnalysis } from './captureAction';
 import { createReviewConfirmation } from './reviewConfirmation';
-export function Capture({ close, repository, analyzed }: { close: () => void; repository: Repository; analyzed: (id: string, imageUri?: string) => Promise<void> }) {
-  const [image, setImage] = useState<string | null>(null);
+export function Capture({ initialImage, close, repository, analyzed }: { initialImage?: string; close: () => void; repository: Repository; analyzed: (id: string, imageUri?: string) => Promise<void> }) {
+  const [image, setImage] = useState<string | null>(initialImage ?? null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -37,6 +37,26 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     try { await analyzed(id, image ?? undefined); }
     catch (error) { transferred.current = null; throw error; }
   };
+  const recognize = useCallback(async (uri: string) => {
+    if (!nativeBridge) throw new Error('기기 내 OCR은 iOS 개발 빌드에서 사용할 수 있어요.');
+    const result = await nativeBridge.recognizeText(uri);
+    if (!mounted.current) return;
+    setText(result.text); setFingerprint(result.fingerprint);
+    const analyses = await repository.listAnalyses();
+    if (!mounted.current) return;
+    setHasPrevious(analyses.some(item => item.image_fingerprint === result.fingerprint));
+    if (!result.text.trim()) Alert.alert('글자를 찾지 못했어요', '더 선명한 이미지를 선택해 주세요.');
+  }, [repository]);
+  useEffect(() => {
+    if (!initialImage) return;
+    working.current = true; setBusy(true);
+    void recognize(initialImage).catch(error => {
+      if (mounted.current) Alert.alert('공유한 이미지를 읽지 못했어요', error instanceof Error ? error.message : '이미지를 다시 공유해 주세요.');
+    }).finally(() => {
+      working.current = false;
+      if (mounted.current) setBusy(false);
+    });
+  }, [initialImage, recognize]);
   const select = async (source: 'photo' | 'clipboard') => {
     if (working.current) return;
     draftVersion.current++;
@@ -60,11 +80,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
       // a different image must never inherit the previous conversation's date.
       setText(''); setFingerprint(null); setHasPrevious(false); setMessageDate('');
       setImage(uri);
-      const result = await nativeBridge.recognizeText(uri);
-      if (!mounted.current) return;
-      setText(result.text); setFingerprint(result.fingerprint);
-      setHasPrevious((await repository.listAnalyses()).some(item => item.image_fingerprint === result.fingerprint));
-      if (!result.text.trim()) Alert.alert('글자를 찾지 못했어요', '더 선명한 이미지를 선택해 주세요.');
+      await recognize(uri);
     } catch (error) {
       if (mounted.current) Alert.alert(source === 'clipboard' ? '이미지를 붙여넣지 못했어요' : '사진을 읽지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
     } finally { working.current = false; if (mounted.current) setBusy(false); }
@@ -134,7 +150,7 @@ export function Capture({ close, repository, analyzed }: { close: () => void; re
     finally { working.current = false; setBusy(false); }
   };
   return <Modal animationType="slide" onRequestClose={closeIfIdle}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
+    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>{initialImage ? '공유한 이미지 가져오기' : '캡처 속 할 일'}</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
     <Button title={busy ? '처리 중…' : '사진에서 선택'} onPress={() => void select('photo')} disabled={busy} />
     {nativeBridge?.pasteClipboardImage && <Button secondary title="클립보드 이미지 붙여넣기" onPress={() => void select('clipboard')} disabled={busy} />}
     {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}

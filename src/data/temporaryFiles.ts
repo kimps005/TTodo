@@ -3,6 +3,7 @@ import { randomUUID } from 'expo-crypto';
 import { isCacheFileUri } from './temporaryPath';
 import { cleanupTemporaryEntries } from './temporaryCleanup';
 import { copyTemporaryImage } from './copyTemporaryImage';
+import { nativeBridge } from '../native/bridge';
 const captureDirectory = () => new Directory(Paths.cache, 'ttodo-captures');
 export function clearTemporaryFiles() {
   cleanupTemporaryEntries([
@@ -23,7 +24,10 @@ export async function ownTemporaryImage(uri: string): Promise<string> {
   return target.uri;
 }
 export function discardTemporaryImage(uri: string) {
-  if (!isCacheFileUri(uri, Paths.cache.uri)) return;
+  if (!isCacheFileUri(uri, Paths.cache.uri)) {
+    void nativeBridge?.discardSharedImage?.(uri).catch(() => {});
+    return;
+  }
   try { const file = new File(uri); if (file.exists) file.delete(); }
   catch { /* A cleanup interrupted by the OS is retried by clearTemporaryFiles on next startup. */ }
 }

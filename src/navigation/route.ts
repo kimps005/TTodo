@@ -7,3 +7,7 @@ export function isCaptureLink(value: unknown): boolean {
   const url = value.toLowerCase();
   return url === 'ttodo://capture' || url === 'ttodo://capture/';
 }
+
+export function isShareImportLink(value: unknown): boolean {
+  return typeof value === 'string' && /^ttodo:\/\/share-import\?fallback=pasteboard(?:&token=[\da-fA-F]{8}(?:-[\da-fA-F]{4}){3}-[\da-fA-F]{12})?(?![\s\S])/.test(value);
+}

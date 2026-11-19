@@ -18,6 +18,9 @@ interface NativeBridge {
   extractTasks(text: string, capturedAt: string | null, timezone: string, messageDate: string | null): Promise<string>;
   recognizeText(uri: string): Promise<OCRResult>;
   pasteClipboardImage?(): Promise<string | null>;
+  takeSharedImage?(): Promise<string | null>;
+  discardSharedImage?(uri: string): Promise<void>;
+  clearSharedImages?(purgePending: boolean): Promise<void>;
   signalCapturePurge(): void;
   reloadWidgets(): void;
   recoverActivity(): Promise<void>;

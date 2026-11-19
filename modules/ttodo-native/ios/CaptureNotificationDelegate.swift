@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import ExpoNotifications
+import UIKit
 import UserNotifications
 import WidgetKit
 
@@ -30,4 +31,11 @@ public class CaptureAppDelegateSubscriber: ExpoAppDelegateSubscriber {
   public func subscriberDidRegister() {
     NotificationCenterManager.shared.addDelegate(CaptureNotificationDelegate.shared)
   }
+
+  #if DEBUG
+  @MainActor
+  public func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any]) -> Bool {
+    SharedImageImport.receive(url)
+  }
+  #endif
 }

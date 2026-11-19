@@ -26,8 +26,9 @@ enum CaptureImageInput {
   #if DEBUG
   static func compressedImage(at url: URL) throws -> Data {
     try autoreleasepool {
-      let thumbnail = try VisionOCR.thumbnail(fileURL: url, maximumDimension: VisionOCR.maximumOCRDimension)
-      guard let jpeg = UIImage(cgImage: thumbnail).jpegData(compressionQuality: 0.9) else { throw Failure.unreadable }
+      let thumbnail = try VisionOCR.thumbnail(fileURL: url, maximumDimension: ShareImageHandoff.maximumDimension)
+      guard let jpeg = UIImage(cgImage: thumbnail).jpegData(compressionQuality: 0.85),
+        jpeg.count <= ShareImageHandoff.maximumBytes else { throw Failure.unreadable }
       return jpeg
     }
   }
