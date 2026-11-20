@@ -73,7 +73,8 @@ public class TTodoNativeModule: Module {
     Function("activityStatus") { TodoActivityManager.status() }
     Function("recordStartupPhase") { (phase: String) in
       guard ProcessInfo.processInfo.environment["TTODO_CI_STARTUP_DIAGNOSTICS"] == "1",
-        ["store_opening", "store_ready", "evidence_pruned", "local_snapshot_ready", "permissions_ready", "activity_started", "activity_ready", "boot_ready", "boot_failed"].contains(phase) else { return }
+        ["store_opening", "store_ready", "evidence_pruned", "local_snapshot_ready", "permissions_ready", "activity_started", "activity_ready", "boot_ready", "boot_failed",
+         "capture_consent_failed", "capture_ocr_failed", "capture_lookup_failed", "capture_availability_failed", "capture_model_failed", "capture_store_failed", "capture_type_error"].contains(phase) else { return }
       self.startupDiagnostics.notice("TTodoStartupDiagnostic phase=\(phase, privacy: .public)")
     }
     AsyncFunction("openNotificationSettings") { () async -> String in
@@ -100,11 +101,20 @@ public class TTodoNativeModule: Module {
       try self.storage().querySQL(sql, params: params)
     }.runOnQueue(storageQueue)
     AsyncFunction("recognizeText") { (uri: String) throws -> [String: String] in
-      guard let url = URL(string: uri), url.isFileURL else { throw OCRFailure.invalidImage }
-      let info = try url.resourceValues(forKeys: [.fileSizeKey])
-      guard let bytes = info.fileSize, bytes > 0, bytes <= 20 * 1024 * 1024 else { throw OCRFailure.tooLarge }
-      let data = try Data(contentsOf: url, options: .mappedIfSafe)
-      return ["text": try VisionOCR.recognize(data), "fingerprint": VisionOCR.fingerprint(data)]
+      do {
+        guard let url = URL(string: uri), url.isFileURL else { throw OCRFailure.invalidImage }
+        let info = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard let bytes = info.fileSize, bytes > 0, bytes <= 20 * 1024 * 1024 else { throw OCRFailure.tooLarge }
+        let data = try Data(contentsOf: url, options: .mappedIfSafe)
+        return ["text": try VisionOCR.recognize(data), "fingerprint": VisionOCR.fingerprint(data)]
+      } catch {
+        if ProcessInfo.processInfo.environment["TTODO_CI_STARTUP_DIAGNOSTICS"] == "1" {
+          let diagnostic = error as NSError
+          let domain = [NSCocoaErrorDomain, NSPOSIXErrorDomain, "com.apple.vis"].contains(diagnostic.domain) ? diagnostic.domain : "other"
+          self.startupDiagnostics.notice("TTodoStartupDiagnostic phase=capture_native_ocr_error domain=\(domain, privacy: .public) code=\(diagnostic.code, privacy: .public)")
+        }
+        throw error
+      }
     }
     AsyncFunction("pasteClipboardImage") { () async throws -> String? in
       try await self.pasteClipboardImage()

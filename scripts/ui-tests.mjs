@@ -250,7 +250,7 @@ try {
   }
   process.exitCode = 1;
 } finally {
-  if (device && /^[0-9a-f-]{36}$/i.test(device) && (scenario === 'task-lifecycle' || flow === 'testLargeTextInputEditingAndNavigation')) {
+  if (device && /^[0-9a-f-]{36}$/i.test(device) && (scenario === 'task-lifecycle' || scenario === 'photo-ocr' || flow === 'testLargeTextInputEditingAndNavigation')) {
     try { collectStartupDiagnostics(device); }
     catch (error) { report.startup_diagnostic_error = error.message; }
   }

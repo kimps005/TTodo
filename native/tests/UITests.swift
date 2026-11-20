@@ -345,6 +345,7 @@ final class TTodoUITests: XCTestCase {
   @MainActor func testPhotoAutoAnalysisAndConsent() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
+    app.launchEnvironment["TTODO_CI_STARTUP_DIAGNOSTICS"] = "1"
     app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
     app.launch()
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))

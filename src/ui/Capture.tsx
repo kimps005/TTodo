@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { analyzeCapture, type CaptureResult, type CaptureSnapshot } from '../ai/captureAnalysis';
+import { analyzeCapture, type CapturePhase, type CaptureResult, type CaptureSnapshot } from '../ai/captureAnalysis';
 import { captureAIUnavailable, extractCaptureTask } from '../ai/onDeviceProvider';
 import { discardTemporaryImage, ownTemporaryImage } from '../data/temporaryFiles';
 import type { Repository } from '../data/repository';
@@ -48,6 +48,7 @@ export function Capture({ initialImage, close, repository }: { initialImage?: st
   const isCurrent = (job: Attempt) => active.current && attempt.current === job && !job.controller.signal.aborted;
 
   const requestAnalysis = async (job: Attempt, grantConsent = false, replacement?: CaptureSnapshot) => {
+    const progress: { phase: CapturePhase | 'consent' } = { phase: 'consent' };
     try {
       await requestCaptureAnalysis({
         working: job.working,
@@ -71,12 +72,22 @@ export function Capture({ initialImage, close, repository }: { initialImage?: st
             signal: job.controller.signal,
             channel: job.channel,
             replacement,
+            onPhase: phase => { progress.phase = phase; },
           });
           if (isCurrent(job)) setScreen(result);
         },
       }, grantConsent);
-    } catch {
-      if (isCurrent(job)) setScreen({ kind: 'status', message: '사진을 분석하지 못했어요. 다시 시도하거나 필요한 할 일을 직접 입력해 주세요.', retry: true });
+    } catch (error) {
+      if (!isCurrent(job)) return;
+      const { phase } = progress;
+      try {
+        nativeBridge?.recordStartupPhase?.('capture_' + phase + '_failed');
+        if (error instanceof TypeError) nativeBridge?.recordStartupPhase?.('capture_type_error');
+      } catch { /* Diagnostics must not block the next action. */ }
+      const message = phase === 'ocr' ? '사진에서 글자를 읽지 못했어요. 다시 시도하거나 다른 사진을 선택해 주세요.'
+        : phase === 'consent' ? '분석 동의를 확인하지 못했어요. 다시 시도해 주세요.'
+        : '사진을 분석하지 못했어요. 다시 시도하거나 필요한 할 일을 직접 입력해 주세요.';
+      setScreen({ kind: 'status', message, retry: true });
     }
   };
 

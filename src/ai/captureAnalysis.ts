@@ -5,6 +5,7 @@ import type { OCRResult } from '../native/bridge';
 
 export const captureModelVersion = 'apple-ondevice/single-capture-v1';
 export type CaptureSnapshot = Awaited<ReturnType<Repository['reanalysisSnapshot']>>;
+export type CapturePhase = 'ocr' | 'lookup' | 'availability' | 'model' | 'store';
 export type CaptureResult =
   | { kind: 'candidate'; task: ExtractedTask; reanalyze?: string }
   | { kind: 'status'; message: string; retry?: boolean; reanalyze?: string };
@@ -37,7 +38,7 @@ function checkCurrent(signal: AbortSignal) {
   if (signal.aborted) throw new Error('분석을 취소했어요.');
 }
 
-export async function analyzeCapture({ repository, recognize, extract, unavailable, clearNotification, signal, channel, replacement }: {
+export async function analyzeCapture({ repository, recognize, extract, unavailable, clearNotification, signal, channel, replacement, onPhase }: {
   repository: CaptureRepository;
   recognize: () => Promise<OCRResult>;
   extract: (text: string, signal: AbortSignal) => Promise<TaskSuggestion[]>;
@@ -46,10 +47,13 @@ export async function analyzeCapture({ repository, recognize, extract, unavailab
   signal: AbortSignal;
   channel: 'manual' | 'share';
   replacement?: CaptureSnapshot;
+  onPhase?: (phase: CapturePhase) => void;
 }): Promise<CaptureResult> {
   const noTask = { kind: 'status', message: '할 일을 찾지 못했어요' } as const;
+  onPhase?.('ocr');
   const { text, fingerprint } = await recognize();
   checkCurrent(signal);
+  onPhase?.('lookup');
   if (containsSensitiveText(text)) return { kind: 'status', message: '민감한 정보가 있어요. 필요한 할 일은 직접 입력해 주세요.' };
 
   const existing = (await repository.listAnalyses()).find(a => a.image_fingerprint === fingerprint);
@@ -70,12 +74,14 @@ export async function analyzeCapture({ repository, recognize, extract, unavailab
     return { kind: 'status', message: '이 사진은 이미 분석했어요. 분석함에서 확인할 수 있어요.', reanalyze: fingerprint };
   }
 
+  onPhase?.('availability');
   const blocked = text.trim() ? unavailable() : undefined;
   if (blocked) return { kind: 'status', message: blocked, retry: true };
 
   let id: string | undefined;
   let token: string | null = null;
   try {
+    onPhase?.('store');
     if (existing) {
       id = existing.id;
       token = replacement ? await repository.restartUnstoredAnalysis(id, false, replacement) : await repository.retryFailedAnalysis(id);
@@ -88,8 +94,10 @@ export async function analyzeCapture({ repository, recognize, extract, unavailab
     if (!token) throw new Error('분석 상태가 변경되었어요.');
     checkCurrent(signal);
     clearNotification(id);
+    onPhase?.('model');
     const tasks = text.trim() ? await extract(text, signal) : [];
     checkCurrent(signal);
+    onPhase?.('store');
     await repository.finishAnalysis(id, tasks.slice(0, 1).map(captureDeadline), captureModelVersion, token);
     token = null;
     checkCurrent(signal);
