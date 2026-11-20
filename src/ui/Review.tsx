@@ -1,16 +1,80 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Image, Modal, ScrollView, Text, TextInput, View, KeyboardAvoidingView, Platform, Pressable, useWindowDimensions } from 'react-native';
+import { Alert, AppState, Modal, ScrollView, Text, TextInput, View, KeyboardAvoidingView, Platform, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ExtractedTask, Repository } from '../data/repository';
 import { Button, Check } from './components';
 import { ui } from './theme';
 import { reconcileReviewDrafts, reviewDraft, reviewDeadlineLabel, reviewInput } from '../domain/reviewDraft';
 import { DeadlineFields } from './DeadlineFields';
-import { discardTemporaryImage } from '../data/temporaryFiles';
 import type { SimilarCapture } from '../domain/duplicate';
 import { createReviewConfirmation } from './reviewConfirmation';
 import { nativeBridge } from '../native/bridge';
-export function Review({ tasks, repository, analysisId, close, changed, imageUri }: { tasks: ExtractedTask[]; repository: Repository; analysisId: string; close: () => void; changed: () => Promise<void>; imageUri?: string }) {
+export function CaptureCandidate({ task, repository, signal, disabled, onSaving, onSaved }: {
+  task: ExtractedTask;
+  repository: Repository;
+  signal: AbortSignal;
+  disabled: boolean;
+  onSaving: (value: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [draft, setDraft] = useState(() => reviewDraft(task));
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const working = useRef(false);
+  const edit = (values: Partial<typeof draft>) => { setError(''); setDraft(current => ({ ...current, ...values })); };
+  const save = async () => {
+    if (disabled || working.current || signal.aborted) return;
+    working.current = true;
+    setSaving(true);
+    onSaving(true);
+    setError('');
+    let saved = false;
+    try {
+      const input = reviewInput(draft);
+      const pending = (await repository.listExtracted(task.analysis_id)).filter(t => t.review_status === 'pending');
+      if (!pending.some(t => t.id === task.id)) throw new Error('제안 상태가 변경되었어요. 분석함에서 확인해 주세요.');
+      const similar = await repository.findSimilarAnalyses(task.analysis_id, pending.map(t => t.evidence_text).join('\n'));
+      if (signal.aborted) return;
+      if (similar.length && !await new Promise<boolean>(resolve => {
+        Alert.alert('비슷한 할 일이 있어요', `${similar.map(match => match.title).join('\n')}\n\n서로 다른 할 일이라면 저장해 주세요.`, [
+          { text: '다시 확인', style: 'cancel', onPress: () => resolve(false) },
+          { text: '확인하고 저장', onPress: () => resolve(true) },
+        ]);
+      })) return;
+      if (signal.aborted) return;
+      await repository.approve(task.analysis_id, [{ id: task.id, input }], similar);
+      saved = true;
+    } catch (reason) {
+      if (!signal.aborted) setError(reason instanceof Error ? reason.message : '저장하지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      working.current = false;
+      if (!signal.aborted) { setSaving(false); onSaving(false); }
+    }
+    if (saved && !signal.aborted) onSaved();
+  };
+
+  const locked = disabled || saving;
+  return <>
+    <View style={ui.card}>
+      {editing ? <>
+        <TextInput accessibilityLabel="할 일 제목" editable={!locked} style={ui.input} value={draft.title} onChangeText={title => edit({ title })} multiline maxLength={400} />
+        <DeadlineFields day={draft.day} time={draft.time} disabled={locked} onDay={day => edit({ day, dateEdited: true })} onTime={time => edit({ time, dateEdited: true })} />
+      </> : <>
+        <Text accessibilityRole="header" style={ui.section}>{draft.title}</Text>
+        {draft.due_at && <Text style={ui.subtitle}>마감 · {reviewDeadlineLabel(draft)}</Text>}
+      </>}
+      <Button secondary title={editing ? '편집 취소' : '편집'} disabled={locked} onPress={() => {
+        if (editing) { setDraft(reviewDraft(task)); setError(''); }
+        setEditing(!editing);
+      }} />
+      <Button title="저장" disabled={locked || !draft.title.trim()} onPress={() => void save()} />
+    </View>
+    {!!error && <Text accessibilityLiveRegion="polite" style={ui.subtitle}>{error}</Text>}
+  </>;
+}
+
+export function Review({ tasks, repository, analysisId, close, changed }: { tasks: ExtractedTask[]; repository: Repository; analysisId: string; close: () => void; changed: () => Promise<void> }) {
   const { fontScale } = useWindowDimensions();
   const [items, setItems] = useState(() => tasks.map(task => reviewDraft(task)));
   const [busy, setBusy] = useState(false);
@@ -39,7 +103,6 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
     const subscription = AppState.addEventListener('change', state => { confirmation.invalidate(); if (state === 'active') void refresh(); });
     return () => { alive = false; confirmation.invalidate(); subscription.remove(); };
   }, [repository, analysisId, tasks, checkAttempt]);
-  useEffect(() => () => { if (imageUri) discardTemporaryImage(imageUri); }, [imageUri]);
   const edit = (index: number, values: Partial<typeof items[number]>) => { confirmation.invalidate(); setItems(current => current.map((item, i) => i === index ? { ...item, ...values } : item)); };
   const closeReview = () => { confirmation.invalidate(); close(); };
   const run = async (operation: () => Promise<void>) => { if (working.current) return; confirmation.invalidate(); working.current = true; setBusy(true); try { await operation(); await changed(); close(); } catch (e) { setCheckAttempt(n => n + 1); Alert.alert('처리하지 못했어요', e instanceof Error ? e.message : '다시 시도해 주세요.'); } finally { working.current = false; setBusy(false); } };
@@ -57,7 +120,6 @@ export function Review({ tasks, repository, analysisId, close, changed, imageUri
   };
   return <Modal animationType="slide" onRequestClose={() => { if (!working.current) closeReview(); }}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
     <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE REVIEW</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>내 할 일이 맞나요?</Text><Text style={ui.subtitle}>제목과 날짜, 원문 근거를 확인한 뒤 필요한 항목만 저장하세요.</Text>
-    {imageUri && <Image source={{ uri: imageUri }} style={{ height: 220, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="이번 분석에 사용한 이미지 미리보기" />}
     {!!similar.length && <View style={ui.card}><Text style={ui.section}>비슷한 분석 기록이 있어요</Text><Text style={ui.small}>최근 7일의 원문 근거와 비교한 참고 안내예요. 서로 다른 일일 수 있으니 기존 항목과 비교해 주세요. 자동으로 합치거나 삭제하지 않아요.</Text>{similar.map(match => <Text key={match.analysis_id} style={ui.subtitle}>{match.saved ? '저장한 항목' : '검토 대기'} · {match.title}</Text>)}</View>}
     {checking && <Text style={ui.small}>최근 분석과 비교하고 있어요…</Text>}
     {checkError && <View style={ui.card}><Text style={ui.small}>최신 제안 상태나 비슷한 분석을 확인하지 못했어요. 유효한 대기 항목의 편집 내용은 유지돼요.</Text><Button secondary title="최신 상태 다시 확인" onPress={() => setCheckAttempt(n => n + 1)} /></View>}

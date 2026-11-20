@@ -10,6 +10,21 @@ export const availabilityLabels: Record<string, string> = {
   unavailable: '현재 기기 내 AI를 사용할 수 없어요.',
   missing_native: 'iOS 개발 빌드에서 사용할 수 있어요.',
 };
+export function captureAIUnavailable(): string | undefined {
+  const status = nativeBridge?.localAIAvailability() ?? 'missing_native';
+  if (status !== 'available') return availabilityLabels[status] ?? availabilityLabels.unavailable;
+  if (!nativeBridge?.extractCaptureTask) return '새 iOS 앱 빌드에서 사진 분석을 사용할 수 있어요.';
+}
+
+export async function extractCaptureTask(text: string, signal: AbortSignal) {
+  if (signal.aborted) return [];
+  const unavailable = captureAIUnavailable();
+  if (unavailable || !nativeBridge?.extractCaptureTask) throw new Error(unavailable ?? availabilityLabels.unavailable);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const raw = await nativeBridge.extractCaptureTask(text, timezone);
+  if (signal.aborted) return [];
+  return enforceDateContext(validateExtraction(JSON.parse(raw), text), { text, captured_at: null, message_date: null, timezone });
+}
 export const onDeviceProvider: TaskExtractionProvider = {
   version: 'apple-ondevice/prompt-v4',
   async extract(context, signal) {

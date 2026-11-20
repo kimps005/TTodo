@@ -50,7 +50,7 @@ test('공유 확장 흐름은 앱 조작 결과로 대체하지 않고 정확한
 });
 
 test('사진 OCR 흐름은 실제 지정 검사가 통과해야 하며 기본 앱 결과를 대신 인정하지 않는다', () => {
-  const flow = 'testPhotoOCRAndCancelPreservesDraft';
+  const flow = 'testPhotoAutoAnalysisAndConsent';
   const photo = { testNodes: [{ ...passedCase, nodeIdentifier: `TTodoUITests/${flow}()`, name: `${flow}()` }] };
   assert.equal(validateManualUITestResult(summary, photo, flow).flow, flow);
   assert.throws(() => validateManualUITestResult(summary, photo));

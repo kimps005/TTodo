@@ -342,7 +342,7 @@ final class TTodoUITests: XCTestCase {
     screenshot(app, name: "large-06-preserved-draft")
   }
 
-  @MainActor func testPhotoOCRAndCancelPreservesDraft() throws {
+  @MainActor func testPhotoAutoAnalysisAndConsent() throws {
     continueAfterFailure = false
     let app = XCUIApplication()
     app.launchArguments = ["-AppleLanguages", "(ko)", "-AppleLocale", "ko_KR"]
@@ -354,40 +354,42 @@ final class TTodoUITests: XCTestCase {
     tap(app.buttons["사진에서 선택"], in: app)
     // iOS 26 Photos exposes thumbnails as Images, not collection-view Cells.
     // The imported PNG is newest; the simulator also includes Apple sample photos.
-    // Verify its actual OCR below rather than assuming the library has one item.
+    // The automatic flow reports model availability for a photo with OCR text.
     let photo = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
     XCTAssertTrue(photo.waitForExistence(timeout: 30), "The real system picker must expose a photo thumbnail.")
     screenshot(app, name: "photo-01-system-picker")
     // Photos exposes this visible thumbnail as a non-hittable Image on iOS 26.
-    // Tap its own center; subsequent real OCR verifies the selected fixture.
+    // Tap its own center to drive the real picker and Vision OCR.
     photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-    let text = app.textViews["인식된 글자"]
-    XCTAssertTrue(text.waitForExistence(timeout: 30))
-    let recognized = try XCTUnwrap(text.value as? String)
-    let normalized = String(recognized.precomposedStringWithCompatibilityMapping.filter { $0.isLetter || $0.isNumber })
-    XCTAssertTrue(normalized.contains("2026년11월20일까지보고서제출"), "Real iOS Vision OCR must recognize the generated Korean image.")
-    screenshot(app, name: "photo-02-real-ocr")
-    // Place the caret after the last line and delete through the real keyboard.
-    // An empty user edit must not unmount the field or prevent typing again.
-    reveal(text, in: app)
-    text.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.95)).tap()
-    text.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: recognized.utf16.count))
-    XCTAssertTrue(text.waitForExistence(timeout: 5), "Clearing OCR must keep the editor available.")
-    XCTAssertEqual(text.value as? String ?? "", "")
-    screenshot(app, name: "photo-02-empty-ocr-editor")
-    text.typeText("CI edited OCR")
-    let editedText = try XCTUnwrap(text.value as? String)
-    XCTAssertTrue(editedText.contains("CI edited OCR"))
-    let date = app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"]
-    tap(date, in: app); date.typeText("2026-11-14")
+    let consent = app.buttons["동의하고 분석"]
+    XCTAssertTrue(consent.waitForExistence(timeout: 30))
+    let status = app.staticTexts["capture-analysis-status"]
+    XCTAssertFalse(status.exists, "The analysis must wait for first-time consent.")
+    tap(consent, in: app)
+    XCTAssertTrue(status.waitForExistence(timeout: 30), "OCR and the availability check must start after consent alone.")
+    let message = status.label
+    let availabilityMessages = ["기기 내 AI에는 iOS 26 이상이 필요해요.", "Apple Intelligence를 지원하는 iPhone이 필요해요.",
+      "설정에서 Apple Intelligence를 켜 주세요.", "기기 내 AI 모델을 준비 중이에요. 다운로드 후 다시 시도해 주세요.",
+      "현재 기기 모델이 한국어를 지원하지 않아요.", "현재 기기 내 AI를 사용할 수 없어요."]
+    XCTAssertTrue(availabilityMessages.contains(message), "The simulator should finish real OCR and report its unavailable model.")
+    XCTAssertFalse(app.textViews["인식된 글자"].exists)
+    XCTAssertFalse(app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"].exists)
+    XCTAssertFalse(app.buttons["인식한 글자에서 직접 선택"].exists)
+    XCTAssertFalse(app.buttons["기기 내 AI로 할 일 찾기"].exists)
+    XCTAssertFalse(app.buttons["저장"].exists)
+    screenshot(app, name: "photo-02-automatic-unavailable")
     tap(app.buttons["사진에서 선택"], in: app)
     let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "취소", "Cancel")).firstMatch
     XCTAssertTrue(cancel.waitForExistence(timeout: 20)); cancel.tap()
-    reveal(text, in: app)
-    XCTAssertEqual(text.value as? String, editedText, "Cancelling selection must preserve the user's OCR edits.")
-    reveal(date, in: app)
-    XCTAssertEqual(date.value as? String, "2026-11-14")
-    screenshot(app, name: "photo-03-cancel-preserves-draft")
+    XCTAssertTrue(status.waitForExistence(timeout: 15))
+    XCTAssertEqual(status.label, message)
+    tap(app.buttons["사진에서 선택"], in: app)
+    XCTAssertTrue(photo.waitForExistence(timeout: 30))
+    photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(status.waitForExistence(timeout: 30), "Previously granted consent should start analysis on photo selection alone.")
+    XCTAssertEqual(status.label, message)
+    XCTAssertFalse(consent.exists)
+    screenshot(app, name: "photo-03-no-repeat-consent")
     tap(app.buttons["닫기"], in: app)
     app.terminate(); app.launch()
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))

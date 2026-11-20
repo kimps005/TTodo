@@ -1,180 +1,185 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Image, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { nativeBridge } from '../native/bridge';
-import { containsSensitiveText, validateExtraction } from '../ai/extraction';
-import { Button } from './components';
-import { colors, ui } from './theme';
+import { analyzeCapture, type CaptureResult, type CaptureSnapshot } from '../ai/captureAnalysis';
+import { captureAIUnavailable, extractCaptureTask } from '../ai/onDeviceProvider';
 import { discardTemporaryImage, ownTemporaryImage } from '../data/temporaryFiles';
-import type { Analysis, Repository } from '../data/repository';
-import { availabilityLabels, onDeviceProvider } from '../ai/onDeviceProvider';
-import { validateDue } from '../domain/todo';
+import type { Repository } from '../data/repository';
+import { nativeBridge } from '../native/bridge';
 import { requestCaptureAnalysis } from './captureAction';
+import { Button } from './components';
+import { CaptureCandidate } from './Review';
 import { createReviewConfirmation } from './reviewConfirmation';
-export function Capture({ initialImage, close, repository, analyzed }: { initialImage?: string; close: () => void; repository: Repository; analyzed: (id: string, imageUri?: string) => Promise<void> }) {
-  const [image, setImage] = useState<string | null>(initialImage ?? null);
-  const [text, setText] = useState('');
-  const [actionBusy, setBusy] = useState(false);
-  const [sharedRead, setSharedRead] = useState<'waiting' | 'reading' | 'done' | 'empty' | 'failed'>(initialImage ? 'waiting' : 'done');
-  const readingSharedImage = sharedRead === 'waiting' || sharedRead === 'reading';
-  const busy = actionBusy || readingSharedImage;
-  const [fingerprint, setFingerprint] = useState<string | null>(null);
-  const [messageDate, setMessageDate] = useState('');
-  const [hasPrevious, setHasPrevious] = useState(false);
-  const [aiStatus, setAIStatus] = useState(() => nativeBridge?.localAIAvailability() ?? 'missing_native');
-  const working = useRef(false);
-  const sharedReadInFlight = useRef(false);
-  const mounted = useRef(false);
-  const draftVersion = useRef(0);
+import { colors, ui } from './theme';
+
+type Attempt = { uri: string; channel: 'manual' | 'share'; controller: AbortController; working: { current: boolean } };
+type Screen = CaptureResult | { kind: 'idle' | 'consent' | 'working' };
+
+export function Capture({ initialImage, close, repository }: { initialImage?: string; close: () => void; repository: Repository }) {
+  const [screen, setScreen] = useState<Screen>({ kind: 'idle' });
+  const [picking, setPicking] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [inputError, setInputError] = useState('');
+  const input = useRef({ uri: initialImage, channel: 'share' as Attempt['channel'] });
+  const attempt = useRef<Attempt | null>(null);
+  const active = useRef(true);
+  const pickerLock = useRef(false);
+  const saveLock = useRef(false);
   const confirmation = useRef(createReviewConfirmation()).current;
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      attempt.current?.controller.abort();
+      confirmation.invalidate();
+      if (input.current.uri) discardTemporaryImage(input.current.uri);
+    };
+  }, [confirmation]);
+
   const closeCapture = () => {
-    if (working.current) return;
-    mounted.current = false;
-    draftVersion.current++;
+    if (saveLock.current) return;
+    active.current = false;
+    attempt.current?.controller.abort();
+    confirmation.invalidate();
     close();
   };
-  useEffect(() => {
-    mounted.current = true;
-    const subscription = AppState.addEventListener('change', state => { draftVersion.current++; if (state === 'active') setAIStatus(nativeBridge?.localAIAvailability() ?? 'missing_native'); });
-    return () => { mounted.current = false; draftVersion.current++; subscription.remove(); };
-  }, []);
-  const transferred = useRef<string | null>(null);
-  useEffect(() => () => { if (image && transferred.current !== image) discardTemporaryImage(image); }, [image]);
-  const openReview = async (id: string) => {
-    transferred.current = image;
-    try { await analyzed(id, image ?? undefined); }
-    catch (error) { transferred.current = null; throw error; }
-  };
-  const recognize = useCallback(async (uri: string) => {
-    if (!nativeBridge) throw new Error('기기 내 OCR은 iOS 개발 빌드에서 사용할 수 있어요.');
-    const result = await nativeBridge.recognizeText(uri);
-    if (!mounted.current) return;
-    const analyses = await repository.listAnalyses();
-    if (!mounted.current) return;
-    setText(result.text); setFingerprint(result.fingerprint);
-    setHasPrevious(analyses.some(item => item.image_fingerprint === result.fingerprint));
-    return Boolean(result.text.trim());
-  }, [repository]);
-  const readSharedImage = async () => {
-    if (!initialImage || working.current || sharedReadInFlight.current) return;
-    sharedReadInFlight.current = true;
-    setSharedRead('reading');
+  const isCurrent = (job: Attempt) => active.current && attempt.current === job && !job.controller.signal.aborted;
+
+  const requestAnalysis = async (job: Attempt, grantConsent = false, replacement?: CaptureSnapshot) => {
     try {
-      const foundText = await recognize(initialImage);
-      if (mounted.current) setSharedRead(foundText ? 'done' : 'empty');
+      await requestCaptureAnalysis({
+        working: job.working,
+        setBusy: busy => { if (busy && isCurrent(job)) setScreen({ kind: 'working' }); },
+        readConsent: () => repository.getPreference('ai_local_consent'),
+        writeConsent: () => repository.setPreference('ai_local_consent', 'yes'),
+        isCurrent: () => isCurrent(job),
+        prompt: () => setScreen({ kind: 'consent' }),
+        analyze: async () => {
+          if (!nativeBridge) {
+            setScreen({ kind: 'status', message: 'iOS 앱 빌드에서 사진을 분석할 수 있어요.' });
+            return;
+          }
+          const bridge = nativeBridge;
+          const result = await analyzeCapture({
+            repository,
+            recognize: () => bridge.recognizeText(job.uri),
+            extract: extractCaptureTask,
+            unavailable: captureAIUnavailable,
+            clearNotification: id => bridge.clearCaptureNotification(id),
+            signal: job.controller.signal,
+            channel: job.channel,
+            replacement,
+          });
+          if (isCurrent(job)) setScreen(result);
+        },
+      }, grantConsent);
     } catch {
-      if (mounted.current) setSharedRead('failed');
-    } finally {
-      sharedReadInFlight.current = false;
+      if (isCurrent(job)) setScreen({ kind: 'status', message: '사진을 분석하지 못했어요. 다시 시도하거나 필요한 할 일을 직접 입력해 주세요.', retry: true });
     }
   };
+
+  const start = (replacement?: CaptureSnapshot) => {
+    const { uri, channel } = input.current;
+    if (!active.current || !uri) return;
+    attempt.current?.controller.abort();
+    confirmation.invalidate();
+    const job: Attempt = { uri, channel, controller: new AbortController(), working: { current: false } };
+    attempt.current = job;
+    setInputError('');
+    void requestAnalysis(job, false, replacement);
+  };
+
   const select = async (source: 'photo' | 'clipboard') => {
-    if (working.current || sharedReadInFlight.current) return;
-    draftVersion.current++;
-    working.current = true; setBusy(true);
+    if (pickerLock.current || saveLock.current || !active.current) return;
+    pickerLock.current = true;
+    setPicking(true);
+    setInputError('');
     try {
-      if (!nativeBridge) throw new Error('기기 내 OCR은 iOS 개발 빌드에서 사용할 수 있어요.');
       let uri: string;
       if (source === 'clipboard') {
-        const pasted = await nativeBridge.pasteClipboardImage?.();
-        if (!pasted) throw new Error('붙여넣을 수 있는 이미지가 없어요. 사진을 다시 복사하고 iOS에서 붙여넣기를 허용해 주세요.');
+        const pasted = await nativeBridge?.pasteClipboardImage?.();
+        if (!pasted) {
+          if (active.current) setInputError('사진을 다시 복사하고 iOS에서 붙여넣기를 허용해 주세요.');
+          return;
+        }
         uri = pasted;
       } else {
         const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
         if (picked.canceled) return;
         const asset = picked.assets[0];
-        if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) { discardTemporaryImage(asset.uri); throw new Error('20MB 이하 이미지를 선택해 주세요.'); }
+        if (!active.current) { discardTemporaryImage(asset.uri); return; }
+        attempt.current?.controller.abort();
+        confirmation.invalidate();
+        setScreen({ kind: 'idle' });
+        if ((asset.fileSize ?? 0) > 20 * 1024 * 1024) {
+          discardTemporaryImage(asset.uri);
+          setInputError('20MB 이하 이미지를 선택해 주세요.');
+          return;
+        }
         uri = await ownTemporaryImage(asset.uri);
       }
-      if (!mounted.current) { discardTemporaryImage(uri); return; }
-      // Commit a new draft only after a real selection. Cancelling preserves edits;
-      // a different image must never inherit the previous conversation's date.
-      setText(''); setFingerprint(null); setHasPrevious(false); setMessageDate('');
-      setSharedRead('done');
-      setImage(uri);
-      if (await recognize(uri) === false) Alert.alert('글자를 찾지 못했어요', '더 선명한 이미지를 선택해 주세요.');
-    } catch (error) {
-      if (mounted.current) Alert.alert(source === 'clipboard' ? '이미지를 붙여넣지 못했어요' : '사진을 읽지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.');
-    } finally { working.current = false; if (mounted.current) setBusy(false); }
-  };
-  type Reanalysis = { id: string; status: Analysis['status']; taskIds: string[] };
-  const analyze = async (reanalyze?: Reanalysis) => {
-    if (!fingerprint) return;
-    let analysisId: string | undefined;
-    let token: string | null = null;
-    try {
-      if (messageDate.trim()) validateDue(messageDate.trim(), 'date');
-      if (containsSensitiveText(text)) throw new Error('민감한 정보가 있는 글자는 분석하지 않아요. 필요한 할 일을 직접 입력해 주세요.');
-      const channel = image && image === initialImage ? 'share' : 'manual';
-      const result = reanalyze ? { id: reanalyze.id, created: false, token: null } : await repository.createAnalysis(fingerprint, channel, null);
-      analysisId = result.id;
-      token = result.token;
-      if (!result.created) {
-        const previous = (await repository.listAnalyses()).find(item => item.id === result.id);
-        if (reanalyze) {
-          token = await repository.restartUnstoredAnalysis(result.id, false, reanalyze);
-        }
-        else if (previous?.status === 'failed') token = await repository.retryFailedAnalysis(result.id);
-        else if (previous?.status === 'processing' || previous?.status === 'queued') { Alert.alert('이미 분석 중이에요', '잠시 후 분석함에서 결과를 확인해 주세요.'); return; }
-        else { await openReview(result.id); return; }
-      }
-      if (!token) throw new Error('분석 상태가 변경되었어요. 다시 시도해 주세요.');
-      nativeBridge?.clearCaptureNotification(result.id);
-      if (!nativeBridge) throw new Error('iOS 개발 빌드에서 사용할 수 있어요.');
-      let semiAutomatic = nativeBridge.localAIAvailability() !== 'available';
-      let tasks;
-      try {
-        tasks = semiAutomatic ? validateExtraction(JSON.parse(nativeBridge.ocrCandidates(text)), text, 'ocr') : await onDeviceProvider.extract({ text, captured_at: null, message_date: messageDate.trim() || null, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }, new AbortController().signal);
-      } catch (error) {
-        if (nativeBridge.localAIAvailability() === 'available') throw error;
-        semiAutomatic = true;
-        tasks = validateExtraction(JSON.parse(nativeBridge.ocrCandidates(text)), text, 'ocr');
-      }
-      await repository.finishAnalysis(result.id, tasks, semiAutomatic ? 'vision-ocr/manual-v1' : onDeviceProvider.version, token);
-      await openReview(result.id);
-    } catch (error) {
-      if (analysisId && token) await repository.failAnalysis(analysisId, 'LOCAL_AI_FAILED', token).catch(() => {});
-      Alert.alert('분석하지 못했어요', error instanceof Error ? error.message : '기기 내 AI 준비 상태를 확인하고 다시 시도해 주세요.');
+      if (!active.current) { discardTemporaryImage(uri); return; }
+      const previous = input.current.uri;
+      input.current = { uri, channel: 'manual' };
+      start();
+      if (previous && previous !== uri) discardTemporaryImage(previous);
+    } catch {
+      if (active.current) setInputError('이미지를 가져오지 못했어요. 다시 시도해 주세요.');
+    } finally {
+      pickerLock.current = false;
+      if (active.current) setPicking(false);
     }
   };
-  const requestAnalysis = (reanalyze?: Reanalysis, grantConsent = false, version = draftVersion.current): Promise<void> => requestCaptureAnalysis({
-    working, setBusy,
-    readConsent: () => repository.getPreference('ai_local_consent'),
-    writeConsent: () => repository.setPreference('ai_local_consent', 'yes'),
-    isCurrent: () => draftVersion.current === version,
-    analyze: () => { draftVersion.current++; return analyze(reanalyze); },
-    // Waiting for an alert response holds no work lock, including cancellation.
-    prompt: () => {
-      const take = confirmation.capture();
-      const semiAutomatic = nativeBridge?.localAIAvailability() !== 'available';
-      Alert.alert(semiAutomatic ? '기기 내 분석과 원문 보관에 동의할까요?' : '기기 안에서 AI로 분석할까요?', semiAutomatic ? '기기 내 OCR·AI 분석과 검토용 원문 보관에 동의해요. 현재는 AI를 사용할 수 없어 OCR 글자를 직접 선택해요. 외부 서버로 보내지 않으며 원문은 7일이 지난 뒤 앱 실행·확인 때 정리해요. 설정에서 동의를 철회할 수 있고, 선택하고 저장하기 전에는 할 일을 만들지 않아요.' : '외부 AI 서버로 이미지나 글자를 보내지 않아요. 승인할 항목을 확인하기 위해 원문 근거 문장을 저장하고, 7일이 지난 내용은 다음 앱 실행·확인 때 정리해요. 모델의 정확도는 아직 검증 중이며, 저장 전 직접 확인해야 해요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: semiAutomatic ? '동의하고 검토' : '동의하고 분석', onPress: () => { if (take()) void requestAnalysis(reanalyze, true, version).catch(() => Alert.alert('설정하지 못했어요', '다시 시도해 주세요.')); } }]);
-    },
-  }, grantConsent);
-  const confirmReanalysis = async () => {
-    if (working.current || !fingerprint) return;
-    working.current = true; setBusy(true);
-    const version = draftVersion.current;
+
+  const confirmReanalysis = async (fingerprint: string) => {
+    const job = attempt.current;
+    if (!job || !isCurrent(job) || pickerLock.current || saveLock.current) return;
     const take = confirmation.capture();
     try {
       const snapshot = await repository.reanalysisSnapshot(fingerprint);
-      if (version !== draftVersion.current) return;
-      Alert.alert('다시 분석할까요?', '이 캡처의 미저장 제안과 수정 내용을 지우고 새로 분석해요. 저장한 기록이 있으면 재분석하지 않아요.', [{ text: '취소', style: 'cancel', onPress: () => { take(); } }, { text: '다시 분석', style: 'destructive', onPress: () => { if (take()) void requestAnalysis(snapshot, false, version).catch(() => Alert.alert('분석을 시작하지 못했어요', '잠시 후 다시 시도해 주세요.')); } }]);
-    } catch (error) { Alert.alert('분석 기록을 확인하지 못했어요', error instanceof Error ? error.message : '다시 시도해 주세요.'); }
-    finally { working.current = false; setBusy(false); }
+      if (!isCurrent(job) || !take()) return;
+      const respond = confirmation.capture();
+      Alert.alert('다시 분석할까요?', '이 사진의 미저장 제안과 수정 내용을 새 분석으로 바꿔요.', [
+        { text: '취소', style: 'cancel', onPress: () => { respond(); } },
+        { text: '다시 분석', style: 'destructive', onPress: () => { if (isCurrent(job) && respond()) start(snapshot); } },
+      ]);
+    } catch {
+      if (isCurrent(job) && take()) setInputError('분석 기록을 확인하지 못했어요. 다시 시도해 주세요.');
+    }
   };
-  return <Modal animationType="slide" onShow={() => { if (sharedRead === 'waiting') void readSharedImage(); }} onRequestClose={closeCapture}><SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}><ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
-    <Text dynamicTypeRamp="caption2" style={ui.eyebrow}>CAPTURE TO TASK</Text><Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>{initialImage ? '공유한 이미지 가져오기' : '캡처 속 할 일'}</Text><Text style={ui.subtitle}>선택한 이미지에서 기기 안에서 글자를 읽어요. 선택·검토 화면을 닫으면 임시 이미지를 삭제해요. 앱이 중단된 경우 다음 실행 때 남은 임시 파일을 정리해요.</Text>
-    {initialImage && <Button secondary title="닫기" disabled={actionBusy} onPress={closeCapture} />}
-    {readingSharedImage && <View style={ui.row}><ActivityIndicator color={colors.accent} /><Text accessibilityLiveRegion="polite" style={[ui.subtitle, ui.grow]}>공유한 이미지에서 글자를 읽고 있어요…</Text></View>}
-    {sharedRead === 'failed' && <View style={ui.card}><Text accessibilityLiveRegion="polite" style={ui.subtitle}>공유한 이미지를 읽지 못했어요. 다시 읽거나 사진에서 이미지를 선택해 주세요.</Text><Button secondary title="공유 이미지 다시 읽기" disabled={busy} onPress={() => void readSharedImage()} /></View>}
-    {sharedRead === 'empty' && !text.trim() && <Text accessibilityLiveRegion="polite" style={ui.subtitle}>글자를 찾지 못했어요. 더 선명한 이미지를 선택해 주세요.</Text>}
-    <Button title={actionBusy ? '처리 중…' : '사진에서 선택'} onPress={() => void select('photo')} disabled={busy} />
-    {nativeBridge?.pasteClipboardImage && <Button secondary title="클립보드 이미지 붙여넣기" onPress={() => void select('clipboard')} disabled={busy} />}
-    {image && <Image source={{ uri: image }} style={{ height: 240, borderRadius: 16, backgroundColor: '#E4E8EE' }} resizeMode="contain" accessibilityLabel="선택한 캡처 이미지" />}
-    {fingerprint !== null && <View style={ui.card}><Text style={ui.label}>기기에서 인식한 글자</Text><TextInput accessibilityLabel="인식된 글자" style={[ui.input, { minHeight: 150 }]} multiline editable={!busy} value={text} onChangeText={value => { draftVersion.current++; setText(value); }} />{containsSensitiveText(text) && <Text style={[ui.subtitle, ui.danger]}>민감한 정보가 감지되었어요. 이 내용은 기기 내 AI로도 분석하지 않아요. 필요한 할 일은 직접 입력해 주세요.</Text>}</View>}
-    <View style={ui.card}><Text style={ui.section}>무료 기기 내 AI · 실험 중</Text><Text style={ui.subtitle}>{availabilityLabels[aiStatus] ?? availabilityLabels.unavailable}</Text><Text style={ui.small}>{aiStatus !== 'available' ? 'AI를 쓸 수 없을 때는 인식한 글자를 탭하고 제목·날짜를 수정한 뒤 저장할 수 있어요. AI 제안이 아니며 선택 전에는 저장하지 않아요.' : '인터넷 API 없이 Apple의 기기 내 모델을 사용해요.'}</Text><Text style={ui.small}> 한국어 정확도는 실제 기기에서 검증해야 해요.</Text><TextInput accessibilityLabel="원문 메시지 기준 날짜 YYYY-MM-DD" style={ui.input} placeholder="대화 기준 날짜 YYYY-MM-DD (선택)" editable={!busy} value={messageDate} onChangeText={value => { draftVersion.current++; setMessageDate(value); }} maxLength={10} keyboardType="numbers-and-punctuation" /><Text style={ui.small}>캡처 날짜와 대화 날짜는 다를 수 있어요. 기준 날짜가 없으면 ‘내일’ 같은 날짜를 확정하지 않아요.</Text><Button title={busy ? '처리 중…' : aiStatus === 'available' ? '기기 내 AI로 할 일 찾기' : '인식한 글자에서 직접 선택'} disabled={busy || !text.trim() || !fingerprint} onPress={() => void requestAnalysis().catch(() => Alert.alert('설정을 확인하지 못했어요', '다시 시도해 주세요.'))} /></View>
-    {hasPrevious && <View style={ui.card}><Text style={ui.small}>이 사진은 이전 분석 기록이 있어요. 한 번도 저장하지 않은 캡처만 다시 분석할 수 있어요. 저장한 할 일은 목록에서 직접 수정해 주세요.</Text><Button secondary title="이 사진 다시 분석" disabled={busy || !text.trim()} onPress={() => void confirmReanalysis()} /></View>}
-    {!initialImage && <Button secondary title="닫기" disabled={actionBusy} onPress={closeCapture} />}
-  </ScrollView></KeyboardAvoidingView></SafeAreaView></Modal>;
+
+  const reanalyze = 'reanalyze' in screen ? screen.reanalyze : undefined;
+  return <Modal animationType="slide" onShow={() => { if (initialImage && !attempt.current && !pickerLock.current) start(); }} onRequestClose={closeCapture}>
+    <SafeAreaView style={ui.screen}><KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={ui.body} keyboardShouldPersistTaps="handled">
+        <Text accessibilityRole="header" dynamicTypeRamp="largeTitle" style={ui.title}>캡처 속 할 일</Text>
+        <Button title="사진에서 선택" disabled={picking || saving} onPress={() => void select('photo')} />
+        {nativeBridge?.pasteClipboardImage && <Button secondary title="클립보드 이미지 붙여넣기" disabled={picking || saving} onPress={() => void select('clipboard')} />}
+        {!!inputError && <Text accessibilityLiveRegion="polite" style={ui.subtitle}>{inputError}</Text>}
+        {screen.kind === 'consent' && <View style={ui.card}>
+          <Text accessibilityRole="header" style={ui.section}>기기 안에서 AI로 분석할까요?</Text>
+          <Text style={ui.subtitle}>사진과 글자는 외부 서버로 보내지 않아요. 제안의 원문 근거를 기기에 저장하고 7일이 지나면 다음 앱 실행·확인 때 정리해요. 설정에서 동의를 철회할 수 있어요.</Text>
+          <Button title="동의하고 분석" disabled={picking} onPress={() => { if (attempt.current) void requestAnalysis(attempt.current, true); }} />
+        </View>}
+        {screen.kind === 'working' && <View style={ui.row}><ActivityIndicator color={colors.accent} /><Text accessibilityLiveRegion="polite" style={[ui.subtitle, ui.grow]}>사진에서 할 일을 찾고 있어요…</Text></View>}
+        {screen.kind === 'status' && <>
+          <Text testID="capture-analysis-status" accessibilityLiveRegion="polite" style={ui.subtitle}>{screen.message}</Text>
+          {screen.retry && <Button secondary title="다시 시도" disabled={picking} onPress={() => start()} />}
+        </>}
+        {screen.kind === 'candidate' && attempt.current && <CaptureCandidate
+          key={screen.task.id}
+          task={screen.task}
+          repository={repository}
+          signal={attempt.current.controller.signal}
+          disabled={picking}
+          onSaving={value => { saveLock.current = value; setSaving(value); if (value) confirmation.invalidate(); }}
+          onSaved={closeCapture}
+        />}
+        {reanalyze && <Button secondary title="이 사진 다시 분석" disabled={picking || saving} onPress={() => void confirmReanalysis(reanalyze)} />}
+        <Button secondary title="닫기" disabled={saving} onPress={closeCapture} />
+      </ScrollView>
+    </KeyboardAvoidingView></SafeAreaView>
+  </Modal>;
 }

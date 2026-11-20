@@ -82,6 +82,9 @@ public class TTodoNativeModule: Module {
     AsyncFunction("extractTasks") { (text: String, capturedAt: String?, timezone: String, messageDate: String?) async throws -> String in
       try await AppleTodoExtractionService().extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
     }
+    AsyncFunction("extractCaptureTask") { (text: String, timezone: String) async throws -> String in
+      try await OnDeviceExtraction.extract(text: text, capturedAt: nil, timezone: timezone, messageDate: nil, singleCaptureTask: true)
+    }
     Function("databaseDirectory") { () throws -> String in
       // Initialize/protect the actual shared DB before expo-sqlite opens its connection.
       return try SharedStore().directory.absoluteString

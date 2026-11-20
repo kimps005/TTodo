@@ -1,7 +1,7 @@
 const manualFlow = 'testManualTaskLifecycleAndDataReset';
 const largeTextFlow = 'testLargeTextInputEditingAndNavigation';
 const shareFlow = 'testShareExtensionRequiresConsent';
-const photoFlow = 'testPhotoOCRAndCancelPreservesDraft';
+const photoFlow = 'testPhotoAutoAnalysisAndConsent';
 const lifecycleFlow = 'testManualTaskLifecycleWithoutSettingsNavigation';
 const resetFlow = 'testDataResetAndConsentWithoutSettingsNavigation';
 

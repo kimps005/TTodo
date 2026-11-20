@@ -20,7 +20,7 @@ const runtimePolicy = process.env.TTODO_UI_RUNTIME ?? 'latest';
 const architecture = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x86_64' : null;
 if (!architecture) throw new Error('Unsupported CI host architecture.');
 if (!['app', 'share-extension', 'photo-ocr', 'data-reset', 'task-lifecycle'].includes(scenario)) throw new Error('Unsupported UI scenario.');
-const flow = scenario === 'task-lifecycle' ? 'testManualTaskLifecycleWithoutSettingsNavigation' : scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoOCRAndCancelPreservesDraft' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
+const flow = scenario === 'task-lifecycle' ? 'testManualTaskLifecycleWithoutSettingsNavigation' : scenario === 'data-reset' ? 'testDataResetAndConsentWithoutSettingsNavigation' : scenario === 'photo-ocr' ? 'testPhotoAutoAnalysisAndConsent' : scenario === 'share-extension' ? 'testShareExtensionRequiresConsent' : textSize === 'large' ? 'testManualTaskLifecycleAndDataReset' : 'testLargeTextInputEditingAndNavigation';
 const report = { requested_model: model, requested_runtime_policy: runtimePolicy, commit: process.env.GITHUB_SHA ?? null, scenario, fixture: 'synthetic-only-via-ui', physical_device: false, model_inference_tested: false, locked_input_tested: false, completed: false, phase: 'create' };
 function collectPhotoImportDiagnostics(device) {
   // Only this fresh synthetic simulator is inspected, before product execution.

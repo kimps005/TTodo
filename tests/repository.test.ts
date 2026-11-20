@@ -12,6 +12,9 @@ import { Repository, type Database, type SqlConnection, type SqlValue } from '..
 import { normalizeTitle, sortTodos, validateDue } from '../src/domain/todo';
 import { createSerializedDatabase } from '../src/data/serializedDatabase';
 import { sampleTodos } from '../src/dev/qaTodos';
+import { analyzeCapture, captureDeadline, captureModelVersion } from '../src/ai/captureAnalysis';
+import { reviewDraft, reviewInput } from '../src/domain/reviewDraft';
+import { requestCaptureAnalysis } from '../src/ui/captureAction';
 import schema from '../src/data/schema.json';
 
 function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:', notify?: () => void) {
@@ -27,6 +30,128 @@ function fixture(now = () => '2026-11-13T02:00:00.000Z', path = ':memory:', noti
   return { repo, native };
 }
 const task = { title: '발표자료 보내기', description: null, due_at: '2026-11-20', due_precision: 'date' as const, assignee: null, confidence: .9, evidence_text: '20일까지 발표자료 보내줘', needs_confirmation: 1 };
+
+test('사진 입력의 동의 직후 OCR과 분석이 이어지고 후보 한 개를 편집·승인해 한 번만 저장한다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    const evidence = '2026년 11월 20일까지 발표자료 보내줘';
+    let recognized = 0, extracted = 0, prompted = 0;
+    const analyze = () => analyzeCapture({
+      repository: repo, channel: 'manual', signal: new AbortController().signal,
+      recognize: async () => { recognized++; return { text: evidence, fingerprint: 'single-photo' }; },
+      // Controlled model boundary. This does not measure model accuracy.
+      extract: async text => { assert.equal(text, evidence); extracted++; return [{ ...task, evidence_text: evidence }, task]; },
+      unavailable: () => undefined, clearNotification: () => {},
+    });
+    let result: Awaited<ReturnType<typeof analyze>> | undefined;
+    const consent = {
+      working: { current: false }, setBusy: () => {}, prompt: () => { prompted++; },
+      readConsent: () => repo.getPreference('ai_local_consent'), writeConsent: () => repo.setPreference('ai_local_consent', 'yes'),
+      analyze: async () => { result = await analyze(); },
+    };
+    await requestCaptureAnalysis(consent);
+    assert.equal(prompted, 1);
+    assert.equal(recognized, 0);
+    await requestCaptureAnalysis(consent, true);
+    assert.equal(recognized, 1);
+    assert.equal(extracted, 1);
+    assert.equal(result?.kind, 'candidate');
+    if (result?.kind !== 'candidate') assert.fail('후보를 표시해야 한다');
+    const original = result.task;
+    assert.equal(original.capture_provider, captureModelVersion);
+    assert.equal(original.due_precision, 'date');
+    assert.equal((await repo.listExtracted(original.analysis_id)).length, 1);
+    assert.deepEqual(await repo.listTodos(), []);
+
+    const repeated = await analyze();
+    assert.equal(repeated.kind === 'candidate' && repeated.task.id, original.id);
+    assert.equal(extracted, 1);
+    const snapshot = await repo.reanalysisSnapshot('single-photo');
+    const draft = reviewDraft(original);
+    const input = reviewInput({ ...draft, title: '수정한 발표자료 제출', day: '2026-11-22', time: '16:45', dateEdited: true });
+    assert.deepEqual(await repo.listTodos(), []);
+    const save = () => repo.approve(original.analysis_id, [{ id: original.id, input }], []);
+    await Promise.all([save(), save()]);
+    const [saved, duplicate] = await repo.listTodos();
+    assert.equal(duplicate, undefined);
+    assert.equal(saved.title, '수정한 발표자료 제출');
+    assert.equal(saved.due_at, new Date(2026, 10, 22, 16, 45).toISOString());
+    assert.equal(saved.created_at, '2026-11-13T02:00:00.000Z');
+    assert.ok(saved.id);
+    assert.match((await analyze() as { message: string }).message, /저장한 기록/);
+    await repo.removeTodo(saved.id);
+    await assert.rejects(repo.restartUnstoredAnalysis(original.analysis_id, false, snapshot), /한 번이라도/);
+    assert.match((await analyze() as { message: string }).message, /저장한 기록/);
+    assert.equal(extracted, 1);
+  } finally { native.close(); }
+});
+
+test('명확한 할 일이 없거나 AI가 사용 불가하면 후보나 할 일을 만들지 않는다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const analyze = (text: string, blocked?: string) => analyzeCapture({
+      repository: repo, recognize: async () => ({ text, fingerprint: text }),
+      extract: async () => { assert.equal(text, '배송 안내'); return []; },
+      unavailable: () => blocked, clearNotification: () => {}, signal: new AbortController().signal, channel: 'manual',
+    });
+    for (const text of [' ', '배송 안내']) {
+      assert.deepEqual(await analyze(text), { kind: 'status', message: '할 일을 찾지 못했어요' });
+    }
+    assert.deepEqual(await analyze('발표자료 보내줘', 'AI 준비 중'), { kind: 'status', message: 'AI 준비 중', retry: true });
+    const records = await repo.listAnalyses();
+    assert.equal(records.length, 2);
+    for (const record of records) {
+      assert.equal(record.status, 'empty');
+      assert.deepEqual(await repo.listExtracted(record.id), []);
+    }
+    assert.deepEqual(await repo.listTodos(), []);
+  } finally { native.close(); }
+});
+
+test('분석 중 사진을 바꾸거나 닫으면 이전 결과가 반환되거나 후보로 저장되지 않는다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const controller = new AbortController();
+    const started = Promise.withResolvers<void>(), output = Promise.withResolvers<(typeof task)[]>();
+    const options = { repository: repo, unavailable: () => undefined, clearNotification: () => {}, channel: 'manual' as const };
+    const old = analyzeCapture({ ...options, signal: controller.signal,
+      recognize: async () => ({ text: task.evidence_text, fingerprint: 'old-photo' }),
+      extract: () => { started.resolve(); return output.promise; },
+    });
+    const cancelled = assert.rejects(old, /취소/);
+    await started.promise;
+    controller.abort();
+    const latest = await analyzeCapture({ ...options, signal: new AbortController().signal,
+      recognize: async () => ({ text: '이미 제출했어요', fingerprint: 'new-photo' }), extract: async () => [],
+    });
+    assert.deepEqual(latest, { kind: 'status', message: '할 일을 찾지 못했어요' });
+    output.resolve([task]);
+    await cancelled;
+    const previous = (await repo.listAnalyses()).find(a => a.image_fingerprint === 'old-photo')!;
+    assert.equal(previous.error_code, 'INTERRUPTED');
+    assert.deepEqual(await repo.listExtracted(previous.id), []);
+  } finally { native.close(); }
+});
+
+test('후보의 마감은 원문 날짜·시각으로 확인된 정밀도까지만 보존한다', () => {
+  const due = new Date(2026, 10, 20, 17, 30).toISOString();
+  const suggestion = { ...task, due_at: due, due_precision: 'datetime' as const };
+  const check = (evidence_text: string) => captureDeadline({ ...suggestion, evidence_text });
+  assert.equal(check('2026년 11월 20일 오후 5시 반까지 보내줘').due_at, due);
+  assert.equal(check('2026-11-20 17:30까지 보내줘').due_at, due);
+  assert.equal(check('2026년 11월 20일까지 보내줘').due_precision, 'date');
+  assert.equal(check('2026년 11월 20일 18:30까지 보내줘').due_precision, 'date');
+  assert.equal(check('2026년 11월 20일까지 17시간 남았어요').due_precision, 'date');
+  assert.equal(check('2026년 11월 21일 17:30까지 보내줘').due_at, null);
+  assert.equal(check('11월 20일 오후 5시 반까지 보내줘').due_at, null);
+  assert.equal(check('2026년에 발표자료 보내줘').due_at, null);
+  assert.equal(check('내일 보내줘').due_at, null);
+});
 
 test('개발용 샘플 5개는 한 번에 추가되며 잘못된 배치는 모두 롤백된다', async () => {
   const { repo, native } = fixture();
