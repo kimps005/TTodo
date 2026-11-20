@@ -84,7 +84,17 @@ public class TTodoNativeModule: Module {
       try await AppleTodoExtractionService().extract(text: text, capturedAt: capturedAt, timezone: timezone, messageDate: messageDate)
     }
     AsyncFunction("extractCaptureTask") { (text: String, timezone: String) async throws -> String in
-      try await OnDeviceExtraction.extract(text: text, capturedAt: nil, timezone: timezone, messageDate: nil, singleCaptureTask: true)
+      do {
+        return try await OnDeviceExtraction.extract(text: text, capturedAt: nil, timezone: timezone, messageDate: nil, singleCaptureTask: true)
+      } catch {
+        if ProcessInfo.processInfo.environment["TTODO_CI_STARTUP_DIAGNOSTICS"] == "1" {
+          let diagnostic = error as NSError
+          let kind = error is LocalAIError ? "local_ai" : error is ExtractionValidationError ? "validation" :
+            diagnostic.domain.hasPrefix("FoundationModels.") ? "foundation_models" : "other"
+          self.startupDiagnostics.notice("TTodoStartupDiagnostic phase=capture_native_model_error kind=\(kind, privacy: .public) code=\(diagnostic.code, privacy: .public)")
+        }
+        throw error
+      }
     }
     Function("databaseDirectory") { () throws -> String in
       // Initialize/protect the actual shared DB before expo-sqlite opens its connection.

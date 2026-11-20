@@ -111,6 +111,27 @@ test('명확한 할 일이 없거나 AI가 사용 불가하면 후보나 할 일
   } finally { native.close(); }
 });
 
+test('기기 내 모델이 생성 도중 실패하면 제안 없이 실패 기록을 남기고 같은 사진을 다시 시도할 수 있다', async () => {
+  const { repo, native } = fixture();
+  try {
+    await repo.initialize();
+    await repo.setPreference('ai_local_consent', 'yes');
+    const failure = new Error('synthetic model failure');
+    const options = { repository: repo, channel: 'manual' as const,
+      recognize: async () => ({ text: task.evidence_text, fingerprint: 'model-failure' }),
+      unavailable: () => undefined, clearNotification: () => {}, signal: new AbortController().signal };
+    await assert.rejects(analyzeCapture({ ...options, extract: async () => { throw failure; } }), error => error === failure);
+    const [record] = await repo.listAnalyses();
+    assert.equal(record.status, 'failed');
+    assert.equal(record.error_code, 'LOCAL_AI_FAILED');
+    assert.deepEqual(await repo.listExtracted(record.id), []);
+    assert.deepEqual(await repo.listTodos(), []);
+    const retry = await analyzeCapture({ ...options, extract: async () => [] });
+    assert.equal(retry.kind, 'status');
+    assert.deepEqual((await repo.listAnalyses()).map(a => [a.id, a.status]), [[record.id, 'empty']]);
+  } finally { native.close(); }
+});
+
 test('분석 중 사진을 바꾸거나 닫으면 이전 결과가 반환되거나 후보로 저장되지 않는다', async () => {
   const { repo, native } = fixture();
   try {

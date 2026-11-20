@@ -86,6 +86,7 @@ export function Capture({ initialImage, close, repository }: { initialImage?: st
       } catch { /* Diagnostics must not block the next action. */ }
       const message = phase === 'ocr' ? '사진에서 글자를 읽지 못했어요. 다시 시도하거나 다른 사진을 선택해 주세요.'
         : phase === 'consent' ? '분석 동의를 확인하지 못했어요. 다시 시도해 주세요.'
+        : phase === 'model' ? '기기 내 AI가 분석을 마치지 못했어요. 다시 시도하거나 할 일을 직접 입력해 주세요.'
         : '사진을 분석하지 못했어요. 다시 시도하거나 필요한 할 일을 직접 입력해 주세요.';
       setScreen({ kind: 'status', message, retry: true });
     }
