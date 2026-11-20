@@ -392,15 +392,21 @@ final class TTodoUITests: XCTestCase {
     photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     let repeatResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: stopped, object: status)], timeout: 30)
     XCTAssertEqual(repeatResult, .completed, "Previously granted consent should start analysis on photo selection alone.")
-    let retainedStatus = message == modelFailure || status.label == modelFailure ? "분석 실패" : "아직 분석 내역이 없어요"
+    let retainedFailure = message == modelFailure || status.label == modelFailure
     XCTAssertFalse(consent.exists)
     screenshot(app, name: "photo-03-no-repeat-consent")
     tap(app.buttons["닫기"], in: app)
     app.terminate(); app.launch()
     XCTAssertTrue(app.scrollViews.firstMatch.waitForExistence(timeout: 30))
     tap(control(app, label: "분석함"), in: app)
-    XCTAssertTrue(app.staticTexts[retainedStatus].waitForExistence(timeout: 15))
-    XCTAssertFalse(app.staticTexts["확인 대기"].exists)
+    if retainedFailure {
+      let failed = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "분석 실패"))
+      XCTAssertTrue(failed.firstMatch.waitForExistence(timeout: 15))
+      XCTAssertEqual(failed.count, 1)
+    } else {
+      XCTAssertTrue(app.staticTexts["아직 분석 내역이 없어요"].waitForExistence(timeout: 15))
+    }
+    XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "확인 대기")).firstMatch.exists)
     tap(control(app, label: "할 일"), in: app)
     XCTAssertTrue(app.staticTexts["머릿속을 조금 비워 보세요"].waitForExistence(timeout: 15))
     screenshot(app, name: "photo-04-no-unapproved-data")
