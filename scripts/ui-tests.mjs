@@ -175,9 +175,6 @@ try {
     run('swiftc', ['modules/ttodo-native/ios/VisionOCR.swift', 'native/tests/OCRSmoke.swift', '-framework', 'AppKit', '-o', generator]);
     report.phase = 'ocr-fixture-preflight';
     writeFileSync(path.join(output, 'ocr-fixture-preflight.log'), run(generator, [], { env: { ...process.env, TTODO_OCR_FIXTURE_OUTPUT: output } }));
-    report.phase = 'photo-import';
-    sim('addmedia', device, path.join(output, 'synthetic-korean.png'));
-    report.photo_fixture = 'generated-korean-png-only';
     report.macos_ocr_fixture_preflight = true;
   }
   if (scenario === 'task-lifecycle') {
@@ -193,6 +190,15 @@ try {
   }
   report.command_phases = [];
   uiCommands.runUICommands(execFileSync, { device, resultPath, flow, architecture,
+    beforeTest() {
+      if (scenario !== 'photo-ocr') return;
+      // bootstatus can finish while assetsd is still rebuilding the photo library.
+      // Let initialization run during the build before importing the real fixture.
+      report.phase = 'photo-import';
+      console.log('UI tests: importing the synthetic photo after the build');
+      sim('addmedia', device, path.join(output, 'synthetic-korean.png'));
+      report.photo_fixture = 'generated-korean-png-only';
+    },
     onPhase(phase, timeout) {
       report.phase = phase;
       report.command_phases.push({ phase, timeout_ms: timeout, started_at: new Date().toISOString() });

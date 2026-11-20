@@ -34,3 +34,17 @@ test('빌드 실패는 원래 오류를 보존하고 UI 테스트를 실행하�
   assert.equal(count, 1);
   assert.deepEqual(phases, ['build-for-testing']);
 });
+
+test('사진은 빌드 뒤에 가져오고 가져오기 오류가 나면 UI 테스트를 실행하지 않는다', () => {
+  const timeline: string[] = [];
+  const run = (_: string, args: string[]) => timeline.push(args.at(-1)!);
+  const options = { device: 'synthetic-device', resultPath: '/synthetic/results.xcresult', flow: 'expected-test',
+    architecture: 'arm64', onPhase: () => {} };
+  runUICommands(run, { ...options, beforeTest: () => timeline.push('photo-import') });
+  assert.deepEqual(timeline, ['build-for-testing', 'photo-import', 'test-without-building']);
+
+  timeline.length = 0;
+  const failure = new Error('synthetic photo import failure');
+  assert.throws(() => runUICommands(run, { ...options, beforeTest: () => { throw failure; } }), error => error === failure);
+  assert.deepEqual(timeline, ['build-for-testing']);
+});
