@@ -14,7 +14,7 @@ export function CaptureCandidate({ task, repository, signal, disabled, onSaving,
   repository: Repository;
   signal: AbortSignal;
   disabled: boolean;
-  onSaving: (value: boolean) => void;
+  onSaving: (value: boolean) => boolean;
   onSaved: () => void;
 }) {
   const [draft, setDraft] = useState(() => reviewDraft(task));
@@ -24,10 +24,9 @@ export function CaptureCandidate({ task, repository, signal, disabled, onSaving,
   const working = useRef(false);
   const edit = (values: Partial<typeof draft>) => { setError(''); setDraft(current => ({ ...current, ...values })); };
   const save = async () => {
-    if (disabled || working.current || signal.aborted) return;
+    if (disabled || working.current || signal.aborted || !onSaving(true)) return;
     working.current = true;
     setSaving(true);
-    onSaving(true);
     setError('');
     let saved = false;
     try {

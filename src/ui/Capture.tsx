@@ -139,7 +139,7 @@ export function Capture({ initialImage, close, repository }: { initialImage?: st
     const take = confirmation.capture();
     try {
       const snapshot = await repository.reanalysisSnapshot(fingerprint);
-      if (!isCurrent(job) || !take()) return;
+      if (pickerLock.current || saveLock.current || !isCurrent(job) || !take()) return;
       const respond = confirmation.capture();
       Alert.alert('다시 분석할까요?', '이 사진의 미저장 제안과 수정 내용을 새 분석으로 바꿔요.', [
         { text: '취소', style: 'cancel', onPress: () => { respond(); } },
@@ -174,7 +174,13 @@ export function Capture({ initialImage, close, repository }: { initialImage?: st
           repository={repository}
           signal={attempt.current.controller.signal}
           disabled={picking}
-          onSaving={value => { saveLock.current = value; setSaving(value); if (value) confirmation.invalidate(); }}
+          onSaving={value => {
+            if (value && (pickerLock.current || saveLock.current || !active.current)) return false;
+            saveLock.current = value;
+            setSaving(value);
+            if (value) confirmation.invalidate();
+            return true;
+          }}
           onSaved={closeCapture}
         />}
         {reanalyze && <Button secondary title="이 사진 다시 분석" disabled={picking || saving} onPress={() => void confirmReanalysis(reanalyze)} />}
