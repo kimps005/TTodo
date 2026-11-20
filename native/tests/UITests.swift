@@ -366,18 +366,19 @@ final class TTodoUITests: XCTestCase {
     let status = app.staticTexts["capture-analysis-status"]
     XCTAssertFalse(status.exists, "The analysis must wait for first-time consent.")
     tap(consent, in: app)
-    XCTAssertTrue(status.waitForExistence(timeout: 30), "OCR and the availability check must start after consent alone.")
-    let message = status.label
     let availabilityMessages = ["기기 내 AI에는 iOS 26 이상이 필요해요.", "Apple Intelligence를 지원하는 iPhone이 필요해요.",
       "설정에서 Apple Intelligence를 켜 주세요.", "기기 내 AI 모델을 준비 중이에요. 다운로드 후 다시 시도해 주세요.",
       "현재 기기 모델이 한국어를 지원하지 않아요.", "현재 기기 내 AI를 사용할 수 없어요."]
-    XCTAssertTrue(availabilityMessages.contains(message), "The simulator should finish real OCR and report its unavailable model.")
+    let unavailable = NSPredicate(format: "exists == true AND label IN %@", availabilityMessages as NSArray)
+    let firstResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: unavailable, object: status)], timeout: 30)
+    let message = status.exists ? status.label : "(no status)"
+    screenshot(app, name: "photo-02-analysis-status")
+    XCTAssertEqual(firstResult, .completed, "OCR and the availability check must start after consent alone. Observed: \(message)")
     XCTAssertFalse(app.textViews["인식된 글자"].exists)
     XCTAssertFalse(app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"].exists)
     XCTAssertFalse(app.buttons["인식한 글자에서 직접 선택"].exists)
     XCTAssertFalse(app.buttons["기기 내 AI로 할 일 찾기"].exists)
     XCTAssertFalse(app.buttons["저장"].exists)
-    screenshot(app, name: "photo-02-automatic-unavailable")
     tap(app.buttons["사진에서 선택"], in: app)
     let cancel = app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "취소", "Cancel")).firstMatch
     XCTAssertTrue(cancel.waitForExistence(timeout: 20)); cancel.tap()
@@ -386,7 +387,8 @@ final class TTodoUITests: XCTestCase {
     tap(app.buttons["사진에서 선택"], in: app)
     XCTAssertTrue(photo.waitForExistence(timeout: 30))
     photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-    XCTAssertTrue(status.waitForExistence(timeout: 30), "Previously granted consent should start analysis on photo selection alone.")
+    let repeatResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: unavailable, object: status)], timeout: 30)
+    XCTAssertEqual(repeatResult, .completed, "Previously granted consent should start analysis on photo selection alone.")
     XCTAssertEqual(status.label, message)
     XCTAssertFalse(consent.exists)
     screenshot(app, name: "photo-03-no-repeat-consent")

@@ -7,7 +7,7 @@
 - Windows에서 Node 테스트 170개, TypeScript, iOS Debug JS·Release Hermes 번들, diff 검사를 통과했다. 제어된 OCR·모델 경계와 실제 SQLite로 동의 직후 실행, 후보 0개·1개, 마감 근거, 편집 승인, 동시 중복 저장, 저장 후 삭제 시 재분석 제한과 이전 요청 무효화를 확인했다.
 - `e6d5efb`의 macOS 품질 CI에서 Swift 저장소·캡처·합성 Vision OCR 검사와 앱·위젯·공유 확장의 arm64 시뮬레이터 빌드가 통과했다. core의 테스트 170개·타입·번들 검사도 통과했다. [품질 CI](https://github.com/kimps005/TTodo/actions/runs/44705326530)
 - 사진 선택과 저장이 거의 동시에 눌릴 때 각각의 진행 잠금이 겹치지 않도록 보강했다. 이 JS 변경까지 테스트 170개·타입·iOS 개발/배포 번들을 다시 통과했다.
-- 갱신한 실제 사진 선택 시뮬레이터 검사는 확인 대기다. [사진 UI CI](https://github.com/kimps005/TTodo/actions/runs/44705329933)
+- `e6d5efb`의 사진 UI 검사는 iOS 26.5 시뮬레이터에서 Release 빌드와 시스템 사진 선택, 첫 동의 후 자동 분석 시작까지 확인했다. XCTest는 예상한 AI 사용 불가 문구에 대한 단언에서 실패했다. 녹화에는 분석 중 화면까지 남아 최종 문구를 확인할 수 없었다. 재검사에서 예상 문구 자체를 기다리고 실패 시 실제 문구와 화면을 남기도록 보강했다. [첫 사진 UI CI](https://github.com/kimps005/TTodo/actions/runs/44705329933)
 - 서명된 iPhone에서 사진·클립보드 권한, 최초 동의, 한국어 모델의 실제 0개·1개 선별과 마감 정확도, 편집 후 저장과 중복 저장 제한, 사진 교체·닫기 중 늦은 결과 차단 및 VoiceOver를 확인해야 한다.
 
 ## 2026-11-20 수정된 Dev Client IPA 빌드와 교체
