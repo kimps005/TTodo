@@ -105,6 +105,7 @@ jobs:
 
           echo "Verified $bundle_id, $binary_type, embedded JS bundle and symlinks in $app."
           zip -qry TTodo-unsigned.ipa Payload
+          python3 "$GITHUB_WORKSPACE/scripts/verify-share-ipa.py" TTodo-unsigned.ipa
           mv TTodo-unsigned.ipa "$RUNNER_TEMP/TTodo-unsigned.ipa"
       - uses: actions/upload-artifact@v4
         with:

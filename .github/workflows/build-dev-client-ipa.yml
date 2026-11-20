@@ -118,6 +118,7 @@ jobs:
 
           echo "Verified $bundle_id, $binary_type, Dev Client schemes and symlinks in $app."
           zip -qry TTodo-dev-client-unsigned.ipa Payload
+          python3 "$GITHUB_WORKSPACE/scripts/verify-share-ipa.py" TTodo-dev-client-unsigned.ipa
           mv TTodo-dev-client-unsigned.ipa "$RUNNER_TEMP/TTodo-dev-client-unsigned.ipa"
       - uses: actions/upload-artifact@v4
         with:

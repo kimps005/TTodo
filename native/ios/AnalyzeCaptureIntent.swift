@@ -3,6 +3,25 @@ internal import TTodoNative
 import UniformTypeIdentifiers
 import Foundation
 
+// App target only. Shortcuts supplies the selected photo and foregrounds the app.
+struct ReviewSharedImageIntent: ProgressReportingIntent {
+  static var title: LocalizedStringResource = "TTodo에서 공유 이미지 검토"
+  static var description = IntentDescription("사진 공유 시트의 이미지 한 장을 TTodo에서 열어요. 앱에서 글자를 확인하고 분석과 저장을 선택하세요.")
+  @available(iOS 26.0, *)
+  static var supportedModes: IntentModes { .foreground(.immediate) }
+  static var openAppWhenRun: Bool { true }
+  @Parameter(title: "공유한 이미지", supportedContentTypes: [.image]) var image: IntentFile
+  static var parameterSummary: some ParameterSummary { Summary("\(\.$image)를 TTodo에서 검토") }
+
+  func perform() async throws -> some IntentResult & ProvidesDialog {
+    progress.totalUnitCount = 1
+    progress.localizedDescription = "TTodo에 전달할 이미지를 준비하고 있어요"
+    try await SharedImageImport.shared.receive(image)
+    progress.completedUnitCount = 1
+    return .result(dialog: "TTodo에 사진을 전달했어요. 편집 중인 화면이 있으면 닫은 뒤 사진을 검토해 주세요.")
+  }
+}
+
 struct AnalyzeCaptureIntent: AppIntent {
   static var title: LocalizedStringResource = "TTodo에서 캡처 분석"
   static var description = IntentDescription("직접 전달한 이미지에서 기기 내 AI로 할 일을 제안해요. 먼저 앱에서 분석 동의와 알림 권한을 설정하세요.")

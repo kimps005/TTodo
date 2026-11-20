@@ -31,6 +31,7 @@ public class TTodoNativeModule: Module {
     return destination.rawValue
   }
   private let storageQueue = DispatchQueue(label: "app.ttodo.sqlite")
+  private var shareObserver: NSObjectProtocol?
   private var sqlStore: SharedStore?
   private func storage() throws -> SharedStore {
     if let sqlStore { return sqlStore }
@@ -42,24 +43,27 @@ public class TTodoNativeModule: Module {
     guard clipboard.hasImages,
       let provider = clipboard.itemProviders.first(where: { CaptureImageInput.imageType(in: $0) != nil }) else { return nil }
 
-    return try await CaptureImageInput.withImageFile(provider) { url in
-      try VisionOCR.validateFile(url)
-      let directory = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        .appendingPathComponent("ttodo-captures", isDirectory: true)
-      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let image = directory.appendingPathComponent("\(UUID().uuidString).image")
-      do {
-        try FileManager.default.copyItem(at: url, to: image)
-        return image.absoluteString
-      } catch {
-        try? FileManager.default.removeItem(at: image)
-        throw CaptureImageInput.Failure.unreadable
-      }
-    }
+    let input = try await CaptureImageInput.load(provider)
+    defer { withExtendedLifetime(input) {} }
+    let directory = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      .appendingPathComponent("ttodo-captures", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let image = directory.appendingPathComponent("\(UUID().uuidString).image")
+    try FileManager.default.moveItem(at: input.url, to: image)
+    return image.absoluteString
   }
 
   public func definition() -> ModuleDefinition {
     Name("TTodoNative")
+    Events("sharedImagesReady")
+    OnCreate {
+      self.shareObserver = NotificationCenter.default.addObserver(forName: SharedImageImport.ready, object: nil, queue: nil) { [weak self] _ in
+        self?.sendEvent("sharedImagesReady")
+      }
+    }
+    OnDestroy {
+      if let observer = self.shareObserver { NotificationCenter.default.removeObserver(observer) }
+    }
     Function("localAIAvailability") { OnDeviceExtraction.availability() }
     Function("ocrCandidates") { (text: String) throws -> String in
       guard !ExtractionValidator.isSensitive(text) else { throw ExtractionValidationError.sensitive }
@@ -102,17 +106,15 @@ public class TTodoNativeModule: Module {
     AsyncFunction("pasteClipboardImage") { () async throws -> String? in
       try await self.pasteClipboardImage()
     }
-    #if DEBUG
-    AsyncFunction("takeSharedImage") { () async throws -> String? in
-      try await SharedImageImport.take()
+    AsyncFunction("takeSharedImages") { () async -> [String] in
+      await SharedImageImport.shared.take()
     }
     AsyncFunction("discardSharedImage") { (uri: String) async in
-      await SharedImageImport.discard(uri)
+      await SharedImageImport.shared.discard(uri)
     }
     AsyncFunction("clearSharedImages") { (purgePending: Bool) async throws in
-      try await SharedImageImport.clear(purgePending: purgePending)
+      try await SharedImageImport.shared.clear(purgePending: purgePending)
     }
-    #endif
     Function("signalCapturePurge") {
       CapturePurgeObserver.post()
     }

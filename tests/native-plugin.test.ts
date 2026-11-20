@@ -75,6 +75,12 @@ test('앱과 확장에 공통 Swift 파일·공유 스키마를 연결하며 재
     assert.ok(first.includes('TTodoShare/ShareViewController.swift'));
     assert.ok(first.includes('TTodoShare/CaptureImageInput.swift'));
     assert.ok(first.includes('TTodoShare/ShareImageHandoff.swift'));
+    const controller = readFileSync(path.join(ios, 'TTodoShare/ShareViewController.swift'), 'utf8');
+    assert.doesNotMatch(controller, /NSSelectorFromString|unsafeBitCast|openURL|extensionContext\?\.open\(/);
+    const reviewIntent = readFileSync(path.join(ios, 'TTodoGenerated/AnalyzeCaptureIntent.swift'), 'utf8');
+    assert.match(reviewIntent, /struct ReviewSharedImageIntent: ProgressReportingIntent/);
+    assert.match(reviewIntent, /\.foreground\(\.immediate\)/);
+    assert.doesNotMatch(first, /TTodoShare\/AnalyzeCaptureIntent.swift/);
     assert.ok(first.includes('TTodoShare/CaptureNotifications.swift'), '공유창의 재분석 알림 정리에 필요한 Swift 소스를 포함해야 한다');
     const sharePlist = readFileSync(path.join(ios, 'TTodoShare/TTodoShare-Info.plist'), 'utf8');
     const { NSExtension: extension } = plist.parse(sharePlist);

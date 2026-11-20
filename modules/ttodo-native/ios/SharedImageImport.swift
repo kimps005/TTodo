@@ -1,78 +1,71 @@
-#if DEBUG
+import AppIntents
+import Foundation
 import ImageIO
-import UIKit
 import UniformTypeIdentifiers
 
-@MainActor
-enum SharedImageImport {
-  private static var pending: ShareImageHandoff.Request?
-  private static var consumed: UUID?
+// Runs in the app process. The event only wakes JS; the queue also covers cold launch.
+public actor SharedImageImport {
+  public static let shared = SharedImageImport()
+  static let ready = Notification.Name("TTodoSharedImageReady")
+  private var pending: [URL] = []
 
-  static func receive(_ url: URL) -> Bool {
-    guard let request = ShareImageHandoff.request(from: url) else { return false }
-    if case let .token(token) = request, token == consumed { return true }
-    pending = request
-    return true
-  }
-
-  static func take() throws -> String? {
-    guard UIApplication.shared.applicationState == .active, let request = pending else { return nil }
-    pending = nil
-    let board = UIPasteboard.general
-    let changeCount = board.changeCount
-    guard board.types.contains(ShareImageHandoff.marker) else {
-      if request == .latest { return nil }
-      throw CaptureImageInput.Failure.unreadable
+  public func receive(_ image: IntentFile) throws {
+    try Task.checkCancellation()
+    if let type = image.type, !type.conforms(to: .image) { throw OCRFailure.invalidImage }
+    let bytes: Data
+    if let url = image.fileURL {
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      try VisionOCR.validateFile(url)
+      bytes = try Data(contentsOf: url)
+    } else {
+      bytes = image.data
     }
-    let first = IndexSet(integer: 0)
-    guard let marker = board.data(forPasteboardType: ShareImageHandoff.marker, inItemSet: first)?.first,
-      let token = UUID(uuidString: String(decoding: marker, as: UTF8.self)) else {
-      throw CaptureImageInput.Failure.unreadable
-    }
-    guard token != consumed, request == .latest || request == .token(token) else { return nil }
-    guard let jpeg = board.data(forPasteboardType: UTType.jpeg.identifier, inItemSet: first)?.first,
-      board.changeCount == changeCount, isBoundedJPEG(jpeg) else {
-      throw CaptureImageInput.Failure.unreadable
-    }
+    guard !bytes.isEmpty, bytes.count <= VisionOCR.maximumBytes else { throw OCRFailure.tooLarge }
+    guard let source = CGImageSourceCreateWithData(bytes as CFData, nil),
+      CGImageSourceGetCount(source) > 0,
+      let identifier = CGImageSourceGetType(source),
+      UTType(identifier as String)?.conforms(to: .image) == true else { throw OCRFailure.invalidImage }
 
     var folder = try directory()
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     var resources = URLResourceValues()
     resources.isExcludedFromBackup = true
     try folder.setResourceValues(resources)
-    let image = folder.appendingPathComponent("\(token.uuidString).jpg")
-    try jpeg.write(to: image, options: [.atomic, .completeFileProtection])
-    consumed = token
-    if board.changeCount == changeCount { board.items = [] }
-    return image.absoluteString
+    let file = folder.appendingPathComponent("\(UUID().uuidString).image")
+    try Task.checkCancellation()
+    try bytes.write(to: file, options: [.atomic, .completeFileProtection])
+    pending.append(file)
+    NotificationCenter.default.post(name: Self.ready, object: nil)
   }
 
-  private static func isBoundedJPEG(_ data: Data) -> Bool {
-    guard !data.isEmpty, data.count <= ShareImageHandoff.maximumBytes,
-      let source = CGImageSourceCreateWithData(data as CFData, nil),
-      let type = CGImageSourceGetType(source), type as String == UTType.jpeg.identifier,
-      let dimensions = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
-      let width = dimensions[kCGImagePropertyPixelWidth as String] as? Int,
-      let height = dimensions[kCGImagePropertyPixelHeight as String] as? Int else { return false }
-    return min(width, height) > 0 && max(width, height) <= ShareImageHandoff.maximumDimension
+  func take() -> [String] {
+    defer { pending.removeAll() }
+    return pending.map(\.absoluteString)
   }
 
-  static func discard(_ uri: String) {
+  func discard(_ uri: String) {
     guard let folder = try? directory(), let url = URL(string: uri), url.isFileURL,
       url.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path,
-      url.pathExtension == "jpg", UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil else { return }
+      url.pathExtension == "image", UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil else { return }
     try? FileManager.default.removeItem(at: url)
   }
 
-  static func clear(purgePending: Bool) throws {
-    if purgePending { pending = nil }
-    do { try FileManager.default.removeItem(at: directory()) }
-    catch let error as CocoaError where error.code == .fileNoSuchFile { }
+  func clear(purgePending: Bool) throws {
+    if purgePending { pending.removeAll() }
+    let folder = try directory()
+    let files: [URL]
+    do { files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) }
+    catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile { return }
+    // Keep newly received inputs during JS startup; remove orphaned files from prior launches.
+    let keep = Set(pending.map(\.lastPathComponent))
+    for file in files where !keep.contains(file.lastPathComponent) {
+      try FileManager.default.removeItem(at: file)
+    }
   }
 
-  private static func directory() throws -> URL {
+  private func directory() throws -> URL {
     try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
       .appendingPathComponent("TTodo-share-imports", isDirectory: true)
   }
 }
-#endif

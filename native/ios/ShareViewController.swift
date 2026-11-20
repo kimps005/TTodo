@@ -2,52 +2,27 @@ import UIKit
 import SwiftUI
 import UniformTypeIdentifiers
 import WidgetKit
+import OSLog
 
 final class ShareViewController: UIViewController {
+  private let presentationLog = Logger(subsystem: "app.ttodo.share", category: "presentation")
+
   override func viewDidLoad() {
     super.viewDidLoad()
-    let items = extensionContext?.inputItems as? [NSExtensionItem] ?? []
-    let providers = items.flatMap { $0.attachments ?? [] }.filter { CaptureImageInput.imageType(in: $0) != nil }
+    presentationLog.notice("Share controller loaded")
+    // The scrollable SwiftUI content has no intrinsic sheet height of its own.
+    preferredContentSize = CGSize(width: max(view.bounds.width, 320), height: 480)
+    view.backgroundColor = .systemBackground
     let close: () -> Void = { [weak self] in
       self?.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
     }
-    #if DEBUG
-    if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: TTodoConfiguration.appGroup) == nil {
-      show(LocalShareView(providers: providers, close: close) { [weak self] url in
-        await self?.openImport(url) ?? false
-      })
-      return
-    }
-    #endif
-    show(CaptureShareView(providers: providers, close: close))
+    show(CaptureShareView(context: { [weak self] in self?.extensionContext }, close: close))
   }
 
-  #if DEBUG
-  private func openImport(_ url: URL) async -> Bool {
-    // This Debug-only handoff depends on the host's responder chain.
-    let legacy = NSSelectorFromString("openURL:")
-    let modern = NSSelectorFromString("openURL:options:completionHandler:")
-    typealias LegacyOpen = @convention(c) (AnyObject, Selector, NSURL) -> Bool
-    typealias OpenCompletion = @convention(block) (Bool) -> Void
-    typealias ModernOpen = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, OpenCompletion) -> Void
-    var responder: UIResponder? = self
-    while let candidate = responder {
-      if candidate.responds(to: legacy), let method = candidate.method(for: legacy),
-        unsafeBitCast(method, to: LegacyOpen.self)(candidate, legacy, url as NSURL) {
-        return true
-      }
-      if candidate.responds(to: modern), let method = candidate.method(for: modern) {
-        return await withCheckedContinuation { continuation in
-          unsafeBitCast(method, to: ModernOpen.self)(candidate, modern, url as NSURL, [:] as NSDictionary) {
-            continuation.resume(returning: $0)
-          }
-        }
-      }
-      responder = candidate.next
-    }
-    return false
+  override func viewDidAppear(_ animated: Bool) {
+    super.viewDidAppear(animated)
+    presentationLog.notice("Share sheet appeared")
   }
-  #endif
 
   private func show<Content: View>(_ content: Content) {
     let host = UIHostingController(rootView: content)
@@ -58,69 +33,63 @@ final class ShareViewController: UIViewController {
   }
 }
 
-private enum ShareInputError: LocalizedError {
-  case singleImage
-  var errorDescription: String? { "이미지를 한 장씩 공유해 주세요." }
-}
-
 #if DEBUG
 private struct LocalShareView: View {
-  let providers: [NSItemProvider]
+  let context: () -> NSExtensionContext?
   let close: () -> Void
-  let openImport: (URL) async -> Bool
-  @State private var fallbackImage: Data?
+  @State private var preparing = false
   @State private var copied = false
   @State private var failure: String?
+  @State private var operation: Task<Void, Never>?
 
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
-          Text("공유한 이미지 가져오기").font(.title.bold()).accessibilityAddTraits(.isHeader)
-          if let fallbackImage {
-            Text("TTodo를 자동으로 열지 못했어요. 이미지를 복사한 후 TTodo를 직접 열 수 있어요.")
-            Button("클립보드에 이미지 복사") {
-              ShareImageHandoff.copy(fallbackImage)
-              copied = true
-            }.buttonStyle(.borderedProminent)
-            if copied {
-              Text("복사했어요. TTodo의 ‘사진·클립보드에서 할 일 찾기’에서 ‘클립보드 이미지 붙여넣기’를 눌러 주세요.")
-                .accessibilityAddTraits(.updatesFrequently)
-            }
-          } else if let failure {
-            Text(failure).foregroundStyle(.red)
+          Text("앱에서 사진 검토하기").font(.title.bold()).accessibilityAddTraits(.isHeader)
+          Text("사진 공유 메뉴에서 이미지 입력 단축어를 선택하면 TTodo가 열려요. 단축어 앱에서 ‘TTodo에서 공유 이미지 검토’ 동작에 단축어 입력을 연결하고 ‘공유 시트에서 보기’를 켜 주세요.")
+          if preparing {
+            ProgressView("복사할 이미지를 준비하고 있어요")
+          } else if copied {
+            Text("이 기기에 5분간 복사했어요. 닫은 뒤 TTodo의 ‘사진·클립보드에서 할 일 찾기’에서 ‘클립보드 이미지 붙여넣기’를 눌러 주세요.")
           } else {
-            ProgressView("이미지를 준비하고 있어요")
+            Text("단축어 설정 전에는 이 사진을 직접 복사해 앱에 붙여넣을 수 있어요.")
+            if let failure { Text(failure).foregroundStyle(.red) }
+            Button(failure == nil ? "이 사진 수동 복사" : "다시 시도") { copyImage() }
+              .buttonStyle(.borderedProminent)
           }
         }.padding(24)
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
-        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기", action: close) } }
-        .task { await forwardImage() }
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기") { operation?.cancel(); close() } } }
+        .onDisappear { operation?.cancel() }
     }
   }
 
-  @MainActor private func forwardImage() async {
-    guard providers.count == 1, let provider = providers.first else {
-      failure = ShareInputError.singleImage.errorDescription
-      return
-    }
-    do {
-      let jpeg = try await CaptureImageInput.withImageFile(provider) { try CaptureImageInput.compressedImage(at: $0) }
-      try Task.checkCancellation()
-      let token = UUID()
-      ShareImageHandoff.copy(jpeg, token: token)
-      if await openImport(ShareImageHandoff.url(for: token)) { close() }
-      else if !Task.isCancelled { fallbackImage = jpeg }
-    } catch {
-      if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? CaptureImageInput.Failure.unreadable.errorDescription }
+  @MainActor private func copyImage() {
+    guard !preparing else { return }
+    preparing = true
+    failure = nil
+    operation = Task {
+      defer { preparing = false; operation = nil }
+      do {
+        let jpeg = try await CaptureImageInput.compressedImage(from: context())
+        try Task.checkCancellation()
+        ShareImageHandoff.copy(jpeg)
+        copied = true
+      } catch {
+        if !Task.isCancelled { failure = (error as? LocalizedError)?.errorDescription ?? CaptureImageInput.Failure.unreadable.errorDescription }
+      }
     }
   }
 }
 #endif
 
 private struct CaptureShareView: View {
-  let providers: [NSItemProvider]
+  let context: () -> NSExtensionContext?
   let close: () -> Void
+  #if DEBUG
+  @State private var needsLocalMode = false
+  #endif
   @State private var working = false
   @State private var message = "공유한 이미지에서 기기 내 AI로 할 일을 찾아요. 원본은 영구 저장하지 않아요."
   @State private var failure: String?
@@ -172,33 +141,25 @@ private struct CaptureShareView: View {
     }
     return "마감 확인 필요"
   }
-  private func readImage() async throws -> URL {
-    guard providers.count == 1, let provider = providers.first else { throw ShareInputError.singleImage }
-    return try await CaptureImageInput.withImageFile(provider) { url in
-      try VisionOCR.validateFile(url)
-      let directory = FileManager.default.temporaryDirectory.appendingPathComponent("ttodo-share-\(UUID().uuidString)", isDirectory: true)
-      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      do {
-        let owned = directory.appendingPathComponent("input")
-        try FileManager.default.copyItem(at: url, to: owned)
-        return owned
-      } catch {
-        try? FileManager.default.removeItem(at: directory)
-        throw error
-      }
-    }
-  }
   private func analyze(reanalyze: Bool = false, expected: CaptureReanalysisSnapshot? = nil) {
     guard !working else { return }; working = true; failure = nil; message = "이미지를 읽고 분석하고 있어요…"
+    if purgeObserver == nil { purgeObserver = CapturePurgeObserver { discardCapture() } }
     // Keep the draft disabled while reading the image. If registration never
     // starts, a read failure must not discard edits to still-pending proposals.
     operation = Task {
       defer { working = false; operation = nil }
       do {
-        guard try SharedStore().hasLocalAIConsent() else { throw CaptureError.consentRequired }
-        let file = try await readImage()
-        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        let consent = try await Task.detached(priority: .userInitiated) {
+          try SharedStore().hasLocalAIConsent()
+        }.value
         try Task.checkCancellation()
+        guard consent else { throw CaptureError.consentRequired }
+        message = "공유한 이미지를 가져오고 있어요…"
+        let input = try await CaptureImageInput.loadSingle(from: context())
+        defer { withExtendedLifetime(input) {} }
+        let file = input.url
+        try Task.checkCancellation()
+        message = "기기에서 글자를 읽고 할 일을 찾고 있어요…"
         preview = try autoreleasepool { UIImage(cgImage: try VisionOCR.thumbnail(fileURL: file, maximumDimension: 720)) }
         let result = try await CaptureProcessor.analyze(fileURL: file, messageDate: nil, channel: "share", retryFailed: true, reanalyzeUnstored: reanalyze, expected: expected, service: AppleTodoExtractionService())
         try Task.checkCancellation()
@@ -215,10 +176,17 @@ private struct CaptureShareView: View {
         if semiAutomatic { message = "기기 내 AI를 사용할 수 없어 글자만 읽었어요. 원하는 원문을 탭해 제목으로 선택하고 수정한 뒤 저장하세요. AI 제안이 아니에요." }
       } catch {
         guard !Task.isCancelled else { return }
+        #if DEBUG
+        if case StoreError.unavailable = error {
+          needsLocalMode = true
+          return
+        }
+        #endif
         let detail = (error as? LocalizedError)?.errorDescription ?? "기기 내 분석을 마치지 못했어요. 앱에서 AI 준비 상태를 확인하고 다시 시도해 주세요."
         // A failed replacement may already have removed old IDs. Reconcile
         // against storage rather than restoring a stale proposal snapshot.
         if analysisId != nil { _ = refreshReview() }
+        message = "분석을 마치지 못했어요."
         failure = detail
       }
     }
@@ -261,11 +229,24 @@ private struct CaptureShareView: View {
     working = false
   }
   var body: some View {
+    #if DEBUG
+    if needsLocalMode { LocalShareView(context: context, close: close) }
+    else { reviewView }
+    #else
+    reviewView
+    #endif
+  }
+
+  private var reviewView: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           Text("캡처 속 할 일").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("ttodo-share-review-entry")
           Text(message).foregroundStyle(.secondary)
+          if analysisId == nil && !working {
+            Text("앱에서 검토하려면 사진 공유 메뉴의 이미지 입력 단축어를 선택하세요. TTodo 설정의 ‘캡처 자동화’에서 연결 방법을 확인할 수 있어요.").font(.caption)
+          }
           if let preview { Image(uiImage: preview).resizable().scaledToFit().frame(maxHeight: 220).accessibilityLabel("이번 분석 이미지 미리보기") }
           Text(semiAutomatic ? "OCR · 직접 선택" : "무료 기기 내 AI · 한국어 정확도 검증 전").font(.caption).foregroundStyle(.secondary)
           if let failure { Text(failure).foregroundStyle(.red) }
@@ -279,7 +260,7 @@ private struct CaptureShareView: View {
             }
           }
           if analysisId == nil {
-            Button("기기에서 분석") { analyze() }.buttonStyle(.borderedProminent).fixedSize(horizontal: false, vertical: true).disabled(working)
+            Button(failure == nil ? "기기에서 분석" : "다시 시도") { analyze() }.buttonStyle(.borderedProminent).fixedSize(horizontal: false, vertical: true).disabled(working)
             Text("먼저 TTodo 앱 설정에서 기기 내 AI 분석에 동의해 주세요. 날짜 기준일을 모르는 ‘내일’ 같은 표현은 확정하지 않아요.").font(.caption).foregroundStyle(.secondary)
           }
           if analysisId != nil {
@@ -332,7 +313,6 @@ private struct CaptureShareView: View {
         }.padding(24)
       }.navigationTitle("TTodo").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("닫기") { operation?.cancel(); close() } } }
-        .onAppear { purgeObserver = CapturePurgeObserver { discardCapture() } }
         .onDisappear { purgeObserver = nil; operation?.cancel() }
         .onReceive(NotificationCenter.default.publisher(for: .NSExtensionHostDidBecomeActive)) { _ in
           if let analysisId, let store = try? SharedStore(),

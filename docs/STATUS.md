@@ -1,5 +1,25 @@
 # 개발 현황
 
+## 2026-11-20 사진 공유 첫 화면과 실제 IPA 재점검
+
+- 사용자가 설치에 사용했다고 지정한 바탕화면의 `TTodo-dev-client-unsigned.ipa`를 직접 확인했다. 버전 1.0.0(빌드 1), iPhoneOS SDK 26.5이며 아래의 `64c3711` 보관 IPA와 SHA-256 전체가 일치한다. 확장에는 이전 URL 호출이 있고 새 검토 화면 식별자가 없다. 본앱에 등록된 단축어 동작은 `AddTodoIntent`와 `AnalyzeCaptureIntent` 두 개다. 설치에 사용한 파일에 로컬 수정이 포함되지 않았음을 확인했다. 실제 정지 지점은 기기 로그가 필요하다.
+
+- 새 IPA를 설치한 후에도 정지했다는 보고를 받았다. 보관된 Dev Client IPA(`artifacts/dev-client-64c3711/TTodo-dev-client-unsigned.ipa`, SHA-256 `fb02a65f57d6e6665278ca5d30190f434bd47440cb3f8750645edf63d4a48b60`)의 확장 실행 파일에는 `openImport`, 완료 콜백을 기다리는 URL 열기, 클립보드 토큰 URL이 남아 있다. 이 IPA와 보관된 단독 Debug IPA 모두 본앱의 단축어 메타데이터에 `ReviewSharedImageIntent`가 없다. 설치 기기에서 실행된 마지막 단계는 확인되지 않았다.
+- 기존 로컬 수정에서도 확장 첫 화면을 붙이기 전에 메인 스레드에서 첨부 항목과 Debug App Group을 조회했다. 이제 공유창이 먼저 제목·닫기·분석 버튼을 표시한다. 분석을 누르면 백그라운드에서 동의를 확인하고 첨부를 가져온다. 사진 제공자 선택·파일 요청 등록·응답 대기 전체에 30초 제한을 적용했다. 요청 실패 후 재시도·닫기가 가능하다. 기기 로그의 `app.ttodo.share`에는 컨트롤러 로드, 화면 표시, 이미지 요청·시간 초과 등 단계만 기록한다.
+- 사진 공유 메뉴의 TTodo 아이콘은 사진 앱 안에 확장을 표시한다. TTodo 앱에서 검토하려면 이미지 입력을 받는 공유 단축어를 한 번 설정하고 공유 메뉴 아래에서 그 단축어를 선택한다. 본앱 설정은 설치된 네이티브 수신 기능을 확인하며, 이전 빌드에서는 분석함의 사진 선택을 안내한다. [Apple DTS의 공유 확장 실행 범위](https://developer.apple.com/forums/thread/779644) · [Apple의 공유 단축어 설정](https://support.apple.com/en-gb/guide/shortcuts/apd163eb9f95/9.0/ios/26)
+- 두 Debug IPA 패키징 경로에 최종 ZIP 내부의 확장 진입점·화면 식별자·구형 토큰 URL·본앱 단축어 등록 검사를 추가했다. Windows에서 보관 IPA 두 개의 거부 및 모의 패키지의 실행 파일/Debug dylib 양성 사례와 단축어 누락 거부를 확인했다. JS 테스트 166개, 타입 검사, iOS Debug JS·Release Hermes 번들 통과. 네이티브 빌드·새 IPA 생성·수정된 XCTest·실제 iPhone 검증은 미실행이다.
+- 실기기에서는 수정 IPA의 공유창 첫 표시와 닫기, iCloud 사진 시간 초과·재시도, 별도 공유 단축어로 본앱 최초 실행·복귀, 동의와 선택 저장 전후의 할 일 개수, 임시 파일 정리를 확인해야 한다. 스크린샷 자동화 알림과 한국어 AI 정확도도 미검증이다.
+
+## 2026-11-19 사진 공유 정지 조사와 본앱 검토 경로 (로컬 변경)
+
+- App Group 없는 Debug 확장은 사진 제공자의 파일 응답 후 클립보드에 쓰고 responder chain으로 본앱을 열었다. 파일 응답과 URL 열기 완료 콜백 중 하나만 누락돼도 준비 화면에서 대기했다. App Group이 있는 확장은 자체 검토 화면을 사용했으며 파일 응답 대기는 동일했다. 사용자 기기에서 마지막으로 실행된 줄은 확인되지 않았다.
+- 설치된 Expo SDK 58의 콜드 스타트는 SceneDelegate가 연결 URL로 RN 초기 옵션을 구성한 뒤 AppDelegate에 전달한다. 복귀 시에도 SceneDelegate가 AppDelegate와 RN Linking 처리를 중계한다. 이전 JS는 초기화·활성화·URL 이벤트에서 네이티브 대기 토큰을 조회했다. 확장에서 URL을 열지 못하면 이 단계까지 이미지가 전달되지 않았다.
+- 공유 확장의 비공식 앱 열기와 토큰 URL 수신을 제거했다. 파일 응답은 30초 뒤 시간 초과로 종료하고 닫기·재시도를 제공한다. Debug 수동 복사는 버튼을 눌렀을 때만 기기 내 5분 만료로 수행한다. App Group이 있으면 기존 확장 내 동의 확인·분석·선택 저장도 사용할 수 있다. Apple이 설명하는 확장 종류별 지원 범위와 iPhoneOS 26.5 헤더의 `sharedApplication` 확장 사용 불가 선언을 확인했다. [Apple DTS](https://developer.apple.com/forums/thread/779644) · [NSExtensionContext.open](https://developer.apple.com/documentation/foundation/nsextensioncontext/open%28_%3Acompletionhandler%3A%29) · [확인한 UIKit SDK 헤더](https://github.com/xybp888/iOS-SDKs/blob/master/iPhoneOS26.5.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h)
+- 본앱에서 검토하려면 단축어를 하나 만들고 ‘공유 시트에서 보기’와 이미지 입력을 설정한다. ‘TTodo에서 공유 이미지 검토’의 사진에 ‘단축어 입력’을 연결한다. 이후 사진 공유 메뉴에서 이 단축어를 선택하면 전면 App Intent가 선택한 사진 한 장을 앱에 전달한다. iOS 26 이상은 `.foreground(.immediate)`, 그 이전 지원 버전은 `openAppWhenRun`을 사용한다. iPhoneOS 26.5의 AppIntents 인터페이스에서 선언을 확인했다. [Apple 공유 단축어 설정](https://support.apple.com/guide/shortcuts/apd163eb9f95/ios) · [전면 실행 모드](https://developer.apple.com/documentation/appintents/appintent/supportedmodes) · [AppIntents SDK 선언](https://github.com/xybp888/iOS-SDKs/blob/master/iPhoneOS26.5.sdk/System/Library/Frameworks/AppIntents.framework/Modules/AppIntents.swiftmodule/arm64e-apple-ios.swiftinterface)
+- 본앱은 백업 제외·파일 보호를 적용한 임시 파일에서 기존 OCR·동의·검토로 이어간다. 파일 바이트를 보존해 기존 지문 비교를 사용한다. 여러 번 공유하거나 편집 중에 공유하면 차례로 열며, 철회·전체 삭제 시 대기 파일도 정리한다. 공유 입력 수신은 할 일을 생성하지 않는다.
+- Windows에서 JS 테스트 166개, TypeScript 검사, iOS Debug JS 및 Release Hermes 번들을 검증했다. 이번 Swift 변경의 Xcode 빌드와 실제 iPhone 실행은 미검증이다. 사진/iCloud 지연·취소·재시도, 앱 최초 실행·복귀·편집 중 전달, OCR·한국어 AI·승인 전후 할 일 개수와 임시 파일 삭제를 확인해야 한다.
+- iOS 27 단축어에는 ‘스크린샷이 저장될 때’ 트리거가 있다. 사용자가 설정한 자동화의 실행 확인 알림, 승인한 캡처 한 장이 실제 동작 입력으로 전달되는지, 잠금 상태에서 본앱으로 전환할 수 있는지는 실기기 검증 대상으로 남긴다. [Apple 단축어 업데이트](https://support.apple.com/en-us/149045) · [자동화 실행 확인](https://support.apple.com/guide/shortcuts/apd690170742/ios)
+
 ## 2026-11-19 Dev Client UI·UX QA 준비
 
 - Debug 로컬 모드는 공유 확장에서 JPEG와 만료 토큰을 자동 전달한다. 앱 첫 실행 옵션에서도 공유 URL을 접수하고, 앱이 활성화되면 토큰과 일치하는 JPEG의 크기와 2048px 제한을 검사한 뒤 `Application Support`에 저장한다. 저장 성공 후 클립보드 항목을 소비하고 기존 미리보기와 OCR로 이동한다. 공유 호스트가 앱 열기를 거부하면 확장에서 수동 복사를 사용할 수 있다.

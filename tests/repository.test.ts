@@ -494,15 +494,17 @@ test('오래된 완료·복원 요청은 다른 연결이 변경한 항목을 �
 
 test('동일 이미지 지문은 재사용하며 승인 재전송으로 중복 생성하지 않는다', async () => {
   const { repo, native } = fixture(); await repo.initialize();
+  await assert.rejects(repo.createAnalysis('hash', 'share', null), /동의/);
   await repo.setPreference('ai_local_consent', 'yes');
-  const a = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:00Z');
+  const a = await repo.createAnalysis('hash', 'share', null);
   const b = await repo.createAnalysis('hash', 'manual', '2026-11-13T02:00:01Z');
   assert.equal(a.id, b.id); assert.equal(b.created, false);
   await repo.finishAnalysis(a.id, [task, { ...task, title: '회의 준비' }], 'evaluation', a.token!);
   const tasks = await repo.listExtracted(a.id);
+  assert.deepEqual(await repo.listTodos(), []);
   const selected = [{ id: tasks[0].id, input: { title: '수정된 제목' } }];
   await repo.approve(a.id, selected); await repo.approve(a.id, selected);
-  assert.equal((await repo.listTodos()).length, 1);
+  assert.deepEqual((await repo.listTodos()).map(todo => todo.source_type), ['share']);
   assert.equal((await repo.listAnalyses())[0].status, 'review');
   await repo.ignoreAnalysis(a.id);
   assert.equal((await repo.listAnalyses())[0].status, 'saved');
