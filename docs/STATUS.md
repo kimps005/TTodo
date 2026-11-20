@@ -1,5 +1,11 @@
 # 개발 현황
 
+## 2026-11-20 수정된 Dev Client IPA 빌드와 교체
+
+- 빌드 전용 브랜치 `codex/share-fix-ipa`의 `edb85a1`에서 iPhoneOS arm64 Debug 아카이브, 공유 확장·단축어 포함 검사와 무서명 IPA 업로드를 통과했다. [GitHub Actions 빌드](https://github.com/kimps005/TTodo/actions/runs/44698038237) · [IPA 아티팩트](https://github.com/kimps005/TTodo/actions/runs/44698038237/artifacts/14611772960)
+- 내려받은 ZIP은 GitHub의 SHA-256과 일치했다. IPA를 다시 검사해 수정 공유 화면과 `ReviewSharedImageIntent` 등록을 확인했다. 바탕화면의 기존 IPA를 교체했으며 새 파일 SHA-256은 `b764b203dc324443c93f38e78a380ef694710aa2ceb8c34055d4be01c1d8f145`다. 로컬 테스트 166개와 타입 검사도 재실행해 통과했다.
+- 수정된 공유창 XCTest, 실제 iPhone 설치와 동작, 스크린샷 자동화 알림 및 한국어 AI 정확도는 미검증이다.
+
 ## 2026-11-20 사진 공유 첫 화면과 실제 IPA 재점검
 
 - 사용자가 설치에 사용했다고 지정한 바탕화면의 `TTodo-dev-client-unsigned.ipa`를 직접 확인했다. 버전 1.0.0(빌드 1), iPhoneOS SDK 26.5이며 아래의 `64c3711` 보관 IPA와 SHA-256 전체가 일치한다. 확장에는 이전 URL 호출이 있고 새 검토 화면 식별자가 없다. 본앱에 등록된 단축어 동작은 `AddTodoIntent`와 `AnalyzeCaptureIntent` 두 개다. 설치에 사용한 파일에 로컬 수정이 포함되지 않았음을 확인했다. 실제 정지 지점은 기기 로그가 필요하다.
