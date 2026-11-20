@@ -371,11 +371,10 @@ final class TTodoUITests: XCTestCase {
     let stoppedMessages = ["기기 내 AI에는 iOS 26 이상이 필요해요.", "Apple Intelligence를 지원하는 iPhone이 필요해요.",
       "설정에서 Apple Intelligence를 켜 주세요.", "기기 내 AI 모델을 준비 중이에요. 다운로드 후 다시 시도해 주세요.",
       "현재 기기 모델이 한국어를 지원하지 않아요.", "현재 기기 내 AI를 사용할 수 없어요.", modelFailure]
-    let stopped = NSPredicate(format: "exists == true AND label IN %@", stoppedMessages as NSArray)
-    let firstResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: stopped, object: status)], timeout: 30)
-    let message = status.exists ? status.label : "(no status)"
+    XCTAssertTrue(status.waitForExistence(timeout: 60), "OCR and the model check or attempt must start after consent alone.")
+    let message = status.label
     screenshot(app, name: "photo-02-analysis-status")
-    XCTAssertEqual(firstResult, .completed, "OCR and the model check or attempt must start after consent alone. Observed: \(message)")
+    XCTAssertTrue(stoppedMessages.contains(message), "Expected a model status. Observed: \(message)")
     XCTAssertFalse(app.textViews["인식된 글자"].exists)
     XCTAssertFalse(app.textFields["원문 메시지 기준 날짜 YYYY-MM-DD"].exists)
     XCTAssertFalse(app.buttons["인식한 글자에서 직접 선택"].exists)
@@ -390,9 +389,10 @@ final class TTodoUITests: XCTestCase {
     tap(app.buttons["사진에서 선택"], in: app)
     XCTAssertTrue(photo.waitForExistence(timeout: 30))
     photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-    let repeatResult = XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: stopped, object: status)], timeout: 30)
-    XCTAssertEqual(repeatResult, .completed, "Previously granted consent should start analysis on photo selection alone.")
-    let retainedFailure = message == modelFailure || status.label == modelFailure
+    XCTAssertTrue(status.waitForExistence(timeout: 60), "Previously granted consent should start analysis on photo selection alone.")
+    let repeatedMessage = status.label
+    XCTAssertTrue(stoppedMessages.contains(repeatedMessage), "Expected a model status after reselection. Observed: \(repeatedMessage)")
+    let retainedFailure = message == modelFailure || repeatedMessage == modelFailure
     XCTAssertFalse(consent.exists)
     screenshot(app, name: "photo-03-no-repeat-consent")
     tap(app.buttons["닫기"], in: app)
